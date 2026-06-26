@@ -185,24 +185,48 @@ function AccountStep({ onNext }: { onNext: () => void }): JSX.Element {
 
 /* ── Step: CurseForge API Key ────────────────────────────── */
 
+type TestState = 'idle' | 'testing' | 'ok' | 'fail'
+
 function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
   const [key, setKey] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [showKey, setShowKey] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [testState, setTestState] = useState<TestState>('idle')
   const [error, setError] = useState<string | null>(null)
 
-  const handleSave = async (): Promise<void> => {
-    const trimmed = key.trim()
-    if (!trimmed) return
-    setSaving(true)
+  const trimmed = key.trim()
+
+  const saveAndContinue = async (): Promise<void> => {
+    if (!trimmed) { onNext(); return }
+    setBusy(true)
     setError(null)
     try {
       await window.api.settings.set({ curseforgeApiKey: trimmed })
-      setSaved(true)
-    } catch (e) {
-      setError('Failed to save key')
+      onNext()
+    } catch {
+      setError('Failed to save key — try again')
     } finally {
-      setSaving(false)
+      setBusy(false)
+    }
+  }
+
+  const testKey = async (): Promise<void> => {
+    if (!trimmed) return
+    setTestState('testing')
+    setError(null)
+    try {
+      // Save first, then trigger a lightweight search to confirm the key works
+      await window.api.settings.set({ curseforgeApiKey: trimmed })
+      await window.api.browse.curseforge({ limit: 1 })
+      setTestState('ok')
+    } catch (e) {
+      setTestState('fail')
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.includes('403') || msg.includes('401')) {
+        setError('Key rejected by CurseForge — make sure you copied the full key from the API Keys section of the console.')
+      } else {
+        setError(`Test failed: ${msg}`)
+      }
     }
   }
 
@@ -224,10 +248,10 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
       >
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-dim)' }}>How to get your API key</p>
         {([
-          ['1', 'Open the CurseForge developer console'],
+          ['1', 'Open the CurseForge console (button below)'],
           ['2', 'Sign in or create a free account'],
-          ['3', 'Click "Create API key" and copy it'],
-          ['4', 'Paste it in the field below'],
+          ['3', 'Click "API Keys" in the left sidebar'],
+          ['4', 'Copy the key — it starts with $2a$10$'],
         ] as [string, string][]).map(([n, text]) => (
           <div key={n} className="flex items-start gap-3">
             <span
@@ -257,42 +281,69 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
       </div>
 
       {/* Key input */}
-      <div className="flex gap-2">
-        <input
-          type="password"
-          value={key}
-          onChange={(e) => { setKey(e.target.value); setSaved(false) }}
-          placeholder="Paste your API key here…"
-          className="flex-1 rounded-xl px-3 py-2.5 text-sm font-mono outline-none"
-          style={{
-            background: 'var(--surface-2)',
-            border: `1px solid ${saved ? 'rgba(var(--accent-rgb),0.4)' : 'var(--border-soft)'}`,
-            color: 'var(--text-strong)',
-          }}
-          onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.5)')}
-          onBlur={(e) => (e.currentTarget.style.borderColor = saved ? 'rgba(var(--accent-rgb),0.4)' : 'var(--border-soft)')}
-        />
-        <button
-          onClick={handleSave}
-          disabled={!key.trim() || saving || saved}
-          className="px-4 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
-          style={{ background: saved ? 'rgba(var(--accent-rgb),0.1)' : 'var(--surface-3)', color: saved ? 'var(--accent)' : 'var(--text-muted)', border: '1px solid var(--border-soft)' }}
-        >
-          {saved ? '✓ Saved' : saving ? '…' : 'Save'}
-        </button>
-      </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={key}
+            onChange={(e) => { setKey(e.target.value); setTestState('idle'); setError(null) }}
+            placeholder="Paste your API key here…"
+            className="flex-1 rounded-xl px-3 py-2.5 text-sm font-mono outline-none"
+            style={{
+              background: 'var(--surface-2)',
+              border: `1px solid ${testState === 'ok' ? 'rgba(var(--accent-rgb),0.4)' : testState === 'fail' ? 'rgba(var(--danger-rgb),0.4)' : 'var(--border-soft)'}`,
+              color: 'var(--text-strong)',
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.5)')}
+            onBlur={(e) => (e.currentTarget.style.borderColor =
+              testState === 'ok' ? 'rgba(var(--accent-rgb),0.4)' :
+              testState === 'fail' ? 'rgba(var(--danger-rgb),0.4)' : 'var(--border-soft)')}
+          />
+          {/* Show/hide toggle */}
+          <button
+            onClick={() => setShowKey((s) => !s)}
+            className="px-3 rounded-xl text-sm transition-colors"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-dim)', border: '1px solid var(--border-soft)' }}
+            title={showKey ? 'Hide key' : 'Show key'}
+          >
+            {showKey ? '🙈' : '👁'}
+          </button>
+        </div>
 
-      {error && <p className="text-xs text-center" style={{ color: 'var(--danger)' }}>{error}</p>}
+        {/* Test button */}
+        {trimmed && testState !== 'ok' && (
+          <button
+            onClick={testKey}
+            disabled={testState === 'testing'}
+            className="w-full py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-60"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }}
+            onMouseEnter={(e) => { if (testState !== 'testing') e.currentTarget.style.background = 'var(--surface-3)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)' }}
+          >
+            {testState === 'testing' ? 'Testing…' : 'Test connection'}
+          </button>
+        )}
+
+        {testState === 'ok' && (
+          <p className="text-xs text-center font-medium" style={{ color: 'var(--accent)' }}>
+            ✓ Connected to CurseForge
+          </p>
+        )}
+        {error && (
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--danger)' }}>{error}</p>
+        )}
+      </div>
 
       <div className="flex flex-col gap-2 pt-1">
         <button
-          onClick={onNext}
-          className="w-full py-3 rounded-xl font-bold text-sm text-black transition-all"
+          onClick={saveAndContinue}
+          disabled={busy}
+          className="w-full py-3 rounded-xl font-bold text-sm text-black transition-all disabled:opacity-60"
           style={{ background: 'var(--accent-strong)' }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent-strong)')}
+          onMouseEnter={(e) => { if (!busy) e.currentTarget.style.background = 'var(--accent)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--accent-strong)' }}
         >
-          {saved ? 'Continue' : 'Skip for now →'}
+          {trimmed ? 'Save & Continue' : 'Skip for now →'}
         </button>
       </div>
     </div>

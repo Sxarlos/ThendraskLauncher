@@ -1,24 +1,39 @@
 import { app, BrowserWindow, shell } from 'electron'
 import type { UpdateInfo } from '@shared/types'
 
-// ── UPDATE MANIFEST URL ───────────────────────────────────────────────────────
-// Point this at a JSON file you control and push to when you release.
-// The file must be JSON with at least: { "version": "x.y.z", "downloadUrl": "..." }
-// Optional field: "notes" (short release description shown in the launcher).
+// ── UPDATE MANIFEST ───────────────────────────────────────────────────────────
+// A tiny public GitHub Gist contains the latest version info.
+// Source code stays completely private — the Gist only exposes a version number
+// and a download link. Nothing sensitive.
 //
-// Easiest setup — create this file in your GitHub repo and update it on release:
-//   https://raw.githubusercontent.com/YOUR_USERNAME/ender-client/main/latest-version.json
+// ONE-TIME SETUP:
+//   1. Go to gist.github.com → New gist
+//   2. Filename: latest-version.json
+//   3. Paste the contents below and click "Create public gist"
+//   4. Click "Raw" and copy that URL → paste it below as MANIFEST_URL
 //
-// Example file contents:
-//   { "version": "1.1.0", "notes": "Bug fixes, improved modpack loading", "downloadUrl": "https://..." }
-const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/ender-client/main/latest-version.json'
+// RELEASING AN UPDATE:
+//   1. Bump version in package.json (e.g. 0.1.2)
+//   2. npm run package  →  builds the installer
+//   3. Upload the .exe wherever you share it (Google Drive, Discord, etc.)
+//   4. Edit your Gist — update "version" and "downloadUrl"
+//   5. Done — the app will notify users within 2 hours
+//
+// Gist contents (update these values when you release):
+// {
+//   "version": "0.1.1",
+//   "notes": "Fixed CurseForge API key setup in the wizard",
+//   "downloadUrl": "https://YOUR_DOWNLOAD_LINK_HERE"
+// }
+//
+const MANIFEST_URL = 'PASTE_YOUR_GIST_RAW_URL_HERE'
 
-// Check again every 2 hours while the app is open
+// Re-check every 2 hours while the app is open
 const RECHECK_INTERVAL_MS = 2 * 60 * 60 * 1000
 
 function semverGt(a: string, b: string): boolean {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
+  const pa = a.replace(/^v/, '').split('.').map(Number)
+  const pb = b.replace(/^v/, '').split('.').map(Number)
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
     if (diff > 0) return true
@@ -28,9 +43,10 @@ function semverGt(a: string, b: string): boolean {
 }
 
 async function fetchManifest(): Promise<UpdateInfo | null> {
+  if (MANIFEST_URL === 'PASTE_YOUR_GIST_RAW_URL_HERE') return null
   try {
-    const res = await fetch(UPDATE_MANIFEST_URL, {
-      headers: { 'Cache-Control': 'no-cache' }
+    const res = await fetch(MANIFEST_URL, {
+      headers: { 'Cache-Control': 'no-cache', 'User-Agent': 'EnderClient-Updater' }
     })
     if (!res.ok) return null
     const data = (await res.json()) as Partial<UpdateInfo>
@@ -60,9 +76,8 @@ export function openDownloadUrl(url: string): void {
   shell.openExternal(url)
 }
 
-/** Call once after the window is ready. Checks now and then on a timer. */
+/** Call once after the window is ready. Checks now then on a timer. */
 export function startUpdateChecker(): void {
-  // Delay first check by 5s so it doesn't slow startup
   setTimeout(async () => {
     await checkForUpdate()
     setInterval(checkForUpdate, RECHECK_INTERVAL_MS)

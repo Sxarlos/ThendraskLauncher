@@ -47,7 +47,12 @@ async function cfGet(path: string, params: Record<string, string | number>): Pro
       Accept: 'application/json'
     }
   })
-  if (!res.ok) throw new Error(`CurseForge ${res.status}: ${res.statusText}`)
+  if (!res.ok) {
+    if (res.status === 403 || res.status === 401) {
+      throw new Error('CurseForge API key is invalid or not authorised. Go to Settings → CurseForge and re-enter your key from console.curseforge.com → API Keys.')
+    }
+    throw new Error(`CurseForge ${res.status}: ${res.statusText}`)
+  }
   return res.json()
 }
 
@@ -138,7 +143,12 @@ async function cfPost(path: string, body: unknown): Promise<any> {
     headers: { 'x-api-key': key, 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body)
   })
-  if (!res.ok) throw new Error(`CurseForge ${res.status}: ${res.statusText}`)
+  if (!res.ok) {
+    if (res.status === 403 || res.status === 401) {
+      throw new Error('CurseForge API key is invalid or not authorised. Go to Settings → CurseForge and re-enter your key from console.curseforge.com → API Keys.')
+    }
+    throw new Error(`CurseForge ${res.status}: ${res.statusText}`)
+  }
   return res.json()
 }
 
