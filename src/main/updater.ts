@@ -26,7 +26,7 @@ import type { UpdateInfo } from '@shared/types'
 //   "downloadUrl": "https://YOUR_DOWNLOAD_LINK_HERE"
 // }
 //
-const MANIFEST_URL = 'PASTE_YOUR_GIST_RAW_URL_HERE'
+const MANIFEST_URL = 'https://gist.githubusercontent.com/Sxarlos/09584c4f095954f7d39e93ae6d55b268/raw/eb0955e8985bd4c5cc1bff3e9be7afcdfce24e01/latest-version.json'
 
 // Re-check every 2 hours while the app is open
 const RECHECK_INTERVAL_MS = 2 * 60 * 60 * 1000
