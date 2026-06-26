@@ -516,11 +516,19 @@ function AppearanceTab({ settings, onChange }: { settings: AppSettings; onChange
 function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (patch: Partial<AppSettings>) => void }): JSX.Element {
   const [cfKey, setCfKey] = useState(settings.curseforgeApiKey ?? '')
   const [cfSaved, setCfSaved] = useState(false)
+  const [relayUrl, setRelayUrl] = useState(settings.relayUrl ?? '')
+  const [relaySaved, setRelaySaved] = useState(false)
 
   const saveCf = (): void => {
     onChange({ curseforgeApiKey: cfKey.trim() || undefined })
     setCfSaved(true)
     setTimeout(() => setCfSaved(false), 2000)
+  }
+
+  const saveRelay = (): void => {
+    onChange({ relayUrl: relayUrl.trim() || undefined })
+    setRelaySaved(true)
+    setTimeout(() => setRelaySaved(false), 2000)
   }
 
   return (
@@ -555,6 +563,41 @@ function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (
             }}
           >
             {cfSaved ? 'Saved ✓' : 'Save'}
+          </button>
+        </div>
+      </div>
+
+      <SectionHeader>Friends</SectionHeader>
+      <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
+        <div className="text-sm font-medium mb-1" style={{ color: 'var(--text-bright)' }}>Presence Relay URL</div>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+          URL of the hosted relay server that powers the friend list across different networks.
+          Leave blank to disable friend presence.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={relayUrl}
+            onChange={(e) => setRelayUrl(e.target.value)}
+            placeholder="https://ender-relay-xxxx.onrender.com"
+            className="flex-1 px-3 py-2 rounded-xl text-sm outline-none font-mono"
+            style={{
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-bright)',
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.5)')}
+            onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
+          />
+          <button
+            onClick={saveRelay}
+            className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: relaySaved ? 'rgba(var(--accent-rgb),0.15)' : 'var(--accent-strong)',
+              color: relaySaved ? 'var(--accent)' : '#000',
+            }}
+          >
+            {relaySaved ? 'Saved ✓' : 'Save'}
           </button>
         </div>
       </div>

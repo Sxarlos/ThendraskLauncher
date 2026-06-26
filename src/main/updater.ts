@@ -21,8 +21,8 @@ import type { UpdateInfo } from '@shared/types'
 //
 // Gist contents (update these values when you release):
 // {
-//   "version": "0.1.1",
-//   "notes": "Fixed CurseForge API key setup in the wizard",
+//   "version": "0.1.2",
+//   "notes": "Fixed CurseForge API key issues and launcher version display",
 //   "downloadUrl": "https://YOUR_DOWNLOAD_LINK_HERE"
 // }
 //

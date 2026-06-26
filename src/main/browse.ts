@@ -27,14 +27,14 @@ async function mrGet(path: string, params: Record<string, string>): Promise<any>
     if (v !== '' && v !== undefined) url.searchParams.set(k, v)
   }
   const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': 'ender-client/0.1.0 (github.com/ender-client)' }
+    headers: { 'User-Agent': 'ender-client/0.1.2 (github.com/ender-client)' }
   })
   if (!res.ok) throw new Error(`Modrinth ${res.status}: ${res.statusText}`)
   return res.json()
 }
 
 async function cfGet(path: string, params: Record<string, string | number>): Promise<any> {
-  const key = getSettings().curseforgeApiKey
+  const key = (getSettings().curseforgeApiKey ?? '').trim()
   if (!key) throw new Error('NO_CF_KEY')
 
   const url = new URL(CF_BASE + path)
@@ -49,7 +49,12 @@ async function cfGet(path: string, params: Record<string, string | number>): Pro
   })
   if (!res.ok) {
     if (res.status === 403 || res.status === 401) {
-      throw new Error('CurseForge API key is invalid or not authorised. Go to Settings → CurseForge and re-enter your key from console.curseforge.com → API Keys.')
+      throw new Error(
+        'CurseForge key rejected (403). Common causes: ' +
+        '(1) wrong key — go to console.curseforge.com → API Keys and copy the full key starting with $2a$10$; ' +
+        '(2) new keys can take a few minutes to activate after creation; ' +
+        '(3) go to Settings → API Keys in Ender Client and re-paste the key.'
+      )
     }
     throw new Error(`CurseForge ${res.status}: ${res.statusText}`)
   }
@@ -136,7 +141,7 @@ export async function fetchCurseForgePackOverview(modId: string): Promise<PackOv
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 async function cfPost(path: string, body: unknown): Promise<any> {
-  const key = getSettings().curseforgeApiKey
+  const key = (getSettings().curseforgeApiKey ?? '').trim()
   if (!key) throw new Error('NO_CF_KEY')
   const res = await fetch(CF_BASE + path, {
     method: 'POST',
@@ -154,7 +159,7 @@ async function cfPost(path: string, body: unknown): Promise<any> {
 
 async function downloadBuffer(url: string): Promise<Buffer> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'ender-client/0.1.0 (github.com/ender-client)' }
+    headers: { 'User-Agent': 'ender-client/0.1.2 (github.com/ender-client)' }
   })
   if (!res.ok) throw new Error(`Download failed: ${res.status}`)
   return Buffer.from(await res.arrayBuffer())
