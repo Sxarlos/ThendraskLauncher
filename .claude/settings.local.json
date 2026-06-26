@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Skill(run)",
+      "PowerShell(New-Item *)",
+      "PowerShell(Start-Process powershell -ArgumentList '-NoExit', '-Command', 'Set-Location \"C:\\\\Users\\\\lewis\\\\Documents\\\\New Client Custom\"; npm run dev' -WorkingDirectory \"C:\\\\Users\\\\lewis\\\\Documents\\\\New Client Custom\")",
+      "PowerShell(Get-Process *)",
+      "WebSearch",
+      "Read(//c/Users/lewis/AppData/Roaming/Electron/**)",
+      "Read(//c/Users/lewis/AppData/Roaming/ender-client/**)"
+    ]
+  }
+}
