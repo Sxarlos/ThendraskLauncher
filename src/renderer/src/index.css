@@ -1,0 +1,247 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ════════════════════════════════════════════════════════════
+   THEME TOKENS
+   Default (:root) = "Ender" dark green. Other themes override a
+   subset below. Accent themes only swap the accent tokens; the
+   light theme swaps the full structural + text palette.
+   `--accent-rgb` / `--danger-rgb` etc. are bare "r,g,b" triples
+   so they can be used inside rgba(var(--x), <alpha>).
+═══════════════════════════════════════════════════════════════ */
+:root {
+  /* Surfaces */
+  --bg: #0a0c10;
+  --bg-inset: #0d0f14;
+  --surface: #111318;
+  --surface-2: #1a1e27;
+  --surface-3: #232834;
+  --border: #252a36;
+  --border-soft: #1c2030;
+  --border-strong: #2f3645;
+
+  /* Text */
+  --text: #e7e9ee;
+  --text-strong: #ffffff;
+  --text-bright: #d1d5db;
+  --text-soft: #9ca3af;
+  --text-muted: #6b7280;
+  --text-faint: #4b5563;
+  --text-dim: #374151;
+
+  /* Accent (themeable) */
+  --accent: #4ade80;
+  --accent-strong: #22c55e;
+  --accent-darker: #16a34a;
+  --accent-rgb: 34, 197, 94;
+
+  /* Semantic (kept consistent across themes) */
+  --danger: #ef4444;
+  --danger-soft: #f87171;
+  --danger-faint: #fca5a5;
+  --danger-rgb: 239, 68, 68;
+  --warning: #fbbf24;
+  --warning-rgb: 251, 191, 36;
+
+  /* Overlays: white in dark themes, black in light. */
+  --overlay-rgb: 255, 255, 255;
+  --scrim-rgb: 0, 0, 0;
+}
+
+/* ── Accent-only themes (dark base) ─────────────────────────── */
+[data-theme='amethyst'] {
+  --accent: #c084fc;
+  --accent-strong: #a855f7;
+  --accent-darker: #9333ea;
+  --accent-rgb: 168, 85, 247;
+}
+[data-theme='ocean'] {
+  --accent: #38bdf8;
+  --accent-strong: #0ea5e9;
+  --accent-darker: #0284c7;
+  --accent-rgb: 14, 165, 233;
+}
+[data-theme='crimson'] {
+  --accent: #fb7185;
+  --accent-strong: #f43f5e;
+  --accent-darker: #e11d48;
+  --accent-rgb: 244, 63, 94;
+}
+[data-theme='gold'] {
+  --accent: #fbbf24;
+  --accent-strong: #f59e0b;
+  --accent-darker: #d97706;
+  --accent-rgb: 245, 158, 11;
+}
+
+/* ── Midnight: near-black AMOLED base, green accent ─────────── */
+[data-theme='midnight'] {
+  --bg: #000000;
+  --bg-inset: #050608;
+  --surface: #0a0c10;
+  --surface-2: #12151c;
+  --surface-3: #181c25;
+  --border: #1c212c;
+  --border-soft: #14171f;
+  --border-strong: #262c38;
+}
+
+/* ── Daylight: full light theme ─────────────────────────────── */
+[data-theme='light'] {
+  --bg: #f4f5f7;
+  --bg-inset: #eceef1;
+  --surface: #ffffff;
+  --surface-2: #f1f3f5;
+  --surface-3: #e6e9ed;
+  --border: #d8dce2;
+  --border-soft: #e4e7ec;
+  --border-strong: #c4cad3;
+
+  --text: #1a1d24;
+  --text-strong: #0a0c10;
+  --text-bright: #2b313c;
+  --text-soft: #4b5563;
+  --text-muted: #6b7280;
+  --text-faint: #8a93a4;
+  --text-dim: #aab2bf;
+
+  --accent: #16a34a;
+  --accent-strong: #22c55e;
+  --accent-darker: #15803d;
+  --accent-rgb: 34, 197, 94;
+
+  --danger: #dc2626;
+  --danger-soft: #ef4444;
+  --danger-faint: #f87171;
+  --danger-rgb: 220, 38, 38;
+  --warning: #d97706;
+  --warning-rgb: 217, 119, 6;
+
+  --overlay-rgb: 0, 0, 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Make Tailwind's `text-white` follow the theme's strong-text token so
+   emphasised text stays readable in the light theme. (bg-white is left
+   alone — it's used for the toggle knob.) */
+.text-white {
+  color: var(--text-strong);
+}
+.hover\:text-white:hover {
+  color: var(--text-strong);
+}
+
+@keyframes shimmer {
+  0%   { background-position: -400% 0; }
+  100% { background-position:  400% 0; }
+}
+
+@keyframes panDrift {
+  0%   { transform: scale(1.06) translate(0%,     0%);   }
+  18%  { transform: scale(1.09) translate(-2.4%,  1.1%); }
+  42%  { transform: scale(1.11) translate(-1.8%, -1.7%); }
+  65%  { transform: scale(1.09) translate( 2.1%, -0.9%); }
+  85%  { transform: scale(1.07) translate( 1.4%,  1.4%); }
+  100% { transform: scale(1.06) translate(0%,     0%);   }
+}
+
+@keyframes imgFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes imgFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes heroFadeIn {
+  from { opacity: 0; transform: scale(1.04); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Eye of Ender splash animations ─────────────────────────── */
+@keyframes eyeAppear {
+  0%   { opacity: 0; transform: scale(0.35) translateY(24px); }
+  65%  { opacity: 1; transform: scale(1.1)  translateY(-8px); }
+  82%  { transform: scale(0.96) translateY(3px); }
+  100% { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+@keyframes eyeFloat {
+  0%, 100% { transform: translateY(0)    rotate(-2deg) scale(1); }
+  50%       { transform: translateY(-16px) rotate(2deg)  scale(1.03); }
+}
+
+@keyframes eyeGlowPulse {
+  0%, 100% { opacity: 0.12; transform: scale(1); }
+  50%       { opacity: 0.22; transform: scale(1.15); }
+}
+
+@keyframes eyePop {
+  0%   { transform: scale(1);    opacity: 1; filter: brightness(1); }
+  20%  { transform: scale(1.3);  opacity: 1; filter: brightness(3) saturate(2); }
+  50%  { transform: scale(1.5);  opacity: 0.6; filter: brightness(5); }
+  100% { transform: scale(0.05); opacity: 0; filter: brightness(1); }
+}
+
+@keyframes particleFly {
+  0%   { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--px), var(--py)) scale(0) rotate(180deg); opacity: 0; }
+}
+
+@keyframes splashRing {
+  0%   { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes ambientFloat {
+  0%, 100% { transform: translateY(0) translateX(0) scale(1); opacity: 0.4; }
+  33%       { transform: translateY(-8px) translateX(4px) scale(1.1); opacity: 0.7; }
+  66%       { transform: translateY(4px) translateX(-6px) scale(0.9); opacity: 0.3; }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 400% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+select option {
+  background: var(--surface-2);
+  color: var(--text);
+}
