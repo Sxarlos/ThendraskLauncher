@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Account } from '@shared/types'
 import { useApp } from '../store'
 
@@ -189,10 +189,19 @@ type TestState = 'idle' | 'testing' | 'ok' | 'fail'
 
 function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
   const [key, setKey] = useState('')
+  const [keyLoaded, setKeyLoaded] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [busy, setBusy] = useState(false)
   const [testState, setTestState] = useState<TestState>('idle')
   const [error, setError] = useState<string | null>(null)
+
+  // Pre-load saved key so users can see/verify what's already stored
+  useEffect(() => {
+    window.api.settings.get().then((s) => {
+      setKey(s.curseforgeApiKey ?? '')
+      setKeyLoaded(true)
+    }).catch(() => setKeyLoaded(true))
+  }, [])
 
   const trimmed = key.trim()
 
@@ -287,8 +296,9 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
             type={showKey ? 'text' : 'password'}
             value={key}
             onChange={(e) => { setKey(e.target.value); setTestState('idle'); setError(null) }}
-            placeholder="Paste your API key here…"
-            className="flex-1 rounded-xl px-3 py-2.5 text-sm font-mono outline-none"
+            placeholder={keyLoaded ? 'Paste your API key here…' : 'Loading…'}
+            disabled={!keyLoaded}
+            className="flex-1 rounded-xl px-3 py-2.5 text-sm font-mono outline-none disabled:opacity-50"
             style={{
               background: 'var(--surface-2)',
               border: `1px solid ${testState === 'ok' ? 'rgba(var(--accent-rgb),0.4)' : testState === 'fail' ? 'rgba(var(--danger-rgb),0.4)' : 'var(--border-soft)'}`,
@@ -331,6 +341,11 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
         )}
         {error && (
           <p className="text-xs leading-relaxed" style={{ color: 'var(--danger)' }}>{error}</p>
+        )}
+        {testState === 'fail' && (
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--text-faint)' }}>
+            Tip: new CurseForge API keys can take a few minutes to activate after creation. If you just made your key, wait 2–3 minutes then try again.
+          </p>
         )}
       </div>
 

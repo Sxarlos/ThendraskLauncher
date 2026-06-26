@@ -34,13 +34,13 @@ function modsDir(instanceId: string): string {
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await net.fetch(url, { headers: { 'User-Agent': 'EnderClient/0.1.0' } })
+  const res = await net.fetch(url, { headers: { 'User-Agent': 'EnderClient/0.1.2' } })
   if (!res.ok) throw new Error(`Modrinth API error: HTTP ${res.status}`)
   return res.json() as Promise<T>
 }
 
 async function downloadToFile(url: string, dest: string): Promise<void> {
-  const res = await net.fetch(url, { headers: { 'User-Agent': 'EnderClient/0.1.0' } })
+  const res = await net.fetch(url, { headers: { 'User-Agent': 'EnderClient/0.1.2' } })
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
   const buf = await res.arrayBuffer()
   writeFileSync(dest, Buffer.from(buf))

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Page } from '@shared/types'
 import { useApp } from '../store'
 import eyeIcon from '../assets/EyeofEnder.png'
@@ -97,6 +97,11 @@ export default function Sidebar(): JSX.Element {
   const installingCount  = useApp((s) => s.installingCount)
   const updateInfo       = useApp((s) => s.updateInfo)
   const [collapsed, setCollapsed] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
+
+  useEffect(() => {
+    window.api.app.getVersion().then(setAppVersion).catch(() => {})
+  }, [])
 
   const W = collapsed ? 52 : 224
 
@@ -142,7 +147,7 @@ export default function Sidebar(): JSX.Element {
           }}
         >
           <div className="font-bold text-sm text-white leading-tight whitespace-nowrap">Ender Client</div>
-          <div className="text-[10px] leading-tight whitespace-nowrap" style={{ color: 'var(--text-faint)' }}>v0.1.0</div>
+          <div className="text-[10px] leading-tight whitespace-nowrap" style={{ color: 'var(--text-faint)' }}>{appVersion ? `v${appVersion}` : ''}</div>
         </div>
       </div>
 
