@@ -145,7 +145,14 @@ const api = {
       ipcRenderer.on('update:available', listener)
       return () => ipcRenderer.removeListener('update:available', listener)
     },
-    openDownload: (url: string): Promise<void> => ipcRenderer.invoke('update:openDownload', url)
+    onDownloadProgress: (cb: (percent: number) => void): (() => void) => {
+      const listener = (_e: unknown, percent: number): void => cb(percent)
+      ipcRenderer.on('update:download-progress', listener)
+      return () => ipcRenderer.removeListener('update:download-progress', listener)
+    },
+    openDownload: (url: string): Promise<void> => ipcRenderer.invoke('update:openDownload', url),
+    download: (url: string): Promise<string> => ipcRenderer.invoke('update:download', url),
+    install: (path: string): Promise<void> => ipcRenderer.invoke('update:install', path)
   }
 }
 

@@ -37,6 +37,7 @@ export default function App(): JSX.Element {
   const clearLogs = useApp((s) => s.clearLogs)
   const loadTheme = useApp((s) => s.loadTheme)
   const setUpdateInfo = useApp((s) => s.setUpdateInfo)
+  const setUpdateDownload = useApp((s) => s.setUpdateDownload)
   const Current = PAGES[page]
 
   const [appReady, setAppReady] = useState(false)
@@ -61,8 +62,11 @@ export default function App(): JSX.Element {
     ) as (() => void) | undefined
 
     const unsubUpdate = (window.api as any).update?.onAvailable?.((info: any) => setUpdateInfo(info)) as (() => void) | undefined
+    const unsubDownload = (window.api as any).update?.onDownloadProgress?.((percent: number) =>
+      setUpdateDownload({ progress: percent })
+    ) as (() => void) | undefined
 
-    return () => { unsubProgress(); unsubLog?.(); unsubUpdate?.() }
+    return () => { unsubProgress(); unsubLog?.(); unsubUpdate?.(); unsubDownload?.() }
   }, [loadTheme, refreshAccounts, refreshInstances, setProgress, addLog, clearLogs, setUpdateInfo])
 
   return (

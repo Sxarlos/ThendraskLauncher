@@ -27,7 +27,7 @@ async function mrGet(path: string, params: Record<string, string>): Promise<any>
     if (v !== '' && v !== undefined) url.searchParams.set(k, v)
   }
   const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': 'ender-client/0.1.2 (github.com/ender-client)' }
+    headers: { 'User-Agent': 'ender-client/0.1.5 (github.com/ender-client)' }
   })
   if (!res.ok) throw new Error(`Modrinth ${res.status}: ${res.statusText}`)
   return res.json()
@@ -159,7 +159,7 @@ async function cfPost(path: string, body: unknown): Promise<any> {
 
 async function downloadBuffer(url: string): Promise<Buffer> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'ender-client/0.1.2 (github.com/ender-client)' }
+    headers: { 'User-Agent': 'ender-client/0.1.5 (github.com/ender-client)' }
   })
   if (!res.ok) throw new Error(`Download failed: ${res.status}`)
   return Buffer.from(await res.arrayBuffer())

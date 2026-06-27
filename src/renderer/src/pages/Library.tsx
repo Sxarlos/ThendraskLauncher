@@ -4,6 +4,7 @@ import type { BrowseParams, Instance, ModpackResult, PackMod, PackOverview, Pack
 import { activeAccount, useApp } from '../store'
 import NewInstanceModal from '../components/NewInstanceModal'
 import { ipcError } from '../lib/ipcError'
+import { formatPlayTime } from '../lib/formatPlayTime'
 
 /* ════════════════════════════════════════════════
    Error boundary — catches render crashes in the detail panel
@@ -159,6 +160,9 @@ function InstanceCard({
           <div className="font-semibold text-[14px] leading-snug text-white truncate">{instance.name}</div>
           <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
             {instance.loader === 'vanilla' ? 'Vanilla' : instance.loader} · MC {instance.mcVersion}
+            {instance.timePlayed ? (
+              <span style={{ color: 'var(--text-dim)' }}> · {formatPlayTime(instance.timePlayed)} played</span>
+            ) : null}
           </div>
         </div>
         {running && (
