@@ -72,6 +72,12 @@ export function markPlayed(id: string): void {
   updateInstance(id, { lastPlayed: Date.now() })
 }
 
+export function addPlayTime(id: string, ms: number): void {
+  const inst = getInstance(id)
+  if (!inst) return
+  updateInstance(id, { timePlayed: (inst.timePlayed ?? 0) + ms })
+}
+
 export function removeInstance(id: string): Instance[] {
   save(load().filter((i) => i.id !== id))
   return listInstances()

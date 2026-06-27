@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Instance } from '@shared/types'
 import { useApp, activeAccount } from '../store'
 import { ipcError } from '../lib/ipcError'
+import { formatPlayTime } from '../lib/formatPlayTime'
+import NEWS from '../lib/news'
 
 /* ── Screenshot slideshow background ─────────────────────── */
 
@@ -161,6 +163,23 @@ function QuickCard({
   )
 }
 
+const TAG_STYLES: Record<string, { color: string; label: string }> = {
+  update:       { color: 'var(--accent-strong)',  label: 'Update' },
+  hotfix:       { color: 'var(--danger-soft)',    label: 'Hotfix' },
+  announcement: { color: 'var(--warning)',        label: 'Announcement' },
+}
+
+const DISMISSED_KEY = 'ender:dismissed-news'
+
+function getDismissed(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? '[]')) }
+  catch { return new Set() }
+}
+
+function saveDismissed(ids: Set<string>): void {
+  localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids]))
+}
+
 function MiniCard({ instance, onClick }: { instance: Instance; onClick: () => void }): JSX.Element {
   const prog    = useApp((s) => s.progress[instance.id])
   const running = prog?.state === 'running'
@@ -190,6 +209,7 @@ function MiniCard({ instance, onClick }: { instance: Instance; onClick: () => vo
         <div className="text-[13px] font-medium text-white truncate leading-snug">{instance.name}</div>
         <div className="text-[11px] truncate" style={{ color: 'var(--text-dim)' }}>
           {instance.loader === 'vanilla' ? 'Vanilla' : instance.loader} · {instance.mcVersion}
+          {instance.timePlayed ? ` · ${formatPlayTime(instance.timePlayed)}` : ''}
         </div>
       </div>
       {running && (
@@ -210,6 +230,36 @@ export default function Home(): JSX.Element {
   const setPage                  = useApp((s) => s.setPage)
   const refreshInstances         = useApp((s) => s.refreshInstances)
   const setPendingLibraryInstanceId = useApp((s) => s.setPendingLibraryInstanceId)
+  const updateInfo               = useApp((s) => s.updateInfo)
+  const updateDownload           = useApp((s) => s.updateDownload)
+  const setUpdateDownload        = useApp((s) => s.setUpdateDownload)
+  const [updateDismissed, setUpdateDismissed] = useState(false)
+  const [dismissedNews, setDismissedNews] = useState<Set<string>>(getDismissed)
+
+  const dismissNews = (id: string): void => {
+    setDismissedNews((prev) => {
+      const next = new Set(prev).add(id)
+      saveDismissed(next)
+      return next
+    })
+  }
+
+  const visibleNews = NEWS.filter((n) => !dismissedNews.has(n.id))
+
+  const startDownload = async (): Promise<void> => {
+    if (!updateInfo) return
+    setUpdateDownload({ state: 'downloading', progress: 0, path: null })
+    try {
+      const path = await (window.api as any).update.download(updateInfo.downloadUrl)
+      setUpdateDownload({ state: 'ready', progress: 100, path })
+    } catch {
+      setUpdateDownload({ state: 'error', progress: 0, path: null })
+    }
+  }
+
+  const installUpdate = (): void => {
+    if (updateDownload.path) (window.api as any).update.install(updateDownload.path)
+  }
 
   const openInstance = (id: string): void => {
     setPendingLibraryInstanceId(id)
@@ -256,6 +306,122 @@ export default function Home(): JSX.Element {
 
   return (
     <div className="h-full flex flex-col overflow-hidden" style={{ animation: 'heroFadeIn 0.4s ease-out' }}>
+
+      {/* ─── UPDATE BANNER ───────────────────────────────────────── */}
+      {updateInfo && !updateDismissed && (
+        <div
+          className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5"
+          style={{
+            background: 'rgba(var(--accent-rgb),0.08)',
+            borderBottom: '1px solid rgba(var(--accent-rgb),0.2)',
+          }}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* Update icon */}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', flexShrink: 0 }}>
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            <span className="text-xs min-w-0">
+              <span style={{ color: 'var(--accent)', fontWeight: 700 }}>v{updateInfo.version}</span>
+              <span style={{ color: 'var(--text-bright)' }}> is available</span>
+              {updateInfo.notes && (
+                <span style={{ color: 'var(--text-muted)' }}> — {updateInfo.notes}</span>
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {updateDownload.state === 'downloading' ? (
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(var(--accent-rgb),0.2)' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{ width: `${updateDownload.progress}%`, background: 'var(--accent)' }}
+                  />
+                </div>
+                <span className="text-xs tabular-nums" style={{ color: 'var(--accent)' }}>{updateDownload.progress}%</span>
+              </div>
+            ) : updateDownload.state === 'ready' ? (
+              <button
+                onClick={installUpdate}
+                className="px-3 py-1 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80"
+                style={{ background: 'var(--accent)', color: '#000' }}
+              >
+                Install & Restart
+              </button>
+            ) : updateDownload.state === 'error' ? (
+              <button
+                onClick={startDownload}
+                className="px-3 py-1 rounded-lg text-xs font-semibold"
+                style={{ background: 'rgba(var(--danger-rgb),0.15)', color: 'var(--danger-soft)' }}
+              >
+                Retry
+              </button>
+            ) : (
+              <button
+                onClick={startDownload}
+                className="px-3 py-1 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80"
+                style={{ background: 'var(--accent)', color: '#000' }}
+              >
+                Download
+              </button>
+            )}
+            {updateDownload.state !== 'downloading' && (
+              <button
+                onClick={() => setUpdateDismissed(true)}
+                className="w-5 h-5 flex items-center justify-center rounded-md transition-colors hover:bg-white/10"
+                style={{ color: 'var(--text-faint)' }}
+                title="Dismiss"
+              >
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── NEWS BANNERS ────────────────────────────────────────── */}
+      {visibleNews.map((item) => {
+        const tag = item.tag ? TAG_STYLES[item.tag] : null
+        return (
+          <div
+            key={item.id}
+            className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5"
+            style={{
+              background: 'rgba(var(--overlay-rgb),0.04)',
+              borderBottom: '1px solid var(--border-soft)',
+            }}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--text-faint)', flexShrink: 0 }}>
+                <path d="M4 22V4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v18l-4-2-4 2-4-2-4 2z"/>
+                <line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="13" y2="13"/>
+              </svg>
+              <span className="text-xs min-w-0">
+                {tag && (
+                  <span style={{ color: tag.color, fontWeight: 700 }}>{tag.label}: </span>
+                )}
+                <span style={{ color: 'var(--text-bright)' }}>{item.title}</span>
+                {item.body && (
+                  <span style={{ color: 'var(--text-muted)' }}> — {item.body}</span>
+                )}
+              </span>
+            </div>
+            <button
+              onClick={() => dismissNews(item.id)}
+              className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md transition-colors hover:bg-white/10"
+              style={{ color: 'var(--text-faint)' }}
+              title="Dismiss"
+            >
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
+              </svg>
+            </button>
+          </div>
+        )
+      })}
 
       {/* ─── HERO PANEL ──────────────────────────────────────────── */}
       <div className="relative overflow-hidden shrink-0" style={{ height: '56%', minHeight: 280 }}>
@@ -533,6 +699,7 @@ export default function Home(): JSX.Element {
             desc="Configure Java path, memory allocation and game directory"
           />
         </div>
+
       </div>
 
     </div>

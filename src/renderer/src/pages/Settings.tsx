@@ -174,7 +174,9 @@ function NoChatRow({
 type UpdateCheckState = 'idle' | 'checking' | 'up-to-date' | 'available'
 
 function UpdateCheckRow(): JSX.Element {
-  const updateInfo = useApp((s) => s.updateInfo)
+  const updateInfo     = useApp((s) => s.updateInfo)
+  const updateDownload = useApp((s) => s.updateDownload)
+  const setUpdateDownload = useApp((s) => s.setUpdateDownload)
   const [state, setState] = useState<UpdateCheckState>(updateInfo ? 'available' : 'idle')
 
   const check = async (): Promise<void> => {
@@ -187,7 +189,20 @@ function UpdateCheckRow(): JSX.Element {
     }
   }
 
-  const current = updateInfo ?? (state === 'available' ? null : null)
+  const startDownload = async (): Promise<void> => {
+    if (!updateInfo) return
+    setUpdateDownload({ state: 'downloading', progress: 0, path: null })
+    try {
+      const path = await (window.api as any).update.download(updateInfo.downloadUrl)
+      setUpdateDownload({ state: 'ready', progress: 100, path })
+    } catch {
+      setUpdateDownload({ state: 'error', progress: 0, path: null })
+    }
+  }
+
+  const installUpdate = (): void => {
+    if (updateDownload.path) (window.api as any).update.install(updateDownload.path)
+  }
 
   return (
     <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
@@ -220,22 +235,61 @@ function UpdateCheckRow(): JSX.Element {
         </div>
       )}
 
-      {state === 'available' && updateInfo && (
+      {(state === 'available' || updateDownload.state !== 'idle') && updateInfo && (
         <div
-          className="mt-3 flex items-center justify-between gap-3 text-xs px-3 py-2 rounded-xl"
-          style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)', color: 'var(--text-bright)' }}
+          className="mt-3 px-3 py-2.5 rounded-xl"
+          style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}
         >
-          <span>
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>v{updateInfo.version}</span> is available
-            {updateInfo.notes && <span style={{ color: 'var(--text-muted)' }}> — {updateInfo.notes}</span>}
-          </span>
-          <button
-            onClick={() => (window.api as any).update?.openDownload?.(updateInfo.downloadUrl)}
-            className="shrink-0 px-3 py-1 rounded-lg font-semibold transition-opacity hover:opacity-80"
-            style={{ background: 'var(--accent)', color: '#000', fontSize: 11 }}
-          >
-            Download
-          </button>
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span style={{ color: 'var(--text-bright)' }}>
+              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>v{updateInfo.version}</span> is available
+              {updateInfo.notes && <span style={{ color: 'var(--text-muted)' }}> — {updateInfo.notes}</span>}
+            </span>
+
+            {updateDownload.state === 'idle' || updateDownload.state === 'error' ? (
+              <button
+                onClick={startDownload}
+                className="shrink-0 px-3 py-1 rounded-lg font-semibold transition-opacity hover:opacity-80"
+                style={{ background: 'var(--accent)', color: '#000', fontSize: 11 }}
+              >
+                {updateDownload.state === 'error' ? 'Retry' : 'Download'}
+              </button>
+            ) : updateDownload.state === 'ready' ? (
+              <button
+                onClick={installUpdate}
+                className="shrink-0 px-3 py-1 rounded-lg font-semibold transition-opacity hover:opacity-80"
+                style={{ background: 'var(--accent)', color: '#000', fontSize: 11 }}
+              >
+                Install & Restart
+              </button>
+            ) : null}
+          </div>
+
+          {updateDownload.state === 'downloading' && (
+            <div className="mt-2.5 flex items-center gap-3">
+              <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(var(--accent-rgb),0.2)' }}>
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{ width: `${updateDownload.progress}%`, background: 'var(--accent)' }}
+                />
+              </div>
+              <span className="text-xs tabular-nums shrink-0" style={{ color: 'var(--accent)' }}>
+                {updateDownload.progress}%
+              </span>
+            </div>
+          )}
+
+          {updateDownload.state === 'error' && (
+            <p className="mt-1.5 text-xs" style={{ color: 'var(--danger-soft)' }}>
+              Download failed — check your connection and try again.
+            </p>
+          )}
+
+          {updateDownload.state === 'ready' && (
+            <p className="mt-1.5 text-xs" style={{ color: 'var(--accent)' }}>
+              ✓ Downloaded — click Install &amp; Restart to apply the update.
+            </p>
+          )}
         </div>
       )}
     </div>

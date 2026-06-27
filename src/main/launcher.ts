@@ -1,9 +1,10 @@
+import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { Client } from 'minecraft-launcher-core'
 import type { ChildProcess } from 'child_process'
 import type { LaunchProgress, LaunchState } from '@shared/types'
 import { getActiveMclcUser } from './accounts'
-import { getInstance, instanceGameDir, markPlayed, updateInstance } from './instances'
+import { getInstance, instanceGameDir, markPlayed, addPlayTime, updateInstance } from './instances'
 import { getSettings, detectJava } from './settings'
 import { ensureChatMod } from './chatmod'
 import { writeDefaultOptions } from './gameoptions'
@@ -22,6 +23,8 @@ import {
   installForgeLoader,
   installNeoforgeLoader
 } from './modpack'
+import { autoInstallShader } from './shaders'
+import { injectCosmetics } from './cosmetics'
 
 /** Instances currently running, keyed by instance id. */
 const running = new Map<string, ChildProcess>()
@@ -176,6 +179,11 @@ export async function launchInstance(instanceId: string): Promise<void> {
     await ensureChatMod(instance).catch(() => { /* non-fatal */ })
   }
 
+  // Inject cosmetics mod (hidden setting — off by default, not shown in UI)
+  if (settings.cosmeticsEnabled) {
+    try { injectCosmetics(instanceId, resolvedLoaderType as any, instance.mcVersion) } catch { /* non-fatal */ }
+  }
+
   // Write default game options for fresh instances (1.12+ only)
   if (settings.defaultGameSettings) {
     writeDefaultOptions(instanceGameDir(instanceId), instance.mcVersion, settings.defaultGameSettings)
@@ -217,12 +225,37 @@ export async function launchInstance(instanceId: string): Promise<void> {
     }
   }
 
+  // Match: "EuphoriaPatcher: Required: ComplementaryShaders r5.7.1"
+  const EUPHORIA_RE = /EuphoriaPatcher:\s+Required:\s+(\S+)\s+(\S+)/
+
   let launched = false
+  let sessionStart = 0
   client.on('data', (line: string) => {
     const str = String(line).trimEnd()
     emitLog(str)
+
+    // Auto-install missing shaders required by EuphoriaPatcher
+    const shaderMatch = str.match(EUPHORIA_RE)
+    if (shaderMatch) {
+      const [, shaderName, version] = shaderMatch
+      const shaderpacks = join(instanceGameDir(instanceId), 'shaderpacks')
+      emitLog(`[Ender Client] Detected missing shader: ${shaderName} ${version} — downloading automatically…`)
+      autoInstallShader(shaderName, version, shaderpacks)
+        .then((dest) => {
+          if (dest) {
+            emitLog(`[Ender Client] ✓ ${shaderName} ${version} installed. Close and relaunch the game to apply.`)
+          } else {
+            emitLog(`[Ender Client] Could not find ${shaderName} ${version} on Modrinth — download manually from https://www.complementary.dev/`)
+          }
+        })
+        .catch((e: Error) => {
+          emitLog(`[Ender Client] Shader auto-download failed: ${e.message}`)
+        })
+    }
+
     if (!launched) {
       launched = true
+      sessionStart = Date.now()
       markPlayed(instanceId)
       setState(instanceId, 'running', 'Minecraft is running.')
       setPlaying(instance.name, instance.loader, instance.mcVersion)
@@ -231,6 +264,7 @@ export async function launchInstance(instanceId: string): Promise<void> {
 
   client.on('close', (code: number) => {
     running.delete(instanceId)
+    if (sessionStart > 0) addPlayTime(instanceId, Date.now() - sessionStart)
     emitLog(`\n[Launcher] Game exited with code ${code}.`)
     setState(instanceId, 'closed', `Game exited (code ${code}).`)
     setIdle()

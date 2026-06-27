@@ -36,7 +36,7 @@ import { setCustomInstancesDir } from './persist'
 import { startRelayRegistration, getOwnPresence } from './presence'
 import { initDiscord, destroyDiscord } from './discord'
 import { listFriends, addFriend, removeFriend, pollFriend, generateFriendCode } from './friends'
-import { startUpdateChecker, checkForUpdate, openDownloadUrl } from './updater'
+import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart } from './updater'
 import type { Friend } from '@shared/types'
 import type { AppSettings, BrowseParams, ServerEntry } from '@shared/types'
 
@@ -287,6 +287,8 @@ function registerIpcHandlers(): void {
   // Updater
   handle('update:check', () => checkForUpdate())
   handle('update:openDownload', (url: string) => openDownloadUrl(url))
+  handle('update:download', (url: string) => downloadUpdate(url))
+  handle('update:install', (path: string) => installAndRestart(path))
 }
 
 app.whenReady().then(() => {
@@ -297,6 +299,13 @@ app.whenReady().then(() => {
 
   // Auto-generate a friend code for this user on first run
   if (!friendCode) setSettings({ friendCode: generateFriendCode() })
+
+  // Auto-apply the default relay URL if none is saved yet
+  const DEFAULT_RELAY_URL = 'https://relay.sxarlos.store'
+  if (DEFAULT_RELAY_URL !== 'PASTE_YOUR_RELAY_URL_HERE') {
+    const { relayUrl } = getSettings()
+    if (!relayUrl) setSettings({ relayUrl: DEFAULT_RELAY_URL })
+  }
 
   startRelayRegistration()
   registerIpcHandlers()

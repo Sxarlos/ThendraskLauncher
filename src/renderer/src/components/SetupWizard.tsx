@@ -4,9 +4,9 @@ import { useApp } from '../store'
 
 /* ── Step type ───────────────────────────────────────────── */
 
-type Step = 'welcome' | 'account' | 'curseforge' | 'done'
-const STEP_ORDER: Step[] = ['welcome', 'account', 'curseforge', 'done']
-const PROGRESS_STEPS: Step[] = ['account', 'curseforge', 'done']
+type Step = 'welcome' | 'account' | 'curseforge' | 'friends' | 'done'
+const STEP_ORDER: Step[] = ['welcome', 'account', 'curseforge', 'friends', 'done']
+const PROGRESS_STEPS: Step[] = ['account', 'curseforge', 'friends', 'done']
 
 /* ── Step indicator ──────────────────────────────────────── */
 
@@ -365,6 +365,73 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
   )
 }
 
+/* ── Step: Friends ───────────────────────────────────────── */
+
+function FriendsStep({ onNext }: { onNext: () => void }): JSX.Element {
+  const [hasRelay, setHasRelay] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    window.api.settings.get().then((s) => setHasRelay(!!s.relayUrl)).catch(() => setHasRelay(false))
+  }, [])
+
+  return (
+    <div className="flex flex-col gap-5">
+      <StepDots current="friends" />
+
+      <div className="text-center">
+        <h2 className="text-xl font-black text-white mb-1.5">Friends</h2>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          See when your mates are online and what they're playing — right inside the launcher.
+        </p>
+      </div>
+
+      {/* Feature highlights */}
+      <div
+        className="rounded-xl p-4 flex flex-col gap-3"
+        style={{ background: 'var(--surface-2)', border: '1px solid var(--border-soft)' }}
+      >
+        {([
+          ['👥', 'Add friends by code', 'No IP addresses — just share your unique friend code'],
+          ['🟢', 'Live status', 'See who\'s online, what modpack they\'re playing, and for how long'],
+          ['🌐', 'Works anywhere', 'Friends on different networks, different countries — it all works'],
+        ] as [string, string, string][]).map(([icon, title, desc]) => (
+          <div key={title} className="flex items-start gap-3">
+            <span className="text-lg shrink-0">{icon}</span>
+            <div>
+              <div className="text-sm font-semibold text-white">{title}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {hasRelay === true && (
+        <div
+          className="flex items-center gap-2 text-xs px-3 py-2.5 rounded-xl"
+          style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }}
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          All set — head to the Friends tab to add your first friend.
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2 pt-1">
+        <button
+          onClick={onNext}
+          className="w-full py-3 rounded-xl font-bold text-sm text-black transition-all"
+          style={{ background: 'var(--accent-strong)' }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent-strong)')}
+        >
+          Continue →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Step: Done ──────────────────────────────────────────── */
 
 function DoneStep({ accounts, onFinish }: { accounts: Account[]; onFinish: () => void }): JSX.Element {
@@ -448,6 +515,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }):
         {step === 'welcome'    && <WelcomeStep onNext={next} />}
         {step === 'account'    && <AccountStep onNext={next} />}
         {step === 'curseforge' && <CurseForgeStep onNext={next} />}
+        {step === 'friends'    && <FriendsStep onNext={next} />}
         {step === 'done'       && <DoneStep accounts={accounts} onFinish={finish} />}
       </div>
     </div>
