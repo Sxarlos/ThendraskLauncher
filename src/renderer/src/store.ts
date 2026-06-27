@@ -38,6 +38,9 @@ interface AppState {
   updateInfo: UpdateInfo | null
   setUpdateInfo: (info: UpdateInfo | null) => void
 
+  updateDownload: { state: 'idle' | 'downloading' | 'ready' | 'error'; progress: number; path: string | null }
+  setUpdateDownload: (patch: Partial<AppState['updateDownload']>) => void
+
   /** Set before navigating to Library so the panel auto-opens for that instance. */
   pendingLibraryInstanceId: string | null
   setPendingLibraryInstanceId: (id: string | null) => void
@@ -95,6 +98,10 @@ export const useApp = create<AppState>((set) => ({
 
   updateInfo: null,
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
+
+  updateDownload: { state: 'idle', progress: 0, path: null },
+  setUpdateDownload: (patch) =>
+    set((s) => ({ updateDownload: { ...s.updateDownload, ...patch } })),
 
   pendingLibraryInstanceId: null,
   setPendingLibraryInstanceId: (pendingLibraryInstanceId) => set({ pendingLibraryInstanceId }),

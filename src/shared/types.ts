@@ -34,6 +34,7 @@ export interface Instance {
   iconUrl?: string
   screenshotUrls?: string[]  // Gallery images fetched from the source platform
   lastPlayed?: number
+  timePlayed?: number         // total milliseconds played across all sessions
   recommendedRamMb?: number
   jvmArgs?: string           // Extra JVM flags for this instance (space/newline separated)
 }
@@ -109,6 +110,7 @@ export interface AppSettings {
   discordRpc?: boolean
   discordClientId?: string
   setupComplete?: boolean
+  cosmeticsEnabled?: boolean  // hidden — not shown in UI
 }
 
 export interface JavaInstall {

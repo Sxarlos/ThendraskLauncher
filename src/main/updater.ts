@@ -1,4 +1,7 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, net } from 'electron'
+import { createWriteStream } from 'fs'
+import { join } from 'path'
+import { tmpdir } from 'os'
 import type { UpdateInfo } from '@shared/types'
 
 // ── UPDATE MANIFEST ───────────────────────────────────────────────────────────
@@ -13,7 +16,7 @@ import type { UpdateInfo } from '@shared/types'
 //   4. Click "Raw" and copy that URL → paste it below as MANIFEST_URL
 //
 // RELEASING AN UPDATE:
-//   1. Bump version in package.json (e.g. 0.1.2)
+//   1. Bump version in package.json (e.g. 0.1.4)
 //   2. npm run package  →  builds the installer
 //   3. Upload the .exe wherever you share it (Google Drive, Discord, etc.)
 //   4. Edit your Gist — update "version" and "downloadUrl"
@@ -21,15 +24,15 @@ import type { UpdateInfo } from '@shared/types'
 //
 // Gist contents (update these values when you release):
 // {
-//   "version": "0.1.2",
-//   "notes": "Fixed CurseForge API key issues and launcher version display",
+//   "version": "0.1.7",
+//   "notes": "In-app updates, friends tab",
 //   "downloadUrl": "https://YOUR_DOWNLOAD_LINK_HERE"
 // }
 //
-const MANIFEST_URL = 'https://gist.githubusercontent.com/Sxarlos/09584c4f095954f7d39e93ae6d55b268/raw/eb0955e8985bd4c5cc1bff3e9be7afcdfce24e01/latest-version.json'
+const MANIFEST_URL = 'https://gist.githubusercontent.com/Sxarlos/09584c4f095954f7d39e93ae6d55b268/raw/latest-version.json'
 
-// Re-check every 2 hours while the app is open
-const RECHECK_INTERVAL_MS = 2 * 60 * 60 * 1000
+// Re-check every 5 minutes while the app is open
+const RECHECK_INTERVAL_MS = 5 * 60 * 1000
 
 function semverGt(a: string, b: string): boolean {
   const pa = a.replace(/^v/, '').split('.').map(Number)
@@ -74,6 +77,70 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
 
 export function openDownloadUrl(url: string): void {
   shell.openExternal(url)
+}
+
+function broadcastProgress(percent: number): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('update:download-progress', percent)
+  }
+}
+
+// Google Drive share links don't serve files directly. Convert them to the
+// direct-download format with confirm=t which bypasses the virus-scan warning page.
+function resolveDownloadUrl(url: string): string {
+  const fileId =
+    url.match(/drive\.google\.com\/file\/d\/([^/?]+)/)?.[1] ??
+    url.match(/drive\.google\.com\/open\?.*[?&]id=([^&]+)/)?.[1] ??
+    (!url.includes('confirm=') ? url.match(/drive\.google\.com\/uc\?.*[?&]id=([^&]+)/)?.[1] : null)
+  if (fileId) return `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`
+  return url
+}
+
+export async function downloadUpdate(url: string): Promise<string> {
+  const dest = join(tmpdir(), 'EnderClientSetup.exe')
+  const resolvedUrl = resolveDownloadUrl(url)
+
+  // Use Electron's net.fetch (Chromium networking) so Google Drive cookies,
+  // redirects and TLS quirks are handled automatically.
+  const res = await net.fetch(resolvedUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+  })
+
+  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
+
+  const total = parseInt(res.headers.get('content-length') ?? '0', 10)
+  let received = 0
+
+  const file = createWriteStream(dest)
+  const reader = res.body!.getReader()
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      file.write(Buffer.from(value!))
+      received += value!.length
+      if (total > 0) broadcastProgress(Math.round((received / total) * 100))
+    }
+  } catch (e) {
+    reader.cancel()
+    file.destroy()
+    throw e
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    file.end()
+    file.on('finish', resolve)
+    file.on('error', reject)
+  })
+
+  broadcastProgress(100)
+  return dest
+}
+
+export function installAndRestart(installerPath: string): void {
+  shell.openPath(installerPath)
+  setTimeout(() => app.quit(), 800)
 }
 
 /** Call once after the window is ready. Checks now then on a timer. */

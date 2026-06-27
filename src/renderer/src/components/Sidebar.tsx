@@ -85,7 +85,7 @@ const NAV: { id: Page; label: string; icon: JSX.Element; comingSoon?: boolean }[
   { id: 'home',     label: 'Home',     icon: <IconHome /> },
   { id: 'library',  label: 'Library',  icon: <IconLibrary /> },
   { id: 'servers',  label: 'Servers',  icon: <IconServers /> },
-  { id: 'friends',  label: 'Friends',  icon: <IconFriends />, comingSoon: true },
+  { id: 'friends',  label: 'Friends',  icon: <IconFriends /> },
   { id: 'settings', label: 'Settings', icon: <IconSettings /> },
 ]
 
