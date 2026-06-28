@@ -275,6 +275,19 @@ export async function installNeoforgeProfile(
 
   if (existsSync(versionJson)) return versionId
 
+  // NeoForge installer checks for launcher_profiles.json and aborts if absent.
+  // Write a minimal stub so it proceeds; the file is harmless to leave in place.
+  const launcherProfiles = join(gameDir, 'launcher_profiles.json')
+  if (!existsSync(launcherProfiles)) {
+    mkdirSync(gameDir, { recursive: true })
+    writeFileSync(launcherProfiles, JSON.stringify({
+      profiles: {},
+      selectedProfile: '(Default)',
+      clientToken: '00000000-0000-0000-0000-000000000000',
+      authenticationDatabase: {}
+    }))
+  }
+
   onProgress(`Downloading NeoForge ${neoforgeVersion} installer…`)
   const installerPath = await installNeoforgeLoader(gameDir, neoforgeVersion)
 
