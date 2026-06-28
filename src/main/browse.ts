@@ -381,6 +381,155 @@ export async function getCurseForgeFileDetails(
   return { mcVersion: allVers.find((v) => MC_VERSION_RE.test(v)) ?? '' }
 }
 
+// ── FTB ───────────────────────────────────────────────────────────────────────
+
+const FTB_BASE = 'https://api.modpacks.ch'
+const FTB_LOADER_NAMES = new Set(['forge', 'fabric', 'quilt', 'neoforge'])
+
+async function ftbGet(path: string): Promise<any> {
+  const res = await fetch(FTB_BASE + path, {
+    headers: { 'User-Agent': 'ender-client/0.1.5 (github.com/ender-client)' }
+  })
+  if (!res.ok) throw new Error(`FTB ${res.status}: ${res.statusText}`)
+  return res.json()
+}
+
+function mapFtbPack(pack: any): ModpackResult {
+  const allTags: string[] = (pack.tags ?? []).map((t: any) => String(t.name ?? ''))
+  const loaders = allTags.filter((t) => FTB_LOADER_NAMES.has(t.toLowerCase())).map((t) => t.toLowerCase())
+  const categories = allTags.filter((t) => !FTB_LOADER_NAMES.has(t.toLowerCase()))
+
+  const mcVersions = [...new Set<string>(
+    (pack.versions ?? []).map((v: any) => v.specs?.minecraft).filter(Boolean)
+  )].reverse()
+
+  const iconUrl: string | undefined = pack.art?.find((a: any) => a.type === 'square')?.url
+
+  return {
+    id: String(pack.id),
+    name: pack.name,
+    description: pack.synopsis ?? '',
+    iconUrl: iconUrl || undefined,
+    downloads: pack.installs ?? pack.plays ?? 0,
+    categories,
+    mcVersions,
+    loaders,
+    source: 'ftb',
+    externalUrl: `https://www.feed-the-beast.com/modpacks/${pack.id}`,
+    author: pack.authors?.[0]?.name ?? undefined
+  }
+}
+
+export async function searchFtb(params: BrowseParams): Promise<ModpackResult[]> {
+  const limit = params.limit ?? 20
+  const offset = params.offset ?? 0
+  const needed = offset + limit
+
+  let allIds: number[]
+  if (params.query) {
+    const data = await ftbGet(`/public/modpack/search/${needed}?term=${encodeURIComponent(params.query)}`)
+    allIds = data.packs ?? []
+  } else {
+    const data = await ftbGet(`/public/modpack/popular/plays/${needed}`)
+    allIds = data.packs ?? []
+  }
+
+  const pageIds = (allIds as number[]).slice(offset, offset + limit)
+  if (pageIds.length === 0) return []
+
+  const packs = await Promise.all(
+    pageIds.map(async (id): Promise<ModpackResult | null> => {
+      try {
+        const pack = await ftbGet(`/public/modpack/${id}`)
+        const result = mapFtbPack(pack)
+        if (params.loader && !result.loaders.includes(params.loader)) return null
+        if (params.mcVersion && !result.mcVersions.includes(params.mcVersion)) return null
+        return result
+      } catch {
+        return null
+      }
+    })
+  )
+
+  return packs.filter((p): p is ModpackResult => p !== null)
+}
+
+export async function fetchFtbScreenshots(packId: string): Promise<string[]> {
+  const pack = await ftbGet(`/public/modpack/${packId}`)
+  const art: Array<{ url: string }> = pack.art ?? []
+  return art.map((a) => a.url).filter(Boolean).slice(0, 8)
+}
+
+export async function fetchFtbPackOverview(packId: string): Promise<PackOverview> {
+  const pack = await ftbGet(`/public/modpack/${packId}`)
+  const art: Array<{ url: string }> = pack.art ?? []
+
+  return {
+    description: pack.synopsis ?? '',
+    screenshotUrls: art.map((a) => a.url).filter(Boolean).slice(0, 12),
+    externalUrl: `https://www.feed-the-beast.com/modpacks/${packId}`,
+    downloads: pack.installs ?? undefined,
+    author: pack.authors?.[0]?.name ?? undefined
+  }
+}
+
+export async function fetchFtbVersions(packId: string): Promise<PackVersion[]> {
+  const pack = await ftbGet(`/public/modpack/${packId}`)
+  const versions: any[] = (pack.versions ?? []).slice().reverse() // newest first
+
+  return versions.map((v: any): PackVersion => ({
+    id: String(v.id),
+    versionNumber: v.name,
+    name: v.name,
+    gameVersions: v.specs?.minecraft ? [v.specs.minecraft] : [],
+    loaders: [],
+    datePublished: v.updated ? new Date(v.updated * 1000).toISOString() : ''
+  }))
+}
+
+export async function fetchFtbMods(packId: string, versionId?: string): Promise<PackMod[]> {
+  const pack = await ftbGet(`/public/modpack/${packId}`)
+  const versions: any[] = pack.versions ?? []
+  const resolvedVerId = versionId
+    ? parseInt(versionId, 10)
+    : versions[versions.length - 1]?.id
+
+  if (!resolvedVerId) return []
+
+  const version = await ftbGet(`/public/modpack/${packId}/${resolvedVerId}`)
+  const files: any[] = version.files ?? []
+
+  return files
+    .filter((f: any) => !f.serveronly && String(f.path ?? '').startsWith('mods'))
+    .map((f: any): PackMod => ({
+      name: String(f.name ?? '').replace(/\.jar$/i, ''),
+      optional: f.optional ?? false,
+      serverOnly: f.serveronly ?? false,
+      iconUrl: undefined
+    }))
+}
+
+export async function fetchFtbChangelog(packId: string, limit = 10): Promise<VersionChangelog[]> {
+  const pack = await ftbGet(`/public/modpack/${packId}`)
+  const versions: any[] = (pack.versions ?? []).slice().reverse().slice(0, limit)
+
+  return versions.map((v: any): VersionChangelog => ({
+    id: String(v.id),
+    versionNumber: v.name,
+    name: v.name,
+    datePublished: v.updated ? new Date(v.updated * 1000).toISOString() : '',
+    changelog: v.changelog ?? ''
+  }))
+}
+
+export async function getFtbVersionDetails(packId: string, versionId: string): Promise<{ mcVersion: string }> {
+  const version = await ftbGet(`/public/modpack/${packId}/${versionId}`)
+  const mcTarget = (version.targets ?? []).find((t: any) => t.name === 'minecraft')
+  return { mcVersion: mcTarget?.version ?? '' }
+}
+
+// ── CurseForge search ─────────────────────────────────────────────────────────
+
 export async function searchCurseForge(params: BrowseParams): Promise<ModpackResult[]> {
   const p: Record<string, string | number> = {
     gameId: 432,

@@ -1,5 +1,5 @@
 import { Component, useCallback, useEffect, useRef, useState } from 'react'
-import type { ErrorInfo, ReactNode } from 'react'
+import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
 import type { BrowseParams, Instance, ModpackResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
 import { activeAccount, useApp } from '../store'
 import NewInstanceModal from '../components/NewInstanceModal'
@@ -228,7 +228,7 @@ function InstanceCard({
    BROWSE tab
 ════════════════════════════════════════════════ */
 
-type Source = 'modrinth' | 'curseforge'
+type Source = 'modrinth' | 'curseforge' | 'ftb'
 type LoaderFilter = 'all' | 'fabric' | 'forge' | 'quilt' | 'neoforge'
 
 const LOADERS: { value: LoaderFilter; label: string }[] = [
@@ -429,10 +429,12 @@ function PackCard({ pack, onInstall }: { pack: ModpackResult; onInstall: (p: Mod
             style={
               pack.source === 'modrinth'
                 ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }
+                : pack.source === 'ftb'
+                ? { background: 'rgba(239,68,68,0.15)', color: '#f87171' }
                 : { background: 'rgba(249,115,22,0.15)', color: '#fb923c' }
             }
           >
-            {pack.source === 'modrinth' ? 'MR' : 'CF'}
+            {pack.source === 'modrinth' ? 'MR' : pack.source === 'ftb' ? 'FTB' : 'CF'}
           </span>
         </div>
 
@@ -522,7 +524,10 @@ function BrowseModpacks(): JSX.Element {
         limit: PAGE_SIZE,
         offset: off,
       }
-      const fn = src === 'modrinth' ? window.api.browse.modrinth : window.api.browse.curseforge
+      const fn =
+        src === 'modrinth' ? window.api.browse.modrinth
+        : src === 'ftb' ? (window.api.browse as any).ftb as typeof window.api.browse.modrinth
+        : window.api.browse.curseforge
       const data = await fn(params)
       setResults((prev) => append ? [...prev, ...data] : data)
       setHasMore(data.length === PAGE_SIZE)
@@ -556,20 +561,18 @@ function BrowseModpacks(): JSX.Element {
         <div className="flex items-center gap-3">
           {/* Source pills */}
           <div className="flex gap-1 p-1 rounded-xl shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
-            {(['modrinth', 'curseforge'] as Source[]).map((s) => (
+            {([
+              { id: 'modrinth',   label: 'Modrinth',   activeStyle: { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', boxShadow: 'inset 0 1px 0 rgba(var(--accent-rgb),0.1)' } },
+              { id: 'curseforge', label: 'CurseForge', activeStyle: { background: 'rgba(249,115,22,0.15)', color: '#fb923c', boxShadow: 'inset 0 1px 0 rgba(249,115,22,0.1)' } },
+              { id: 'ftb',        label: 'FTB',         activeStyle: { background: 'rgba(239,68,68,0.15)', color: '#f87171', boxShadow: 'inset 0 1px 0 rgba(239,68,68,0.1)' } },
+            ] as { id: Source; label: string; activeStyle: CSSProperties }[]).map((s) => (
               <button
-                key={s}
-                onClick={() => setSource(s)}
+                key={s.id}
+                onClick={() => setSource(s.id)}
                 className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200"
-                style={
-                  source === s
-                    ? s === 'modrinth'
-                      ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', boxShadow: 'inset 0 1px 0 rgba(var(--accent-rgb),0.1)' }
-                      : { background: 'rgba(249,115,22,0.15)', color: '#fb923c', boxShadow: 'inset 0 1px 0 rgba(249,115,22,0.1)' }
-                    : { background: 'transparent', color: 'var(--text-muted)' }
-                }
+                style={source === s.id ? s.activeStyle : { background: 'transparent', color: 'var(--text-muted)' }}
               >
-                {s === 'modrinth' ? 'Modrinth' : 'CurseForge'}
+                {s.label}
               </button>
             ))}
           </div>
@@ -1276,7 +1279,7 @@ function OverviewTabContent({
           onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-3)'; e.currentTarget.style.color = 'var(--text-bright)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-soft)' }}
         >
-          View on {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}
+          View on {instance.source === 'modrinth' ? 'Modrinth' : instance.source === 'ftb' ? 'FTB' : 'CurseForge'}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
           </svg>
@@ -1917,14 +1920,13 @@ function InstanceDetailPanel({
                   className="text-[11px] px-2 py-0.5 rounded-full"
                   style={
                     instance.source === 'modrinth'
-                      ? {
-                          background: 'rgba(var(--accent-rgb),0.12)',
-                          color: 'var(--accent)'
-                        }
+                      ? { background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }
+                      : instance.source === 'ftb'
+                      ? { background: 'rgba(239,68,68,0.12)', color: '#f87171' }
                       : { background: 'rgba(249,115,22,0.12)', color: '#fb923c' }
                   }
                 >
-                  {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}
+                  {instance.source === 'modrinth' ? 'Modrinth' : instance.source === 'ftb' ? 'FTB' : 'CurseForge'}
                 </span>
               )}
             </div>
@@ -2226,9 +2228,26 @@ export default function Library(): JSX.Element {
   const [tab, setTab] = useState<Tab>('instances')
   const instances = useApp((s) => s.instances)
   const [showNew, setShowNew] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null)
   const pendingLibraryInstanceId = useApp((s) => s.pendingLibraryInstanceId)
   const setPendingLibraryInstanceId = useApp((s) => s.setPendingLibraryInstanceId)
+  const refreshInstances = useApp((s) => s.refreshInstances)
+  const setError = useApp((s) => s.setError)
+
+  const importPack = useCallback(async (): Promise<void> => {
+    const filePath = await window.api.dialog.pickFile([{ name: 'Modpack', extensions: ['mrpack', 'zip'] }])
+    if (!filePath) return
+    setImporting(true)
+    try {
+      await (window.api as any).modpack?.importFile?.(filePath)
+      await refreshInstances()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import failed.')
+    } finally {
+      setImporting(false)
+    }
+  }, [refreshInstances, setError])
 
   // Consume the pending instance ID set by Home page navigation
   useEffect(() => {
@@ -2291,15 +2310,28 @@ export default function Library(): JSX.Element {
           </div>
 
           {tab === 'instances' && (
-            <button
-              onClick={() => setShowNew(true)}
-              className="mb-1 px-4 py-1.5 rounded-xl text-sm font-semibold text-black transition-all"
-              style={{ background: 'var(--accent-strong)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent-strong)')}
-            >
-              + New instance
-            </button>
+            <div className="mb-1 flex gap-2">
+              <button
+                onClick={importPack}
+                disabled={importing}
+                className="px-3 py-1.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+                style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}
+                onMouseEnter={(e) => { if (!importing) { e.currentTarget.style.background = 'var(--surface-3)'; e.currentTarget.style.color = 'var(--text-bright)' } }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-soft)' }}
+                title="Import a .mrpack or CurseForge zip"
+              >
+                {importing ? 'Importing…' : '↑ Import'}
+              </button>
+              <button
+                onClick={() => setShowNew(true)}
+                className="px-4 py-1.5 rounded-xl text-sm font-semibold text-black transition-all"
+                style={{ background: 'var(--accent-strong)' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent-strong)')}
+              >
+                + New instance
+              </button>
+            </div>
           )}
         </div>
       )}

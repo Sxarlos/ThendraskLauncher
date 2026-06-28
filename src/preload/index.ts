@@ -103,7 +103,9 @@ const api = {
     modrinth: (params: BrowseParams): Promise<ModpackResult[]> =>
       ipcRenderer.invoke('browse:modrinth', params),
     curseforge: (params: BrowseParams): Promise<ModpackResult[]> =>
-      ipcRenderer.invoke('browse:curseforge', params)
+      ipcRenderer.invoke('browse:curseforge', params),
+    ftb: (params: BrowseParams): Promise<ModpackResult[]> =>
+      ipcRenderer.invoke('browse:ftb', params)
   },
   modpack: {
     changelog: (instanceId: string): Promise<VersionChangelog[]> =>
@@ -115,7 +117,9 @@ const api = {
     mods: (instanceId: string): Promise<PackMod[]> =>
       ipcRenderer.invoke('modpack:mods', instanceId),
     switchVersion: (instanceId: string, versionId: string): Promise<Instance | undefined> =>
-      ipcRenderer.invoke('modpack:switchVersion', instanceId, versionId)
+      ipcRenderer.invoke('modpack:switchVersion', instanceId, versionId),
+    importFile: (filePath: string): Promise<Instance | undefined> =>
+      ipcRenderer.invoke('modpack:importFile', filePath)
   },
   instance: {
     openDir: (instanceId: string): Promise<void> =>

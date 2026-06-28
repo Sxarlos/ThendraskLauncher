@@ -28,7 +28,7 @@ export interface Instance {
   mcVersion: string
   loader: LoaderType
   loaderVersion?: string
-  source?: 'manual' | 'modrinth' | 'curseforge'
+  source?: 'manual' | 'modrinth' | 'curseforge' | 'ftb'
   externalId?: string        // Modrinth project_id or CurseForge mod id
   packVersionId?: string     // Specific version ID from Modrinth/CurseForge
   iconUrl?: string
@@ -144,7 +144,7 @@ export interface ModpackResult {
   categories: string[]
   mcVersions: string[]
   loaders: string[]
-  source: 'modrinth' | 'curseforge'
+  source: 'modrinth' | 'curseforge' | 'ftb'
   externalUrl?: string
   author?: string
 }

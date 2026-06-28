@@ -5,9 +5,13 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import AdmZip from 'adm-zip'
 import { instanceGameDir } from './instances'
 import { getSettings } from './settings'
+
+const execFileAsync = promisify(execFile)
 
 const MR_BASE = 'https://api.modrinth.com/v2'
 const CF_BASE = 'https://api.curseforge.com/v1'
@@ -189,6 +193,39 @@ export async function installNeoforgeLoader(
   return installerPath
 }
 
+/**
+ * Runs the NeoForge installer JAR to create a proper version profile in the instance's game dir.
+ * More reliable than MCLC's ForgeWrapper for NeoForge 20.4+ which changed its installer format.
+ * Returns the version profile ID string for use as MCLC's `custom` option.
+ */
+export async function installNeoforgeProfile(
+  gameDir: string,
+  neoforgeVersion: string,
+  javaExecutable: string,
+  onProgress: (msg: string) => void
+): Promise<string> {
+  const versionId = `neoforge-${neoforgeVersion}`
+  const versionJson = join(gameDir, 'versions', versionId, `${versionId}.json`)
+
+  if (existsSync(versionJson)) return versionId
+
+  onProgress(`Downloading NeoForge ${neoforgeVersion} installer…`)
+  const installerPath = await installNeoforgeLoader(gameDir, neoforgeVersion)
+
+  onProgress(`Running NeoForge ${neoforgeVersion} installer (this may take a minute)…`)
+  await execFileAsync(
+    javaExecutable === 'java' ? 'java' : javaExecutable,
+    ['-jar', installerPath, '--installClient', gameDir],
+    { timeout: 5 * 60 * 1000 }
+  )
+
+  if (!existsSync(versionJson)) {
+    throw new Error(`NeoForge installer completed but version profile not found at ${versionJson}`)
+  }
+
+  return versionId
+}
+
 // ── servers.dat injection ─────────────────────────────────────────────────────
 // Writes Minecraft's multiplayer server list (NBT format) so the permanent
 // servers appear in-game the first time a player opens the Multiplayer screen.
@@ -352,6 +389,224 @@ export async function installMrpack(
   }
   writeMarker(instanceId, marker)
   return marker
+}
+
+// ── FTB pack ─────────────────────────────────────────────────────────────────
+
+const FTB_API = 'https://api.modpacks.ch'
+
+export async function installFtbPack(
+  instanceId: string,
+  packId: string,
+  versionId: string | undefined,
+  onProgress: (msg: string, pct?: number) => void
+): Promise<PackMarker> {
+  const gameDir = instanceGameDir(instanceId)
+
+  onProgress('Fetching modpack info…')
+
+  let resolvedVersionId: number | undefined = versionId ? parseInt(versionId, 10) : undefined
+  if (!resolvedVersionId) {
+    const packRes = await fetch(`${FTB_API}/public/modpack/${packId}`, { headers: { 'User-Agent': UA } })
+    if (!packRes.ok) throw new Error(`FTB ${packRes.status}`)
+    const pack = await packRes.json() as any
+    const versions: any[] = pack.versions ?? []
+    if (!versions.length) throw new Error('No versions available for this FTB modpack')
+    resolvedVersionId = versions[versions.length - 1].id
+  }
+
+  onProgress('Fetching version details…')
+  const verRes = await fetch(`${FTB_API}/public/modpack/${packId}/${resolvedVersionId}`, { headers: { 'User-Agent': UA } })
+  if (!verRes.ok) throw new Error(`FTB ${verRes.status}`)
+  const version = await verRes.json() as any
+
+  const targets: any[] = version.targets ?? []
+  const loaderTarget = targets.find((t: any) => t.type === 'modloader')
+  const loaderType = loaderTarget?.name?.toLowerCase() ?? 'vanilla'
+  const loaderVersion: string | undefined = loaderTarget?.version
+
+  const files: any[] = (version.files ?? []).filter((f: any) => !f.serveronly)
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]
+    if (!f.url) continue
+
+    const pathParts = String(f.path ?? '').split('/').filter(Boolean)
+    const filePath = join(gameDir, ...pathParts, f.name)
+    const fileDir = join(filePath, '..')
+
+    if (!existsSync(fileDir)) mkdirSync(fileDir, { recursive: true })
+    if (!existsSync(filePath)) {
+      try {
+        await downloadToFile(f.url, filePath)
+      } catch { /* skip files that fail */ }
+    }
+
+    const pct = Math.round(((i + 1) / files.length) * 90)
+    onProgress(`Downloading files… (${i + 1}/${files.length})`, pct)
+  }
+
+  injectServersDat(gameDir)
+
+  const marker: PackMarker = {
+    packVersionId: String(version.id ?? resolvedVersionId),
+    loaderType,
+    loaderVersion
+  }
+  writeMarker(instanceId, marker)
+  return marker
+}
+
+// ── Local pack import ─────────────────────────────────────────────────────────
+
+export interface ImportResult {
+  marker: PackMarker
+  name: string
+  mcVersion: string
+}
+
+export async function importLocalPack(
+  instanceId: string,
+  filePath: string,
+  onProgress: (msg: string, pct?: number) => void
+): Promise<ImportResult> {
+  const gameDir = instanceGameDir(instanceId)
+
+  onProgress('Reading pack file…')
+  const buf = readFileSync(filePath)
+  const zip = new AdmZip(buf)
+
+  const mrpackEntry = zip.getEntry('modrinth.index.json')
+  const cfEntry = zip.getEntry('manifest.json')
+
+  if (mrpackEntry) {
+    // ── mrpack format ────────────────────────────────────────────────────────
+    const index = JSON.parse(mrpackEntry.getData().toString('utf8'))
+    const deps: Record<string, string> = index.dependencies ?? {}
+
+    const loaderKey = Object.keys(deps).find((k) =>
+      ['fabric-loader', 'quilt-loader', 'forge', 'neoforge'].includes(k)
+    )
+    const loaderType = (loaderKey ?? 'vanilla').replace('-loader', '')
+    const loaderVersion = loaderKey ? deps[loaderKey] : undefined
+    const mcVersion = deps['minecraft'] ?? ''
+    const name: string = index.name ?? 'Imported Pack'
+
+    const allFiles: Array<{
+      path: string
+      downloads: string[]
+      env?: { client?: string; server?: string }
+    }> = index.files ?? []
+    const clientFiles = allFiles.filter((f) => f.env?.client !== 'unsupported')
+
+    for (let i = 0; i < clientFiles.length; i++) {
+      const f = clientFiles[i]
+      const destPath = join(gameDir, ...f.path.split('/'))
+      const destDir = join(destPath, '..')
+      if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
+      if (!existsSync(destPath)) {
+        for (const url of f.downloads) {
+          try { await downloadToFile(url, destPath); break } catch { /* try next mirror */ }
+        }
+      }
+      onProgress(
+        `Downloading files… (${i + 1}/${clientFiles.length})`,
+        Math.round(((i + 1) / clientFiles.length) * 85)
+      )
+    }
+
+    onProgress('Extracting config overrides…', 90)
+    for (const prefix of ['overrides/', 'client-overrides/']) {
+      for (const entry of zip.getEntries()) {
+        if (!entry.entryName.startsWith(prefix) || entry.isDirectory) continue
+        const rel = entry.entryName.slice(prefix.length)
+        const dest = join(gameDir, ...rel.split('/'))
+        const destDir = join(dest, '..')
+        if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
+        writeFileSync(dest, entry.getData())
+      }
+    }
+
+    injectServersDat(gameDir)
+    const marker: PackMarker = { loaderType, loaderVersion }
+    writeMarker(instanceId, marker)
+    return { marker, name, mcVersion }
+  }
+
+  if (cfEntry) {
+    // ── CurseForge format ────────────────────────────────────────────────────
+    const cfKey = getSettings().curseforgeApiKey
+    if (!cfKey) {
+      throw new Error(
+        'A CurseForge API key is required to import this pack — add it in Settings → API Keys'
+      )
+    }
+
+    const manifest = JSON.parse(cfEntry.getData().toString('utf8'))
+    const loaderEntry: string | undefined = manifest.minecraft?.modLoaders?.[0]?.id
+    let loaderType = 'vanilla'
+    let loaderVersion: string | undefined
+    if (loaderEntry) {
+      const dash = loaderEntry.indexOf('-')
+      if (dash !== -1) {
+        loaderType = loaderEntry.slice(0, dash)
+        loaderVersion = loaderEntry.slice(dash + 1)
+      }
+    }
+    const mcVersion: string = manifest.minecraft?.version ?? ''
+    const name: string = manifest.name ?? 'Imported Pack'
+
+    const cfH = { 'x-api-key': cfKey, Accept: 'application/json' }
+    const modEntries: Array<{ projectID: number; fileID: number; required: boolean }> =
+      (manifest.files ?? []).filter((m: any) => m.required)
+    const modsDir = join(gameDir, 'mods')
+    if (!existsSync(modsDir)) mkdirSync(modsDir, { recursive: true })
+
+    onProgress(`Fetching download URLs for ${modEntries.length} mods…`)
+    const BATCH = 100
+    let done = 0
+
+    for (let i = 0; i < modEntries.length; i += BATCH) {
+      const batch = modEntries.slice(i, i + BATCH)
+      const res = await fetch(`${CF_BASE}/mods/files`, {
+        method: 'POST',
+        headers: { ...cfH, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileIds: batch.map((m) => m.fileID) })
+      })
+      const files = ((await res.json() as any).data as any[]) ?? []
+      for (const file of files) {
+        done++
+        if (!file.downloadUrl) continue
+        const dest = join(modsDir, file.fileName)
+        if (existsSync(dest)) continue
+        try { await downloadToFile(file.downloadUrl, dest) } catch { /* skip */ }
+        onProgress(
+          `Downloading mods… (${done}/${modEntries.length})`,
+          Math.round((done / modEntries.length) * 85)
+        )
+      }
+    }
+
+    onProgress('Extracting config overrides…', 90)
+    const overridePrefix = `${manifest.overrides ?? 'overrides'}/`
+    for (const entry of zip.getEntries()) {
+      if (!entry.entryName.startsWith(overridePrefix) || entry.isDirectory) continue
+      const rel = entry.entryName.slice(overridePrefix.length)
+      const dest = join(gameDir, ...rel.split('/'))
+      const destDir = join(dest, '..')
+      if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
+      writeFileSync(dest, entry.getData())
+    }
+
+    injectServersDat(gameDir)
+    const marker: PackMarker = { loaderType, loaderVersion }
+    writeMarker(instanceId, marker)
+    return { marker, name, mcVersion }
+  }
+
+  throw new Error(
+    'Unknown format — file must be a .mrpack or a CurseForge modpack zip containing manifest.json'
+  )
 }
 
 // ── CurseForge zip ────────────────────────────────────────────────────────────
