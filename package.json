@@ -30,10 +30,6 @@
       {
         "from": "resources/icon.png",
         "to": "icon.png"
-      },
-      {
-        "from": "resources/endercosmetics-1.0.0.jar",
-        "to": "endercosmetics-1.0.0.jar"
       }
     ],
     "win": {
