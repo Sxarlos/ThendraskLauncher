@@ -170,6 +170,7 @@ const TAG_STYLES: Record<string, { color: string; label: string }> = {
 }
 
 const DISMISSED_KEY = 'ender:dismissed-news'
+const VERSION_KEY   = 'ender:app-version'
 
 function getDismissed(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? '[]')) }
@@ -178,6 +179,17 @@ function getDismissed(): Set<string> {
 
 function saveDismissed(ids: Set<string>): void {
   localStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids]))
+}
+
+function semverGte(a: string, b: string): boolean {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff > 0) return true
+    if (diff < 0) return false
+  }
+  return true
 }
 
 function MiniCard({ instance, onClick }: { instance: Instance; onClick: () => void }): JSX.Element {
@@ -235,6 +247,7 @@ export default function Home(): JSX.Element {
   const setUpdateDownload        = useApp((s) => s.setUpdateDownload)
   const [updateDismissed, setUpdateDismissed] = useState(false)
   const [dismissedNews, setDismissedNews] = useState<Set<string>>(getDismissed)
+  const [appVersion, setAppVersion] = useState(() => localStorage.getItem(VERSION_KEY) ?? '')
 
   const dismissNews = (id: string): void => {
     setDismissedNews((prev) => {
@@ -244,13 +257,16 @@ export default function Home(): JSX.Element {
     })
   }
 
-  const visibleNews = NEWS.filter((n) => !dismissedNews.has(n.id))
+  // Only show news items for the current version or newer — older items are noise after an upgrade.
+  const visibleNews = NEWS.filter((n) =>
+    !dismissedNews.has(n.id) && (appVersion === '' || semverGte(n.id, appVersion))
+  )
 
   const startDownload = async (): Promise<void> => {
     if (!updateInfo) return
     setUpdateDownload({ state: 'downloading', progress: 0, path: null })
     try {
-      const path = await (window.api as any).update.download(updateInfo.downloadUrl)
+      const path = await window.api.update.download(updateInfo.downloadUrl)
       setUpdateDownload({ state: 'ready', progress: 100, path })
     } catch {
       setUpdateDownload({ state: 'error', progress: 0, path: null })
@@ -271,6 +287,13 @@ export default function Home(): JSX.Element {
     [...instances].sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0))[0] ?? null
 
   // Lazily fetch screenshots for the featured instance if not yet stored
+  useEffect(() => {
+    window.api.app.getVersion().then((v) => {
+      localStorage.setItem(VERSION_KEY, v)
+      setAppVersion(v)
+    }).catch(() => {})
+  }, [])
+
   useEffect(() => {
     if (!featured) return
     if (featured.screenshotUrls?.length) return             // already fetched

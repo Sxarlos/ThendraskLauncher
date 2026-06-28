@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and package
+        run: npm run package
+
+      - name: Read version from package.json
+        id: pkg
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Create GitHub Release and upload installer
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Ender Client ${{ steps.pkg.outputs.version }}"
+          files: dist/*.exe
+          generate_release_notes: true
+
+      - name: Update Gist update manifest
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          # Fetch the release we just created to get the asset URL
+          $rel = Invoke-RestMethod `
+            -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/$env:TAG" `
+            -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
+
+          $exe = $rel.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
+          if (-not $exe) { throw "No .exe asset found on release — check that npm run package produced a dist/*.exe" }
+
+          # First line of auto-generated release notes, falling back to a default
+          $notes = ($rel.body -split "`n" | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1) `
+                   ?? "Ender Client v$env:VERSION"
+
+          $content = [ordered]@{
+            version     = $env:VERSION
+            notes       = $notes
+            downloadUrl = $exe.browser_download_url
+          } | ConvertTo-Json -Compress
+
+          $payload = @{
+            files = @{
+              "latest-version.json" = @{ content = $content }
+            }
+          } | ConvertTo-Json -Depth 5
+
+          Invoke-RestMethod `
+            -Uri "https://api.github.com/gists/$env:GIST_ID" `
+            -Method PATCH `
+            -Headers @{ Authorization = "Bearer $env:GIST_TOKEN"; "Content-Type" = "application/json" } `
+            -Body $payload
+
+          Write-Host "Done: v$env:VERSION → $($exe.browser_download_url)"
