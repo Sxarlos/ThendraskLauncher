@@ -206,13 +206,21 @@ export async function launchInstance(instanceId: string): Promise<void> {
           instanceGameDir(instanceId),
           neoVer,
           resolvedJavaPath,
-          (msg) => setState(instanceId, 'preparing', msg)
+          (msg) => setState(instanceId, 'preparing', msg),
+          (line) => {
+            for (const win of BrowserWindow.getAllWindows()) {
+              win.webContents.send('launch:log', { instanceId, line })
+            }
+          }
         )
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
         console.error('[Launcher] NeoForge install failed:', reason)
-        setState(instanceId, 'preparing', `NeoForge ${neoVer} install failed: ${reason}`)
-        await new Promise((r) => setTimeout(r, 3000))
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('launch:log', { instanceId, line: `[Launcher] NeoForge ${neoVer} install failed: ${reason}` })
+        }
+        setState(instanceId, 'error', `NeoForge ${neoVer} install failed — check the log panel for details.`)
+        throw new Error(`NeoForge ${neoVer} install failed: ${reason}`)
       }
     } else {
       setState(instanceId, 'preparing', 'Could not resolve NeoForge version — launching vanilla')

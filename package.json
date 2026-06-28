@@ -1,7 +1,7 @@
 {
   "name": "ender-client",
   "productName": "Ender Client",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Ender Client — custom Minecraft launcher: browse Modrinth/CurseForge/FTB/ATLauncher/Technic modpacks, account switcher, launch vanilla & modded, monitor servers",
   "main": "./out/main/index.js",
   "author": "",
