@@ -5,6 +5,7 @@ import { listAccounts, loginInteractive, removeAccount, setActive, getMinecraftP
 import {
   createInstance,
   listInstances,
+  getInstance,
   removeInstance,
   updateInstance,
   instanceGameDir,
@@ -17,19 +18,27 @@ import { listServers, addServer, removeServer, pingServer } from './servers'
 import {
   searchModrinth,
   searchCurseForge,
+  searchFtb,
   fetchModrinthScreenshots,
   fetchCurseForgeScreenshots,
+  fetchFtbScreenshots,
   fetchModrinthVersions,
   fetchCurseForgeVersions,
+  fetchFtbVersions,
   fetchModrinthMods,
   fetchCurseFormMods,
+  fetchFtbMods,
   getModrinthVersionDetails,
   getCurseForgeFileDetails,
+  getFtbVersionDetails,
   fetchModrinthPackOverview,
   fetchCurseForgePackOverview,
+  fetchFtbPackOverview,
   fetchModrinthChangelog,
-  fetchCurseForgeChangelog
+  fetchCurseForgeChangelog,
+  fetchFtbChangelog
 } from './browse'
+import { importLocalPack } from './modpack'
 import { applyToAllInstances } from './chatmod'
 import { detectAllJavas } from './java'
 import { setCustomInstancesDir } from './persist'
@@ -95,14 +104,18 @@ function handle<T>(channel: string, fn: (...args: any[]) => T | Promise<T>): voi
 
 async function fetchAndStoreScreenshots(
   instanceId: string,
-  source: 'modrinth' | 'curseforge',
+  source: 'modrinth' | 'curseforge' | 'ftb',
   externalId: string
 ): Promise<string[]> {
   try {
-    const urls =
-      source === 'modrinth'
-        ? await fetchModrinthScreenshots(externalId)
-        : await fetchCurseForgeScreenshots(externalId)
+    let urls: string[]
+    if (source === 'modrinth') {
+      urls = await fetchModrinthScreenshots(externalId)
+    } else if (source === 'curseforge') {
+      urls = await fetchCurseForgeScreenshots(externalId)
+    } else {
+      urls = await fetchFtbScreenshots(externalId)
+    }
     if (urls.length > 0) updateInstance(instanceId, { screenshotUrls: urls })
     return urls
   } catch (err) {
@@ -128,16 +141,20 @@ function registerIpcHandlers(): void {
     // Auto-populate packVersionId on first install so update tracking works
     if (input.externalId && input.source && input.source !== 'manual' && !input.packVersionId) {
       try {
-        const versions =
-          input.source === 'modrinth'
-            ? await fetchModrinthVersions(input.externalId)
-            : await fetchCurseForgeVersions(input.externalId)
-        if (versions.length > 0) input.packVersionId = versions[0].id
+        let versions
+        if (input.source === 'modrinth') {
+          versions = await fetchModrinthVersions(input.externalId)
+        } else if (input.source === 'curseforge') {
+          versions = await fetchCurseForgeVersions(input.externalId)
+        } else if (input.source === 'ftb') {
+          versions = await fetchFtbVersions(input.externalId)
+        }
+        if (versions?.length) input.packVersionId = versions[0].id
       } catch (_) {}
     }
     const inst = createInstance(input)
     if (input.externalId && input.source && input.source !== 'manual') {
-      void fetchAndStoreScreenshots(inst.id, input.source, input.externalId)
+      void fetchAndStoreScreenshots(inst.id, input.source as 'modrinth' | 'curseforge' | 'ftb', input.externalId)
     }
     return inst
   })
@@ -148,7 +165,7 @@ function registerIpcHandlers(): void {
   handle('instances:fetchScreenshots', (id: string) => {
     const inst = listInstances().find((i) => i.id === id)
     if (!inst?.externalId || !inst.source || inst.source === 'manual') return null
-    return fetchAndStoreScreenshots(id, inst.source, inst.externalId)
+    return fetchAndStoreScreenshots(id, inst.source as 'modrinth' | 'curseforge' | 'ftb', inst.externalId)
   })
 
   // Launch
@@ -234,38 +251,39 @@ function registerIpcHandlers(): void {
   // Browse
   handle('browse:modrinth', (params: BrowseParams) => searchModrinth(params))
   handle('browse:curseforge', (params: BrowseParams) => searchCurseForge(params))
+  handle('browse:ftb', (params: BrowseParams) => searchFtb(params))
 
   // Modpack detail (versions, mods, switch)
   handle('modpack:versions', async (instanceId: string) => {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
-    return inst.source === 'modrinth'
-      ? fetchModrinthVersions(inst.externalId)
-      : fetchCurseForgeVersions(inst.externalId)
+    if (inst.source === 'modrinth') return fetchModrinthVersions(inst.externalId)
+    if (inst.source === 'ftb') return fetchFtbVersions(inst.externalId)
+    return fetchCurseForgeVersions(inst.externalId)
   })
 
   handle('modpack:mods', async (instanceId: string) => {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
-    return inst.source === 'modrinth'
-      ? fetchModrinthMods(inst.externalId, inst.packVersionId)
-      : fetchCurseFormMods(inst.externalId, inst.packVersionId)
+    if (inst.source === 'modrinth') return fetchModrinthMods(inst.externalId, inst.packVersionId)
+    if (inst.source === 'ftb') return fetchFtbMods(inst.externalId, inst.packVersionId)
+    return fetchCurseFormMods(inst.externalId, inst.packVersionId)
   })
 
   handle('modpack:changelog', async (instanceId: string) => {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
-    return inst.source === 'modrinth'
-      ? fetchModrinthChangelog(inst.externalId)
-      : fetchCurseForgeChangelog(inst.externalId)
+    if (inst.source === 'modrinth') return fetchModrinthChangelog(inst.externalId)
+    if (inst.source === 'ftb') return fetchFtbChangelog(inst.externalId)
+    return fetchCurseForgeChangelog(inst.externalId)
   })
 
   handle('modpack:overview', async (instanceId: string) => {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return null
-    return inst.source === 'modrinth'
-      ? fetchModrinthPackOverview(inst.externalId)
-      : fetchCurseForgePackOverview(inst.externalId)
+    if (inst.source === 'modrinth') return fetchModrinthPackOverview(inst.externalId)
+    if (inst.source === 'ftb') return fetchFtbPackOverview(inst.externalId)
+    return fetchCurseForgePackOverview(inst.externalId)
   })
 
   handle('modpack:switchVersion', async (instanceId: string, versionId: string) => {
@@ -279,9 +297,39 @@ function registerIpcHandlers(): void {
     } else if (inst.source === 'curseforge' && inst.externalId) {
       const details = await getCurseForgeFileDetails(inst.externalId, versionId)
       if (details.mcVersion) mcVersion = details.mcVersion
+    } else if (inst.source === 'ftb' && inst.externalId) {
+      const details = await getFtbVersionDetails(inst.externalId, versionId)
+      if (details.mcVersion) mcVersion = details.mcVersion
     }
 
     return updateInstance(instanceId, { mcVersion, packVersionId: versionId })
+  })
+
+  // Local pack import (.mrpack or CurseForge zip)
+  handle('modpack:importFile', async (filePath: string) => {
+    const tempInst = createInstance({
+      name: 'Importing…',
+      mcVersion: '',
+      loader: 'vanilla',
+      source: 'manual'
+    })
+
+    try {
+      const result = await importLocalPack(
+        tempInst.id,
+        filePath,
+        () => {} // no per-file progress needed for now
+      )
+      return updateInstance(tempInst.id, {
+        name: result.name,
+        mcVersion: result.mcVersion,
+        loader: result.marker.loaderType as import('@shared/types').LoaderType,
+        loaderVersion: result.marker.loaderVersion
+      })
+    } catch (err) {
+      removeInstance(tempInst.id)
+      throw err
+    }
   })
 
   // Servers

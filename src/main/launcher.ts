@@ -5,7 +5,8 @@ import type { ChildProcess } from 'child_process'
 import type { LaunchProgress, LaunchState } from '@shared/types'
 import { getActiveMclcUser } from './accounts'
 import { getInstance, instanceGameDir, markPlayed, addPlayTime, updateInstance } from './instances'
-import { getSettings, detectJava } from './settings'
+import { getSettings } from './settings'
+import { ensureJava, requiredJavaMajor } from './java'
 import { ensureChatMod } from './chatmod'
 import { writeDefaultOptions } from './gameoptions'
 import { getVersions } from './mojang'
@@ -14,6 +15,7 @@ import {
   readMarker,
   installMrpack,
   installCfPack,
+  installFtbPack,
   resolveFabricVersion,
   resolveQuiltVersion,
   resolveForgeVersion,
@@ -21,7 +23,7 @@ import {
   installFabricLoader,
   installQuiltLoader,
   installForgeLoader,
-  installNeoforgeLoader
+  installNeoforgeProfile
 } from './modpack'
 import { autoInstallShader } from './shaders'
 
@@ -91,6 +93,13 @@ export async function launchInstance(instanceId: string): Promise<void> {
             instance.packVersionId,
             (msg, pct) => setState(instanceId, 'downloading', msg, pct)
           )
+        } else if (instance.source === 'ftb') {
+          effectiveMarker = await installFtbPack(
+            instanceId,
+            instance.externalId,
+            instance.packVersionId,
+            (msg, pct) => setState(instanceId, 'downloading', msg, pct)
+          )
         }
       } catch (err) {
         console.error('[Launcher] Modpack install failed:', err)
@@ -107,6 +116,22 @@ export async function launchInstance(instanceId: string): Promise<void> {
         updateInstance(instanceId, { packVersionId: effectiveMarker.packVersionId })
       }
     }
+  }
+
+  // ── Java: auto-detect or auto-download the correct version ─────────────────
+  // Must happen before loader setup — NeoForge needs Java to run its installer.
+  const requiredMajor = requiredJavaMajor(instance.mcVersion)
+  let resolvedJavaPath: string
+  try {
+    resolvedJavaPath = await ensureJava(
+      requiredMajor,
+      settings.javaPath || undefined,
+      (msg, pct) => setState(instanceId, 'preparing', msg, pct)
+    )
+  } catch (err) {
+    const msg = (err as Error).message
+    setState(instanceId, 'error', msg)
+    throw new Error(msg)
   }
 
   // ── Loader setup ────────────────────────────────────────────────────────────
@@ -155,13 +180,18 @@ export async function launchInstance(instanceId: string): Promise<void> {
       await new Promise((r) => setTimeout(r, 1000))
     }
   } else if (resolvedLoaderType === 'neoforge') {
+    // NeoForge 20.4+ uses a new installer format incompatible with MCLC's ForgeWrapper.
+    // We run the installer directly (it creates a version profile) and point MCLC at the profile.
     const neoVer = resolvedLoaderVersion ?? await resolveNeoforgeVersion(instance.mcVersion)
     if (neoVer) {
-      setState(instanceId, 'preparing', 'Downloading NeoForge installer…')
-      forgeInstallerPath = await installNeoforgeLoader(instanceGameDir(instanceId), neoVer)
-        .catch(() => undefined)
-      if (!forgeInstallerPath) {
-        setState(instanceId, 'preparing', 'NeoForge installer download failed — launching vanilla')
+      customVersion = await installNeoforgeProfile(
+        instanceGameDir(instanceId),
+        neoVer,
+        resolvedJavaPath,
+        (msg) => setState(instanceId, 'preparing', msg)
+      ).catch(() => undefined)
+      if (!customVersion) {
+        setState(instanceId, 'preparing', 'NeoForge install failed — launching vanilla')
         await new Promise((r) => setTimeout(r, 1000))
       }
     } else {
@@ -185,16 +215,6 @@ export async function launchInstance(instanceId: string): Promise<void> {
 
   const versions = await getVersions().catch(() => [])
   const versionType = versions.find((v) => v.id === instance.mcVersion)?.type ?? 'release'
-
-  // ── Pre-flight: verify Java is reachable ────────────────────────────────────
-  const java = await detectJava()
-  if (!java.ok) {
-    const msg = settings.javaPath
-      ? `Java not found at configured path: ${settings.javaPath}`
-      : 'Java is not installed or not on PATH. Install Java 17+ and set the path in Settings → General.'
-    setState(instanceId, 'error', msg)
-    throw new Error(msg)
-  }
 
   const client = new Client()
 
@@ -272,8 +292,7 @@ export async function launchInstance(instanceId: string): Promise<void> {
     loader: resolvedLoaderType,
     customVersion,
     forgeInstaller: forgeInstallerPath,
-    javaPath: java.path,
-    javaVersion: java.version
+    javaPath: resolvedJavaPath
   })
 
   // msmc's MclcUser is structurally what MCLC needs; the lib's exported types
@@ -295,7 +314,7 @@ export async function launchInstance(instanceId: string): Promise<void> {
       max: `${settings.usePackRam && instance.recommendedRamMb ? instance.recommendedRamMb : settings.maxRamMb}M`,
       min: '512M'
     },
-    javaPath: java.path === 'java' ? undefined : java.path,
+    javaPath: resolvedJavaPath === 'java' ? undefined : resolvedJavaPath,
     ...(instance.jvmArgs?.trim()
       ? { customArgs: instance.jvmArgs.trim().split(/\s+/).filter(Boolean) }
       : {})
