@@ -201,15 +201,18 @@ export async function launchInstance(instanceId: string): Promise<void> {
     // We run the installer directly (it creates a version profile) and point MCLC at the profile.
     const neoVer = resolvedLoaderVersion ?? await resolveNeoforgeVersion(instance.mcVersion)
     if (neoVer) {
-      customVersion = await installNeoforgeProfile(
-        instanceGameDir(instanceId),
-        neoVer,
-        resolvedJavaPath,
-        (msg) => setState(instanceId, 'preparing', msg)
-      ).catch(() => undefined)
-      if (!customVersion) {
-        setState(instanceId, 'preparing', 'NeoForge install failed — launching vanilla')
-        await new Promise((r) => setTimeout(r, 1000))
+      try {
+        customVersion = await installNeoforgeProfile(
+          instanceGameDir(instanceId),
+          neoVer,
+          resolvedJavaPath,
+          (msg) => setState(instanceId, 'preparing', msg)
+        )
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err)
+        console.error('[Launcher] NeoForge install failed:', reason)
+        setState(instanceId, 'preparing', `NeoForge ${neoVer} install failed: ${reason}`)
+        await new Promise((r) => setTimeout(r, 3000))
       }
     } else {
       setState(instanceId, 'preparing', 'Could not resolve NeoForge version — launching vanilla')

@@ -3,7 +3,7 @@
  * Called from launcher.ts during the 'preparing' phase on first launch (or after a version switch).
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -407,13 +407,21 @@ export async function installMrpack(
   const loaderType = rawLoaderType.replace('-loader', '')
   const loaderVersion = loaderKey ? deps[loaderKey] : undefined
 
-  // Download client-side mod files
+  // Download client-side mod files — wipe mods dir first so stale JARs from a
+  // previous version don't coexist with the new version's mods.
   const allFiles: Array<{
     path: string
     downloads: string[]
     env?: { client?: string; server?: string }
   }> = index.files ?? []
   const clientFiles = allFiles.filter((f) => f.env?.client !== 'unsupported')
+
+  const mrModsDir = join(gameDir, 'mods')
+  if (existsSync(mrModsDir)) {
+    for (const f of readdirSync(mrModsDir)) {
+      try { rmSync(join(mrModsDir, f), { force: true }) } catch { /* skip locked files */ }
+    }
+  }
 
   for (let i = 0; i < clientFiles.length; i++) {
     const f = clientFiles[i]
@@ -723,6 +731,11 @@ export async function installAtlPack(
     (m: any) => m.type === 'mods' || m.type === 'mod'
   )
   const modsDir = join(gameDir, 'mods')
+  if (existsSync(modsDir)) {
+    for (const f of readdirSync(modsDir)) {
+      try { rmSync(join(modsDir, f), { force: true }) } catch { /* skip locked files */ }
+    }
+  }
   mkdirSync(modsDir, { recursive: true })
 
   for (let i = 0; i < mods.length; i++) {
@@ -879,11 +892,17 @@ export async function installCfPack(
     }
   }
 
-  // Download mods
+  // Download mods — wipe the directory first so stale mods from a previous
+  // version don't end up alongside the new version's mods (duplicate JARs crash NeoForge).
   const modEntries: Array<{ projectID: number; fileID: number; required: boolean }> =
     (manifest.files ?? []).filter((m: any) => m.required)
   const modsDir = join(gameDir, 'mods')
-  if (!existsSync(modsDir)) mkdirSync(modsDir, { recursive: true })
+  if (existsSync(modsDir)) {
+    for (const f of readdirSync(modsDir)) {
+      try { rmSync(join(modsDir, f), { force: true }) } catch { /* skip locked files */ }
+    }
+  }
+  mkdirSync(modsDir, { recursive: true })
 
   onProgress(`Fetching download URLs for ${modEntries.length} mods…`)
   const BATCH = 100
