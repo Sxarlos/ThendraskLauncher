@@ -96,12 +96,29 @@ export default function Sidebar(): JSX.Element {
   const setPage          = useApp((s) => s.setPage)
   const installingCount  = useApp((s) => s.installingCount)
   const updateInfo       = useApp((s) => s.updateInfo)
+  const updateDownload   = useApp((s) => s.updateDownload)
+  const setUpdateDownload = useApp((s) => s.setUpdateDownload)
   const [collapsed, setCollapsed] = useState(false)
   const [appVersion, setAppVersion] = useState('')
 
   useEffect(() => {
     window.api.app.getVersion().then(setAppVersion).catch(() => {})
   }, [])
+
+  const startDownload = async (): Promise<void> => {
+    if (!updateInfo) return
+    setUpdateDownload({ state: 'downloading', progress: 0, path: null })
+    try {
+      const path = await window.api.update.download(updateInfo.downloadUrl)
+      setUpdateDownload({ state: 'ready', progress: 100, path })
+    } catch {
+      setUpdateDownload({ state: 'error', progress: 0, path: null })
+    }
+  }
+
+  const installUpdate = (): void => {
+    if (updateDownload.path) (window.api as any).update.install(updateDownload.path)
+  }
 
   const W = collapsed ? 52 : 224
 
@@ -258,7 +275,7 @@ export default function Sidebar(): JSX.Element {
               </span>
             </div>
 
-            {/* Notes + button (only expanded) */}
+            {/* Notes + download controls (only expanded) */}
             {!collapsed && (
               <>
                 {updateInfo.notes && (
@@ -269,16 +286,44 @@ export default function Sidebar(): JSX.Element {
                     {updateInfo.notes}
                   </p>
                 )}
-                <button
-                  onClick={() => window.api.update.openDownload(updateInfo.downloadUrl)}
-                  className="mt-2 w-full text-xs font-semibold rounded-md py-1 transition-opacity hover:opacity-80"
-                  style={{
-                    background: 'var(--accent)',
-                    color: '#000',
-                  }}
-                >
-                  Download
-                </button>
+
+                {updateDownload.state === 'downloading' ? (
+                  <div className="mt-2 w-full">
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(var(--accent-rgb),0.2)' }}>
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{ width: `${updateDownload.progress}%`, background: 'var(--accent)' }}
+                      />
+                    </div>
+                    <p className="text-[10px] mt-1 text-center tabular-nums" style={{ color: 'var(--accent)' }}>
+                      {updateDownload.progress}%
+                    </p>
+                  </div>
+                ) : updateDownload.state === 'ready' ? (
+                  <button
+                    onClick={installUpdate}
+                    className="mt-2 w-full text-xs font-semibold rounded-md py-1 transition-opacity hover:opacity-80"
+                    style={{ background: 'var(--accent)', color: '#000' }}
+                  >
+                    Install &amp; Restart
+                  </button>
+                ) : updateDownload.state === 'error' ? (
+                  <button
+                    onClick={startDownload}
+                    className="mt-2 w-full text-xs font-semibold rounded-md py-1"
+                    style={{ background: 'rgba(var(--danger-rgb),0.15)', color: 'var(--danger-soft)' }}
+                  >
+                    Retry
+                  </button>
+                ) : (
+                  <button
+                    onClick={startDownload}
+                    className="mt-2 w-full text-xs font-semibold rounded-md py-1 transition-opacity hover:opacity-80"
+                    style={{ background: 'var(--accent)', color: '#000' }}
+                  >
+                    Download
+                  </button>
+                )}
               </>
             )}
           </div>
