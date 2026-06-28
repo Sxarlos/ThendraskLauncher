@@ -228,8 +228,20 @@ function InstanceCard({
    BROWSE tab
 ════════════════════════════════════════════════ */
 
-type Source = 'modrinth' | 'curseforge' | 'ftb'
+type Source = 'modrinth' | 'curseforge' | 'ftb' | 'ftb-legacy' | 'atlauncher' | 'technic'
+type FtbLegacyCat = 'public' | '3rdparty' | 'private'
+type AtlCat = 'public' | 'private'
 type LoaderFilter = 'all' | 'fabric' | 'forge' | 'quilt' | 'neoforge'
+type SortOption = 'popular' | 'updated' | 'newest'
+
+const MR_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'technology',   label: 'Tech'        },
+  { id: 'adventure',    label: 'Adventure'   },
+  { id: 'magic',        label: 'Magic'       },
+  { id: 'optimization', label: 'Optimization'},
+  { id: 'quests',       label: 'Quests'      },
+  { id: 'exploration',  label: 'Exploration' },
+]
 
 const LOADERS: { value: LoaderFilter; label: string }[] = [
   { value: 'all',      label: 'All' },
@@ -431,10 +443,16 @@ function PackCard({ pack, onInstall }: { pack: ModpackResult; onInstall: (p: Mod
                 ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }
                 : pack.source === 'ftb'
                 ? { background: 'rgba(239,68,68,0.15)', color: '#f87171' }
+                : pack.source === 'ftb-legacy'
+                ? { background: 'rgba(251,146,60,0.15)', color: '#fb923c' }
+                : pack.source === 'atlauncher'
+                ? { background: 'rgba(99,102,241,0.15)', color: '#818cf8' }
+                : pack.source === 'technic'
+                ? { background: 'rgba(220,38,38,0.15)', color: '#f87171' }
                 : { background: 'rgba(249,115,22,0.15)', color: '#fb923c' }
             }
           >
-            {pack.source === 'modrinth' ? 'MR' : pack.source === 'ftb' ? 'FTB' : 'CF'}
+            {pack.source === 'modrinth' ? 'MR' : pack.source === 'ftb' || pack.source === 'ftb-legacy' ? 'FTB' : pack.source === 'atlauncher' ? 'ATL' : pack.source === 'technic' ? 'TCH' : 'CF'}
           </span>
         </div>
 
@@ -500,9 +518,15 @@ function PackCard({ pack, onInstall }: { pack: ModpackResult; onInstall: (p: Mod
 
 function BrowseModpacks(): JSX.Element {
   const [source, setSource] = useState<Source>('modrinth')
+  const [ftbLegacyCat, setFtbLegacyCat] = useState<FtbLegacyCat>('public')
+  const [atlCat, setAtlCat] = useState<AtlCat>('public')
+  const [privateCode, setPrivateCode] = useState('')
+  const [privatePackId, setPrivatePackId] = useState('')
   const [query, setQuery] = useState('')
   const [loader, setLoader] = useState<LoaderFilter>('all')
   const [mcVersion, setMcVersion] = useState('')
+  const [sort, setSort] = useState<SortOption>('popular')
+  const [category, setCategory] = useState<string>('')
   const [results, setResults] = useState<ModpackResult[]>([])
   const [loading, setLoading] = useState(false)
   const [browseError, setBrowseError] = useState<string | null>(null)
@@ -512,23 +536,45 @@ function BrowseModpacks(): JSX.Element {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const doSearch = useCallback(async (
-    q: string, src: Source, ldr: LoaderFilter, ver: string, off: number, append: boolean
+    q: string, src: Source, ldr: LoaderFilter, ver: string, off: number, append: boolean,
+    ftbCat: FtbLegacyCat, atl: AtlCat, privCode: string, privId: string,
+    srt: SortOption, cat: string
   ): Promise<void> => {
     setLoading(true)
     setBrowseError(null)
     try {
+      const sortParam = srt === 'updated' ? 'updated' : srt === 'newest' ? 'newest' : 'downloads'
       const params: BrowseParams = {
         query: q,
         loader: ldr === 'all' ? undefined : ldr,
         mcVersion: ver || undefined,
         limit: PAGE_SIZE,
         offset: off,
+        sort: sortParam,
+        category: cat || undefined,
       }
-      const fn =
-        src === 'modrinth' ? window.api.browse.modrinth
-        : src === 'ftb' ? (window.api.browse as any).ftb as typeof window.api.browse.modrinth
-        : window.api.browse.curseforge
-      const data = await fn(params)
+      let data: ModpackResult[]
+      if (src === 'modrinth') {
+        data = await window.api.browse.modrinth(params)
+      } else if (src === 'curseforge') {
+        data = await window.api.browse.curseforge(params)
+      } else if (src === 'ftb') {
+        data = await (window.api.browse as any).ftb(params)
+      } else if (src === 'ftb-legacy') {
+        if (ftbCat === 'private') {
+          if (!privCode || !privId) { setLoading(false); setResults([]); return }
+          data = await (window.api.browse as any).ftbLegacy(
+            { ...params, query: privId, privateCode: privCode }, 'private'
+          )
+        } else {
+          data = await (window.api.browse as any).ftbLegacy(params, ftbCat)
+        }
+      } else if (src === 'technic') {
+        if (!q) { setLoading(false); setResults([]); return }
+        data = await (window.api.browse as any).technic(params)
+      } else {
+        data = await (window.api.browse as any).atlauncher(params, atl)
+      }
       setResults((prev) => append ? [...prev, ...data] : data)
       setHasMore(data.length === PAGE_SIZE)
     } catch (e) {
@@ -543,98 +589,221 @@ function BrowseModpacks(): JSX.Element {
     setResults([])
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      doSearch(query, source, loader, mcVersion, 0, false)
+      doSearch(query, source, loader, mcVersion, 0, false, ftbLegacyCat, atlCat, privateCode, privatePackId, sort, category)
     }, 350)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [query, source, loader, mcVersion, doSearch])
+  }, [query, source, loader, mcVersion, doSearch, ftbLegacyCat, atlCat, privateCode, privatePackId, sort, category])
 
   const loadMore = (): void => {
     const next = offset + PAGE_SIZE
     setOffset(next)
-    doSearch(query, source, loader, mcVersion, next, true)
+    doSearch(query, source, loader, mcVersion, next, true, ftbLegacyCat, atlCat, privateCode, privatePackId, sort, category)
   }
 
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className="shrink-0 px-6 pt-4 pb-4 space-y-3" style={{ borderBottom: '1px solid var(--border-soft)' }}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Source pills */}
           <div className="flex gap-1 p-1 rounded-xl shrink-0" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
             {([
-              { id: 'modrinth',   label: 'Modrinth',   activeStyle: { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', boxShadow: 'inset 0 1px 0 rgba(var(--accent-rgb),0.1)' } },
-              { id: 'curseforge', label: 'CurseForge', activeStyle: { background: 'rgba(249,115,22,0.15)', color: '#fb923c', boxShadow: 'inset 0 1px 0 rgba(249,115,22,0.1)' } },
-              { id: 'ftb',        label: 'FTB',         activeStyle: { background: 'rgba(239,68,68,0.15)', color: '#f87171', boxShadow: 'inset 0 1px 0 rgba(239,68,68,0.1)' } },
+              { id: 'modrinth',    label: 'Modrinth',    activeStyle: { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', boxShadow: 'inset 0 1px 0 rgba(var(--accent-rgb),0.1)' } },
+              { id: 'curseforge',  label: 'CurseForge',  activeStyle: { background: 'rgba(249,115,22,0.15)', color: '#fb923c', boxShadow: 'inset 0 1px 0 rgba(249,115,22,0.1)' } },
+              { id: 'ftb',         label: 'FTB',          activeStyle: { background: 'rgba(239,68,68,0.15)', color: '#f87171', boxShadow: 'inset 0 1px 0 rgba(239,68,68,0.1)' } },
+              { id: 'ftb-legacy',  label: 'FTB Legacy',   activeStyle: { background: 'rgba(251,146,60,0.15)', color: '#fb923c', boxShadow: 'inset 0 1px 0 rgba(251,146,60,0.1)' } },
+              { id: 'atlauncher',  label: 'ATLauncher',   activeStyle: { background: 'rgba(99,102,241,0.15)', color: '#818cf8', boxShadow: 'inset 0 1px 0 rgba(99,102,241,0.1)' } },
+              { id: 'technic',     label: 'Technic',       activeStyle: { background: 'rgba(220,38,38,0.15)', color: '#f87171', boxShadow: 'inset 0 1px 0 rgba(220,38,38,0.1)' } },
             ] as { id: Source; label: string; activeStyle: CSSProperties }[]).map((s) => (
               <button
                 key={s.id}
                 onClick={() => setSource(s.id)}
-                className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200"
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200"
                 style={source === s.id ? s.activeStyle : { background: 'transparent', color: 'var(--text-muted)' }}
               >
                 {s.label}
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Search */}
-          <div className="relative flex-1">
-            <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
-              style={{ color: 'var(--text-faint)' }}
-              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
-            >
-              <circle cx="11" cy="11" r="7"/>
-              <path d="M21 21l-4.35-4.35"/>
-            </svg>
+        {/* FTB Legacy sub-category tabs */}
+        {source === 'ftb-legacy' && (
+          <div className="flex gap-1">
+            {([
+              { id: 'public',   label: 'Public' },
+              { id: '3rdparty', label: '3rd Party' },
+              { id: 'private',  label: 'Private' },
+            ] as { id: FtbLegacyCat; label: string }[]).map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setFtbLegacyCat(c.id)}
+                className="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                style={
+                  ftbLegacyCat === c.id
+                    ? { background: 'rgba(251,146,60,0.2)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.3)' }
+                    : { background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
+                }
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ATLauncher sub-category tabs */}
+        {source === 'atlauncher' && (
+          <div className="flex gap-1">
+            {([
+              { id: 'public',  label: 'Public' },
+              { id: 'private', label: 'Private' },
+            ] as { id: AtlCat; label: string }[]).map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setAtlCat(c.id)}
+                className="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                style={
+                  atlCat === c.id
+                    ? { background: 'rgba(99,102,241,0.2)', color: '#818cf8', border: '1px solid rgba(99,102,241,0.3)' }
+                    : { background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
+                }
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* FTB Legacy Private: code + pack ID inputs */}
+        {source === 'ftb-legacy' && ftbLegacyCat === 'private' ? (
+          <div className="flex items-center gap-2">
             <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search modpacks…"
-              className="w-full pl-9 pr-4 py-2 rounded-xl text-sm text-white placeholder:text-gray-600 outline-none transition-all"
+              value={privateCode}
+              onChange={(e) => setPrivateCode(e.target.value)}
+              placeholder="Private code…"
+              className="flex-1 px-3 py-2 rounded-xl text-sm text-white placeholder:text-gray-600 outline-none"
               style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.4)')}
+              onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(251,146,60,0.5)')}
+              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-soft)')}
+            />
+            <input
+              value={privatePackId}
+              onChange={(e) => setPrivatePackId(e.target.value)}
+              placeholder="Pack ID…"
+              className="w-28 px-3 py-2 rounded-xl text-sm text-white placeholder:text-gray-600 outline-none"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(251,146,60,0.5)')}
               onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-soft)')}
             />
           </div>
-
-          {/* Version dropdown */}
-          <select
-            value={mcVersion}
-            onChange={(e) => setMcVersion(e.target.value)}
-            className="py-2 pl-3 pr-8 rounded-xl text-sm outline-none shrink-0 transition-all cursor-pointer appearance-none"
-            style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: mcVersion ? 'var(--text-bright)' : 'var(--text-muted)' }}
-          >
-            <option value="">All versions</option>
-            {COMMON_VERSIONS.map((v) => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Loader filter pills */}
-        <div className="flex gap-1.5">
-          {LOADERS.map((l) => {
-            const active = loader === l.value
-            const lc = l.value !== 'all' ? loaderColor(l.value) : null
-            return (
-              <button
-                key={l.value}
-                onClick={() => setLoader(l.value)}
-                className="px-3.5 py-1 rounded-lg text-xs font-semibold transition-all duration-150"
-                style={
-                  active
-                    ? lc
-                      ? { background: lc.bg, color: lc.text, border: `1px solid ${lc.text}22` }
-                      : { background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }
-                    : { background: 'rgba(var(--overlay-rgb),0.03)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
-                }
+        ) : (
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="relative flex-1">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+                style={{ color: 'var(--text-faint)' }}
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
               >
-                {l.label}
-              </button>
-            )
-          })}
-        </div>
+                <circle cx="11" cy="11" r="7"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search modpacks…"
+                className="w-full pl-9 pr-4 py-2 rounded-xl text-sm text-white placeholder:text-gray-600 outline-none transition-all"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.4)')}
+                onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border-soft)')}
+              />
+            </div>
+
+            {/* Version dropdown */}
+            <select
+              value={mcVersion}
+              onChange={(e) => setMcVersion(e.target.value)}
+              className="py-2 pl-3 pr-8 rounded-xl text-sm outline-none shrink-0 transition-all cursor-pointer appearance-none"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: mcVersion ? 'var(--text-bright)' : 'var(--text-muted)' }}
+            >
+              <option value="">All versions</option>
+              {COMMON_VERSIONS.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Sort + category filters — shown for Modrinth and CurseForge */}
+        {(source === 'modrinth' || source === 'curseforge') && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-1">
+              {([
+                { id: 'popular', label: 'Popular' },
+                { id: 'updated', label: 'Updated' },
+                { id: 'newest',  label: 'Newest'  },
+              ] as { id: SortOption; label: string }[]).map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSort(s.id)}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+                  style={
+                    sort === s.id
+                      ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }
+                      : { background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
+                  }
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {source === 'modrinth' && (
+              <div className="flex gap-1 flex-wrap">
+                {MR_CATEGORIES.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setCategory(category === c.id ? '' : c.id)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium transition-all"
+                    style={
+                      category === c.id
+                        ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }
+                        : { background: 'transparent', color: 'var(--text-faint)', border: '1px solid var(--border-soft)' }
+                    }
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Loader filter pills — hidden for ATLauncher/Technic (no loader data) and FTB Legacy private */}
+        {source !== 'atlauncher' && source !== 'technic' && !(source === 'ftb-legacy' && ftbLegacyCat === 'private') && (
+          <div className="flex gap-1.5">
+            {LOADERS.map((l) => {
+              const active = loader === l.value
+              const lc = l.value !== 'all' ? loaderColor(l.value) : null
+              return (
+                <button
+                  key={l.value}
+                  onClick={() => setLoader(l.value)}
+                  className="px-3.5 py-1 rounded-lg text-xs font-semibold transition-all duration-150"
+                  style={
+                    active
+                      ? lc
+                        ? { background: lc.bg, color: lc.text, border: `1px solid ${lc.text}22` }
+                        : { background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }
+                      : { background: 'rgba(var(--overlay-rgb),0.03)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
+                  }
+                >
+                  {l.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Results */}
@@ -667,7 +836,18 @@ function BrowseModpacks(): JSX.Element {
           </div>
         )}
 
-        {!loading && results.length === 0 && !browseError && (
+        {!loading && results.length === 0 && !browseError && source === 'technic' && !query && (
+          <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--text-dim)' }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="mb-4">
+              <circle cx="11" cy="11" r="7"/>
+              <path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <p className="text-sm font-medium">Search for a Technic modpack</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--surface-3)' }}>Type a pack name or slug to search Technic</p>
+          </div>
+        )}
+
+        {!loading && results.length === 0 && !browseError && !(source === 'technic' && !query) && (
           <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--text-dim)' }}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="mb-4">
               <circle cx="11" cy="11" r="7"/>
@@ -1279,7 +1459,7 @@ function OverviewTabContent({
           onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-3)'; e.currentTarget.style.color = 'var(--text-bright)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-soft)' }}
         >
-          View on {instance.source === 'modrinth' ? 'Modrinth' : instance.source === 'ftb' ? 'FTB' : 'CurseForge'}
+          View on {instance.source === 'modrinth' ? 'Modrinth' : instance.source === 'ftb' || instance.source === 'ftb-legacy' ? 'FTB' : instance.source === 'atlauncher' ? 'ATLauncher' : instance.source === 'technic' ? 'Technic' : 'CurseForge'}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
           </svg>
@@ -1923,10 +2103,16 @@ function InstanceDetailPanel({
                       ? { background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }
                       : instance.source === 'ftb'
                       ? { background: 'rgba(239,68,68,0.12)', color: '#f87171' }
+                      : instance.source === 'ftb-legacy'
+                      ? { background: 'rgba(251,146,60,0.12)', color: '#fb923c' }
+                      : instance.source === 'atlauncher'
+                      ? { background: 'rgba(99,102,241,0.12)', color: '#818cf8' }
+                      : instance.source === 'technic'
+                      ? { background: 'rgba(220,38,38,0.12)', color: '#f87171' }
                       : { background: 'rgba(249,115,22,0.12)', color: '#fb923c' }
                   }
                 >
-                  {instance.source === 'modrinth' ? 'Modrinth' : instance.source === 'ftb' ? 'FTB' : 'CurseForge'}
+                  {instance.source === 'modrinth' ? 'Modrinth' : instance.source === 'ftb' || instance.source === 'ftb-legacy' ? 'FTB' : instance.source === 'atlauncher' ? 'ATLauncher' : instance.source === 'technic' ? 'Technic' : 'CurseForge'}
                 </span>
               )}
             </div>

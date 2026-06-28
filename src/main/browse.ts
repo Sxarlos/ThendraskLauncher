@@ -65,13 +65,20 @@ export async function searchModrinth(params: BrowseParams): Promise<ModpackResul
   const facets: string[][] = [['project_type:modpack']]
   if (params.loader) facets.push([`categories:${params.loader}`])
   if (params.mcVersion) facets.push([`versions:${params.mcVersion}`])
+  if (params.category) facets.push([`categories:${params.category}`])
+
+  const index = params.sort === 'updated' ? 'updated'
+    : params.sort === 'newest' ? 'newest'
+    : params.sort === 'downloads' ? 'downloads'
+    : params.query ? 'relevance'
+    : 'downloads'
 
   const data = await mrGet('/search', {
     query: params.query ?? '',
     facets: JSON.stringify(facets),
     limit: String(params.limit ?? 20),
     offset: String(params.offset ?? 0),
-    index: params.query ? 'relevance' : 'downloads'
+    index
   })
 
   return (data.hits ?? []).map((h: any): ModpackResult => {
@@ -381,6 +388,163 @@ export async function getCurseForgeFileDetails(
   return { mcVersion: allVers.find((v) => MC_VERSION_RE.test(v)) ?? '' }
 }
 
+// ── FTB Legacy ────────────────────────────────────────────────────────────────
+// Same underlying API as FTB but exposes public / 3rd-party / private categories.
+
+export async function searchFtbLegacy(params: BrowseParams, category: string): Promise<ModpackResult[]> {
+  // Private: fetch a single pack by code + pack ID
+  if (category === 'private') {
+    if (!params.privateCode || !params.query) return []
+    try {
+      const pack = await ftbGet(`/private/${params.privateCode.trim()}/modpack/${params.query.trim()}`)
+      if (pack.status === 'error') return []
+      return [{ ...mapFtbPack(pack), source: 'ftb-legacy' as const }]
+    } catch {
+      return []
+    }
+  }
+
+  const limit = params.limit ?? 20
+  const offset = params.offset ?? 0
+  const needed = offset + limit
+
+  let allIds: number[]
+  if (params.query) {
+    const data = await ftbGet(`/public/modpack/search/${needed}?term=${encodeURIComponent(params.query)}`)
+    allIds = data.packs ?? []
+  } else {
+    const data = await ftbGet(`/public/modpack/popular/installs/${needed}`)
+    allIds = data.packs ?? []
+  }
+
+  const pageIds = (allIds as number[]).slice(offset, offset + limit)
+  if (pageIds.length === 0) return []
+
+  const packs = await Promise.all(
+    pageIds.map(async (id): Promise<ModpackResult | null> => {
+      try {
+        const pack = await ftbGet(`/public/modpack/${id}`)
+        const result = mapFtbPack(pack)
+        // 3rd-party: exclude official FTB Team packs
+        if (category === '3rdparty') {
+          const author = (pack.authors as any[])?.[0]?.name ?? ''
+          if (author === 'FTB Team') return null
+        }
+        if (params.loader && !result.loaders.includes(params.loader)) return null
+        if (params.mcVersion && !result.mcVersions.includes(params.mcVersion)) return null
+        return { ...result, source: 'ftb-legacy' as const }
+      } catch {
+        return null
+      }
+    })
+  )
+
+  return packs.filter((p): p is ModpackResult => p !== null)
+}
+
+// ── ATLauncher ────────────────────────────────────────────────────────────────
+
+const ATL_CDN = 'https://download.nodecdn.net/containers/atl'
+const ATL_UA  = 'Mozilla/5.0 ATLauncher/3.4.26.0'
+
+let _atlCache: any[] | null = null
+let _atlCacheAt = 0
+
+async function getAtlPacks(): Promise<any[]> {
+  if (_atlCache && Date.now() - _atlCacheAt < 10 * 60 * 1000) return _atlCache
+  const res = await fetch(`${ATL_CDN}/launcher/json/packsnew.json`, {
+    headers: { 'User-Agent': ATL_UA }
+  })
+  if (!res.ok) throw new Error(`ATLauncher ${res.status}: ${res.statusText}`)
+  _atlCache = await res.json() as any[]
+  _atlCacheAt = Date.now()
+  return _atlCache!
+}
+
+function mapAtlPack(p: any): ModpackResult {
+  const mcVersions = [
+    ...new Set<string>(
+      [...(p.versions ?? []), ...(p.devVersions ?? [])]
+        .map((v: any) => v.minecraft)
+        .filter(Boolean)
+    )
+  ].sort().reverse()
+
+  return {
+    id: String(p.id),
+    name: p.name,
+    description: p.description ?? '',
+    iconUrl: undefined,
+    downloads: 0,
+    categories: [],
+    mcVersions,
+    loaders: [],
+    source: 'atlauncher',
+    externalUrl: `https://www.atlauncher.com/pack/${p.name.replace(/[^A-Za-z0-9]/g, '')}`,
+    author: undefined
+  }
+}
+
+export async function searchAtlauncher(params: BrowseParams, category: string): Promise<ModpackResult[]> {
+  const packs = await getAtlPacks()
+  const targetType = category === 'private' ? 'private' : 'public'
+  const q = (params.query ?? '').toLowerCase()
+  const limit = params.limit ?? 20
+  const offset = params.offset ?? 0
+
+  let filtered = packs.filter((p: any) => p.type === targetType)
+
+  if (q) {
+    filtered = filtered.filter((p: any) =>
+      p.name.toLowerCase().includes(q) ||
+      (p.description ?? '').toLowerCase().includes(q)
+    )
+  }
+
+  if (params.mcVersion) {
+    filtered = filtered.filter((p: any) => {
+      const versions = [...(p.versions ?? []), ...(p.devVersions ?? [])]
+      return versions.some((v: any) => v.minecraft === params.mcVersion)
+    })
+  }
+
+  filtered.sort((a: any, b: any) => {
+    if (a.featured && !b.featured) return -1
+    if (!a.featured && b.featured) return 1
+    return (a.position ?? 0) - (b.position ?? 0)
+  })
+
+  return filtered.slice(offset, offset + limit).map(mapAtlPack)
+}
+
+export async function fetchAtlPackOverview(packId: string): Promise<PackOverview> {
+  const packs = await getAtlPacks()
+  const pack = packs.find((p: any) => String(p.id) === packId)
+  if (!pack) return { description: '', screenshotUrls: [] }
+  return {
+    description: pack.description ?? '',
+    screenshotUrls: [],
+    externalUrl: `https://www.atlauncher.com/pack/${pack.name.replace(/[^A-Za-z0-9]/g, '')}`,
+    downloads: undefined,
+    author: undefined
+  }
+}
+
+export async function fetchAtlVersions(packId: string): Promise<PackVersion[]> {
+  const packs = await getAtlPacks()
+  const pack = packs.find((p: any) => String(p.id) === packId)
+  if (!pack) return []
+
+  return [...(pack.versions ?? [])].reverse().map((v: any): PackVersion => ({
+    id: v.version,
+    versionNumber: v.version,
+    name: v.version,
+    gameVersions: v.minecraft ? [v.minecraft] : [],
+    loaders: [],
+    datePublished: ''
+  }))
+}
+
 // ── FTB ───────────────────────────────────────────────────────────────────────
 
 const FTB_BASE = 'https://api.modpacks.ch'
@@ -430,7 +594,7 @@ export async function searchFtb(params: BrowseParams): Promise<ModpackResult[]> 
     const data = await ftbGet(`/public/modpack/search/${needed}?term=${encodeURIComponent(params.query)}`)
     allIds = data.packs ?? []
   } else {
-    const data = await ftbGet(`/public/modpack/popular/plays/${needed}`)
+    const data = await ftbGet(`/public/modpack/popular/installs/${needed}`)
     allIds = data.packs ?? []
   }
 
@@ -531,10 +695,15 @@ export async function getFtbVersionDetails(packId: string, versionId: string): P
 // ── CurseForge search ─────────────────────────────────────────────────────────
 
 export async function searchCurseForge(params: BrowseParams): Promise<ModpackResult[]> {
+  const sortField = params.sort === 'updated' ? 3
+    : params.sort === 'newest' ? 3
+    : params.sort === 'downloads' ? 6
+    : 2  // Popularity (default)
+
   const p: Record<string, string | number> = {
     gameId: 432,
     classId: 4471,
-    sortField: 2,
+    sortField,
     sortOrder: 'desc',
     pageSize: params.limit ?? 20,
     index: params.offset ?? 0
@@ -569,4 +738,107 @@ export async function searchCurseForge(params: BrowseParams): Promise<ModpackRes
       author: m.authors?.[0]?.name || undefined
     }
   })
+}
+
+// ── Technic Launcher ──────────────────────────────────────────────────────────
+
+const TECHNIC_API = 'https://api.technicpack.net'
+const TECHNIC_UA  = 'Mozilla/5.0 TechnicLauncher/4.0.0'
+
+async function technicGet(path: string): Promise<any> {
+  const res = await fetch(`${TECHNIC_API}${path}`, { headers: { 'User-Agent': TECHNIC_UA } })
+  if (!res.ok) throw new Error(`Technic ${res.status}: ${res.statusText}`)
+  return res.json()
+}
+
+function mapTechnicPack(pack: any): ModpackResult {
+  return {
+    id: pack.name,
+    name: pack.displayName ?? pack.name,
+    description: (pack.description ?? '').replace(/<[^>]+>/g, '').slice(0, 300),
+    iconUrl: pack.icon?.url || undefined,
+    downloads: pack.downloads ?? 0,
+    categories: [],
+    mcVersions: pack.minecraft ? [pack.minecraft] : [],
+    loaders: pack.forge ? ['forge'] : [],
+    source: 'technic',
+    externalUrl: pack.url || `https://www.technicpack.net/modpack/${pack.name}`,
+    author: pack.user ?? undefined
+  }
+}
+
+export async function searchTechnic(params: BrowseParams): Promise<ModpackResult[]> {
+  const q = (params.query ?? '').trim()
+  if (!q) return []
+
+  const data = await technicGet(`/search?q=${encodeURIComponent(q)}&build=latest`)
+  const slugs = Object.keys(data.modpacks ?? {})
+
+  const limit = params.limit ?? 20
+  const offset = params.offset ?? 0
+  const pageIds = slugs.slice(offset, offset + limit)
+  if (pageIds.length === 0) return []
+
+  const packs = await Promise.all(
+    pageIds.map(async (slug): Promise<ModpackResult | null> => {
+      try {
+        const pack = await technicGet(`/modpack/${slug}?build=latest`)
+        if (pack.error) return null
+        return mapTechnicPack(pack)
+      } catch {
+        return null
+      }
+    })
+  )
+  return packs.filter((p): p is ModpackResult => p !== null)
+}
+
+export async function fetchTechnicPackOverview(slug: string): Promise<PackOverview> {
+  const pack = await technicGet(`/modpack/${slug}?build=latest`)
+  const description = (pack.description ?? '').replace(/<[^>]+>/g, '')
+  const screenshots: string[] = []
+  if (pack.background?.url) screenshots.push(pack.background.url)
+  return {
+    description,
+    screenshotUrls: screenshots,
+    externalUrl: pack.url || `https://www.technicpack.net/modpack/${slug}`,
+    downloads: pack.downloads ?? undefined,
+    author: pack.user ?? undefined
+  }
+}
+
+export async function fetchTechnicVersions(slug: string): Promise<PackVersion[]> {
+  const pack = await technicGet(`/modpack/${slug}?build=latest`)
+
+  if (pack.solder) {
+    try {
+      const solderRes = await fetch(`${pack.solder}/api/modpack/${slug}`, {
+        headers: { 'User-Agent': TECHNIC_UA }
+      })
+      if (solderRes.ok) {
+        const s = await solderRes.json() as any
+        const recommended: string = s.recommended ?? ''
+        const latest: string = s.latest ?? ''
+        const builds: string[] = (s.builds ?? []).slice().reverse()
+        return builds.map((b: string): PackVersion => ({
+          id: b,
+          versionNumber: b,
+          name: b === recommended ? `${b} (Recommended)` : b === latest ? `${b} (Latest)` : b,
+          gameVersions: pack.minecraft ? [pack.minecraft] : [],
+          loaders: pack.forge ? ['forge'] : [],
+          datePublished: ''
+        }))
+      }
+    } catch { /* fall through to simple */ }
+  }
+
+  const builds = [...new Set<string>([pack.currentBuild, pack.recommended].filter(Boolean))]
+  return builds.map((b): PackVersion => ({
+    id: b,
+    versionNumber: b,
+    name: b === pack.recommended ? `${b} (Recommended)` : b,
+    gameVersions: pack.minecraft ? [pack.minecraft] : [],
+    loaders: pack.forge ? ['forge'] : [],
+    datePublished: ''
+  }))
 }

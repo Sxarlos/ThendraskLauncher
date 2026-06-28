@@ -28,7 +28,7 @@ export interface Instance {
   mcVersion: string
   loader: LoaderType
   loaderVersion?: string
-  source?: 'manual' | 'modrinth' | 'curseforge' | 'ftb'
+  source?: 'manual' | 'modrinth' | 'curseforge' | 'ftb' | 'ftb-legacy' | 'atlauncher' | 'technic'
   externalId?: string        // Modrinth project_id or CurseForge mod id
   packVersionId?: string     // Specific version ID from Modrinth/CurseForge
   iconUrl?: string
@@ -144,7 +144,7 @@ export interface ModpackResult {
   categories: string[]
   mcVersions: string[]
   loaders: string[]
-  source: 'modrinth' | 'curseforge' | 'ftb'
+  source: 'modrinth' | 'curseforge' | 'ftb' | 'ftb-legacy' | 'atlauncher' | 'technic'
   externalUrl?: string
   author?: string
 }
@@ -155,6 +155,9 @@ export interface BrowseParams {
   mcVersion?: string
   limit?: number
   offset?: number
+  privateCode?: string
+  sort?: 'downloads' | 'updated' | 'newest'
+  category?: string
 }
 
 export interface MinecraftSkin {
