@@ -96,20 +96,38 @@ function resolveDownloadUrl(url: string): string {
   return url
 }
 
+async function gdriveFetch(fetchUrl: string): Promise<Response> {
+  const res = await net.fetch(fetchUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+  })
+  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
+  return res
+}
+
 export async function downloadUpdate(url: string): Promise<string> {
   const dest = join(tmpdir(), 'EnderClientSetup.exe')
   const resolvedUrl = resolveDownloadUrl(url)
 
-  // Use Electron's net.fetch (Chromium networking) so Google Drive cookies,
-  // redirects and TLS quirks are handled automatically.
-  const res = await net.fetch(resolvedUrl, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-  })
+  let res = await gdriveFetch(resolvedUrl)
 
-  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
+  // Google Drive returns an HTML "too large to virus-scan" warning page for big files.
+  // The confirm=t shortcut no longer works reliably — extract the real token from the page.
+  if ((res.headers.get('content-type') ?? '').includes('text/html')) {
+    const html = await res.text()
+    const match = html.match(/confirm=([^&"'\s]+)/)
+    if (!match) {
+      throw new Error(
+        'Download failed: received an HTML page instead of the installer. ' +
+        'Make sure the Google Drive file is shared publicly ("Anyone with the link").'
+      )
+    }
+    const confirmUrl = resolvedUrl.replace(/\bconfirm=[^&]+/, `confirm=${match[1]}`)
+    res = await gdriveFetch(confirmUrl)
+  }
 
   const total = parseInt(res.headers.get('content-length') ?? '0', 10)
   let received = 0
+  let checkedHeader = false
 
   const file = createWriteStream(dest)
   const reader = res.body!.getReader()
@@ -118,6 +136,19 @@ export async function downloadUpdate(url: string): Promise<string> {
     for (;;) {
       const { done, value } = await reader.read()
       if (done) break
+      // First chunk must start with MZ — the Windows PE magic bytes.
+      // If it doesn't, the download returned bad content (HTML, redirect page, etc.).
+      if (!checkedHeader && value && value.length >= 2) {
+        checkedHeader = true
+        if (value[0] !== 0x4D || value[1] !== 0x5A) {
+          reader.cancel()
+          file.destroy()
+          throw new Error(
+            'Download failed: the file is not a valid Windows executable. ' +
+            'Check that the download URL points directly to the installer.'
+          )
+        }
+      }
       file.write(Buffer.from(value!))
       received += value!.length
       if (total > 0) broadcastProgress(Math.round((received / total) * 100))
