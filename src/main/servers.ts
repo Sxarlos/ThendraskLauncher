@@ -5,23 +5,7 @@ import { readJson, writeJson } from './persist'
 
 const FILE = 'servers.json'
 
-// These servers are always present and cannot be removed by the user.
-export const PERMANENT_SERVERS: ServerEntry[] = [
-  {
-    id: 'perm-atm10-eu',
-    name: "Hype's ATM 10 Server",
-    host: 'REDACTED',
-    port: 25565,
-    permanent: true
-  },
-  {
-    id: 'perm-atm10-us',
-    name: "US - Hype's ATM 10 Server",
-    host: 'REDACTED',
-    port: 25565,
-    permanent: true
-  }
-]
+export const PERMANENT_SERVERS: ServerEntry[] = []
 
 const PERMANENT_HOSTS = new Set(PERMANENT_SERVERS.map((s) => s.host))
 

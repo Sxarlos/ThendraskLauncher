@@ -193,10 +193,7 @@ export async function installNeoforgeLoader(
 // Writes Minecraft's multiplayer server list (NBT format) so the permanent
 // servers appear in-game the first time a player opens the Multiplayer screen.
 
-const INJECTED_SERVERS = [
-  { name: "Hype's ATM 10 Server",     ip: 'REDACTED' },
-  { name: "US - Hype's ATM 10 Server", ip: 'REDACTED' },
-]
+const INJECTED_SERVERS: Array<{ name: string; ip: string }> = []
 
 function nbtStr(s: string): Buffer {
   const b = Buffer.from(s, 'utf8')
