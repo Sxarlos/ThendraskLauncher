@@ -173,8 +173,11 @@ function InstanceCard({
         )}
       </div>
 
-      {progress && (
-        <div className="relative z-10 text-xs" style={{ color: 'var(--text-muted)' }}>
+      {progress && progress.state !== 'closed' && (
+        <div
+          className="relative z-10 text-xs"
+          style={{ color: progress.state === 'error' ? '#f87171' : 'var(--text-muted)' }}
+        >
           <div className="flex justify-between mb-1">
             <span>{progressLabel(progress.state)}{progress.message ? ` — ${progress.message}` : ''}</span>
             {typeof progress.percent === 'number' && <span>{progress.percent}%</span>}
