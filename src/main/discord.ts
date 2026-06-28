@@ -63,6 +63,7 @@ export function setPlaying(instanceName: string, loader?: string, mcVersion?: st
     largeImageKey: 'logo',
     largeImageText: 'Ender Client',
     instance: false,
+    buttons: [{ label: 'ender-client.xyz', url: 'https://ender-client.xyz' }],
   }).catch(() => { /* Discord may have disconnected */ })
 }
 
@@ -75,5 +76,6 @@ export function setIdle(): void {
     largeImageKey: 'logo',
     largeImageText: 'Ender Client',
     instance: false,
+    buttons: [{ label: 'ender-client.xyz', url: 'https://ender-client.xyz' }],
   }).catch(() => { /* Discord may have disconnected */ })
 }
