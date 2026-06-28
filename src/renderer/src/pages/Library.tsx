@@ -573,7 +573,6 @@ function BrowseModpacks(): JSX.Element {
           data = await (window.api.browse as any).ftbLegacy(params, ftbCat)
         }
       } else if (src === 'technic') {
-        if (!q) { setLoading(false); setResults([]); return }
         data = await (window.api.browse as any).technic(params)
       } else {
         data = await (window.api.browse as any).atlauncher(params, atl)
@@ -839,18 +838,7 @@ function BrowseModpacks(): JSX.Element {
           </div>
         )}
 
-        {!loading && results.length === 0 && !browseError && source === 'technic' && !query && (
-          <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--text-dim)' }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="mb-4">
-              <circle cx="11" cy="11" r="7"/>
-              <path d="M21 21l-4.35-4.35"/>
-            </svg>
-            <p className="text-sm font-medium">Search for a Technic modpack</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--surface-3)' }}>Type a pack name or slug to search Technic</p>
-          </div>
-        )}
-
-        {!loading && results.length === 0 && !browseError && !(source === 'technic' && !query) && (
+        {!loading && results.length === 0 && !browseError && (
           <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--text-dim)' }}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" className="mb-4">
               <circle cx="11" cy="11" r="7"/>

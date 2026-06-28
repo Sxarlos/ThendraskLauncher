@@ -757,31 +757,44 @@ function mapTechnicPack(pack: any): ModpackResult {
     name: pack.displayName ?? pack.name,
     description: (pack.description ?? '').replace(/<[^>]+>/g, '').slice(0, 300),
     iconUrl: pack.icon?.url || undefined,
-    downloads: pack.downloads ?? 0,
+    // API returns 'installs' (not 'downloads') in current responses
+    downloads: pack.installs ?? pack.downloads ?? 0,
     categories: [],
     mcVersions: pack.minecraft ? [pack.minecraft] : [],
     loaders: pack.forge ? ['forge'] : [],
     source: 'technic',
-    externalUrl: pack.url || `https://www.technicpack.net/modpack/${pack.name}`,
+    // 'url' can be null in current API; prefer platformUrl
+    externalUrl: pack.platformUrl || pack.url || `https://www.technicpack.net/modpack/${pack.name}`,
     author: pack.user ?? undefined
   }
 }
 
 export async function searchTechnic(params: BrowseParams): Promise<ModpackResult[]> {
   const q = (params.query ?? '').trim()
-  if (!q) return []
-
-  const data = await technicGet(`/search?q=${encodeURIComponent(q)}&build=latest`)
-  const slugs = Object.keys(data.modpacks ?? {})
-
   const limit = params.limit ?? 20
   const offset = params.offset ?? 0
-  const pageIds = slugs.slice(offset, offset + limit)
-  if (pageIds.length === 0) return []
+
+  // Use trending endpoint when no query; search endpoint otherwise.
+  // Both return { modpacks: [...] } as an array (API format as of 2025).
+  const endpoint = q
+    ? `/search?q=${encodeURIComponent(q)}&build=latest`
+    : `/trending?build=latest`
+
+  const data = await technicGet(endpoint)
+
+  // Normalise: new format is an array, old format was a slug→name dict.
+  const items: any[] = Array.isArray(data.modpacks)
+    ? data.modpacks
+    : Object.keys(data.modpacks ?? {}).map((slug) => ({ slug }))
+
+  const pageItems = items.slice(offset, offset + limit)
+  if (pageItems.length === 0) return []
 
   const packs = await Promise.all(
-    pageIds.map(async (slug): Promise<ModpackResult | null> => {
+    pageItems.map(async (item): Promise<ModpackResult | null> => {
       try {
+        const slug = item.slug ?? item.name
+        if (!slug) return null
         const pack = await technicGet(`/modpack/${slug}?build=latest`)
         if (pack.error) return null
         return mapTechnicPack(pack)
