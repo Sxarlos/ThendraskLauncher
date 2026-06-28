@@ -86,6 +86,8 @@ const api = {
   },
   dialog: {
     pickDir: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickDir'),
+    pickFile: (filters?: Electron.FileFilter[]): Promise<string | null> =>
+      ipcRenderer.invoke('dialog:pickFile', filters),
     pickModFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickModFiles')
   },
   friends: {

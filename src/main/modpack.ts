@@ -45,7 +45,7 @@ export async function resolveFabricVersion(mcVersion: string): Promise<string | 
   try {
     const res = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(mcVersion)}`)
     if (!res.ok) return undefined
-    const data: any[] = await res.json()
+    const data = await res.json() as any[]
     const stable = data.find((e) => e.loader?.stable)
     return (stable ?? data[0])?.loader?.version
   } catch {
@@ -57,7 +57,7 @@ export async function resolveQuiltVersion(mcVersion: string): Promise<string | u
   try {
     const res = await fetch(`https://meta.quiltmc.org/v3/versions/loader/${encodeURIComponent(mcVersion)}`)
     if (!res.ok) return undefined
-    const data: any[] = await res.json()
+    const data = await res.json() as any[]
     return data[0]?.version
   } catch {
     return undefined
@@ -120,7 +120,7 @@ export async function resolveForgeVersion(mcVersion: string): Promise<string | u
   try {
     const res = await fetch('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json')
     if (!res.ok) return undefined
-    const data: { promos: Record<string, string> } = await res.json()
+    const data = await res.json() as { promos: Record<string, string> }
     return data.promos[`${mcVersion}-recommended`] ?? data.promos[`${mcVersion}-latest`]
   } catch {
     return undefined
@@ -274,7 +274,7 @@ export async function installMrpack(
   } else {
     const res = await fetch(`${MR_BASE}/project/${projectId}/version`, { headers: { 'User-Agent': UA } })
     if (!res.ok) throw new Error(`Modrinth ${res.status}`)
-    const versions: any[] = await res.json()
+    const versions = await res.json() as any[]
     if (!versions.length) throw new Error('No versions available for this modpack')
     versionData = versions[0]
   }
@@ -376,11 +376,11 @@ export async function installCfPack(
   if (fileId) {
     const res = await fetch(`${CF_BASE}/mods/${modId}/files/${fileId}`, { headers: cfH })
     if (!res.ok) throw new Error(`CurseForge ${res.status}`)
-    fileData = (await res.json()).data
+    fileData = (await res.json() as any).data
   } else {
     const res = await fetch(`${CF_BASE}/mods/${modId}/files?pageSize=1&sortField=1&sortOrder=desc`, { headers: cfH })
     if (!res.ok) throw new Error(`CurseForge ${res.status}`)
-    fileData = (await res.json()).data?.[0]
+    fileData = (await res.json() as any).data?.[0]
   }
 
   if (!fileData?.downloadUrl) throw new Error('This CurseForge file has no public download URL')
@@ -424,7 +424,7 @@ export async function installCfPack(
       headers: { ...cfH, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fileIds: batch.map((m) => m.fileID) })
     })
-    const files: any[] = (await res.json()).data ?? []
+    const files = (await res.json() as any).data as any[] ?? []
 
     for (const file of files) {
       done++

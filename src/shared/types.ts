@@ -110,7 +110,6 @@ export interface AppSettings {
   discordRpc?: boolean
   discordClientId?: string
   setupComplete?: boolean
-  cosmeticsEnabled?: boolean  // hidden — not shown in UI
 }
 
 export interface JavaInstall {
