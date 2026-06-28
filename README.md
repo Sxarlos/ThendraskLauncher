@@ -7,7 +7,7 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 ## Features
 
 - **Microsoft account login** — secure OAuth via `msmc`. Only the refresh token is stored, encrypted with the OS keychain (`safeStorage`). Your password is never seen or stored.
-- **Modpack browser** — search and install modpacks from Modrinth and CurseForge directly in the launcher.
+- **Modpack browser** — search and install modpacks from Modrinth, CurseForge, FTB, FTB Legacy, ATLauncher, and Technic Launcher. Modrinth and CurseForge support sort (Popular / Updated / Newest) and category filters.
 - **Instance management** — create vanilla or modded instances for any Minecraft version. Each instance has its own isolated `.minecraft` folder.
 - **Launch** — downloads the game version and assets on first run via `minecraft-launcher-core`. Progress and live game logs stream onto the instance card.
 - **Server monitor** — add servers to watch; the launcher pings them and shows live player counts and status.
@@ -49,3 +49,7 @@ Updates are distributed via a public GitHub Gist that points to a download URL. 
 4. Users will see an update banner within a few minutes
 
 The Gist URL is configured in `src/main/updater.ts`.
+
+## Acknowledgements
+
+- [Prism Launcher](https://github.com/PrismLauncher/PrismLauncher) — their open-source code was referenced to discover the ATLauncher CDN endpoint and the required User-Agent header used to fetch the pack list.

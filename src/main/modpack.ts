@@ -149,6 +149,74 @@ export async function resolveNeoforgeVersion(mcVersion: string): Promise<string 
 }
 
 /**
+ * Returns a list of available loader versions for the given loader + MC version combination.
+ * Used by the New Instance modal to let users pick a specific loader version.
+ * Returns versions newest-first; the first entry is the recommended default.
+ */
+export async function listLoaderVersions(loader: string, mcVersion: string): Promise<string[]> {
+  if (loader === 'fabric') {
+    try {
+      const res = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(mcVersion)}`)
+      if (!res.ok) return []
+      const data = await res.json() as { loader: { version: string; stable: boolean } }[]
+      // Stable versions first, then unstable, capped at 20
+      const stable = data.filter((e) => e.loader.stable).map((e) => e.loader.version)
+      const unstable = data.filter((e) => !e.loader.stable).map((e) => e.loader.version)
+      return [...stable, ...unstable].slice(0, 20)
+    } catch {
+      return []
+    }
+  }
+
+  if (loader === 'quilt') {
+    try {
+      const res = await fetch(`https://meta.quiltmc.org/v3/versions/loader/${encodeURIComponent(mcVersion)}`)
+      if (!res.ok) return []
+      const data = await res.json() as { version: string }[]
+      return data.map((e) => e.version).slice(0, 20)
+    } catch {
+      return []
+    }
+  }
+
+  if (loader === 'forge') {
+    try {
+      const res = await fetch('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json')
+      if (!res.ok) return []
+      const data = await res.json() as { promos: Record<string, string> }
+      const recommended = data.promos[`${mcVersion}-recommended`]
+      const latest = data.promos[`${mcVersion}-latest`]
+      const seen = new Set<string>()
+      const result: string[] = []
+      for (const v of [recommended, latest]) {
+        if (v && !seen.has(v)) { seen.add(v); result.push(v) }
+      }
+      return result
+    } catch {
+      return []
+    }
+  }
+
+  if (loader === 'neoforge') {
+    try {
+      const res = await fetch('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml')
+      if (!res.ok) return []
+      const xml = await res.text()
+      const versions = [...xml.matchAll(/<version>([\d.]+)<\/version>/g)].map((m) => m[1])
+      const match = mcVersion.match(/^1\.(\d+)(?:\.(\d+))?$/)
+      if (!match) return []
+      const prefix = match[2] ? `${match[1]}.${match[2]}.` : `${match[1]}.`
+      const matching = versions.filter((v) => v.startsWith(prefix))
+      return matching.slice().reverse().slice(0, 15)
+    } catch {
+      return []
+    }
+  }
+
+  return []
+}
+
+/**
  * Downloads the Forge installer JAR into the instance's .ender-installers/ cache.
  * Returns the JAR path for MCLC's `forge:` option — ForgeWrapper handles the rest.
  */
@@ -607,6 +675,158 @@ export async function importLocalPack(
   throw new Error(
     'Unknown format — file must be a .mrpack or a CurseForge modpack zip containing manifest.json'
   )
+}
+
+// ── ATLauncher pack ───────────────────────────────────────────────────────────
+
+const ATL_CDN = 'https://download.nodecdn.net/containers/atl'
+const ATL_INST_UA = 'Mozilla/5.0 ATLauncher/3.4.26.0'
+
+export async function installAtlPack(
+  instanceId: string,
+  packId: string,
+  packVersionId: string | undefined,
+  onProgress: (msg: string, pct?: number) => void
+): Promise<PackMarker> {
+  const gameDir = instanceGameDir(instanceId)
+
+  onProgress('Fetching pack list…')
+  const listRes = await fetch(`${ATL_CDN}/launcher/json/packsnew.json`, {
+    headers: { 'User-Agent': ATL_INST_UA }
+  })
+  if (!listRes.ok) throw new Error(`ATLauncher pack list fetch failed: ${listRes.status}`)
+  const packs: any[] = await listRes.json()
+  const pack = packs.find((p: any) => String(p.id) === packId)
+  if (!pack) throw new Error(`ATLauncher pack ${packId} not found in pack list`)
+
+  const safeName = pack.name.replace(/[^A-Za-z0-9]/g, '')
+  const allVersions: any[] = pack.versions ?? []
+  const targetVersion = packVersionId ?? allVersions[allVersions.length - 1]?.version
+  if (!targetVersion) throw new Error('No versions available for this ATLauncher pack')
+
+  onProgress('Fetching version details…')
+  const versionUrl = `${ATL_CDN}/packs/${safeName}/versions/${targetVersion}/${safeName}.json`
+  const versionRes = await fetch(versionUrl, { headers: { 'User-Agent': ATL_INST_UA } })
+  if (!versionRes.ok) throw new Error(`ATLauncher version JSON fetch failed: ${versionRes.status}`)
+  const versionData = await versionRes.json() as any
+
+  const mcVersion: string = versionData.minecraft ?? ''
+  const loaderRaw: string = (versionData.loader?.type ?? 'vanilla').toLowerCase()
+  const loaderType = loaderRaw === 'forge' ? 'forge'
+    : loaderRaw === 'fabric' ? 'fabric'
+    : loaderRaw === 'neoforge' ? 'neoforge'
+    : loaderRaw === 'quilt' ? 'quilt'
+    : 'vanilla'
+  const loaderVersion: string | undefined = versionData.loader?.version
+
+  const mods: any[] = (versionData.mods ?? []).filter(
+    (m: any) => m.type === 'mods' || m.type === 'mod'
+  )
+  const modsDir = join(gameDir, 'mods')
+  mkdirSync(modsDir, { recursive: true })
+
+  for (let i = 0; i < mods.length; i++) {
+    const mod = mods[i]
+    if (!mod.url) continue
+    const fileName = mod.file ?? `${(mod.name ?? `mod_${i}`).replace(/[^A-Za-z0-9._-]/g, '_')}.jar`
+    const destPath = join(modsDir, fileName)
+    if (!existsSync(destPath)) {
+      try {
+        await downloadToFile(mod.url, destPath)
+      } catch { /* skip mods that fail */ }
+    }
+    onProgress(`Downloading mods… (${i + 1}/${mods.length})`, Math.round(((i + 1) / mods.length) * 80))
+  }
+
+  // Download and extract config overrides
+  const configsUrl = `${ATL_CDN}/packs/${safeName}/versions/${targetVersion}/Configs.zip`
+  try {
+    onProgress('Downloading configs…', 85)
+    const configRes = await fetch(configsUrl, { headers: { 'User-Agent': ATL_INST_UA } })
+    if (configRes.ok) {
+      onProgress('Extracting configs…', 90)
+      const configBuf = Buffer.from(await configRes.arrayBuffer())
+      const configZip = new AdmZip(configBuf)
+      configZip.extractAllTo(gameDir, true)
+    }
+  } catch { /* configs zip might not exist for all packs */ }
+
+  const marker: PackMarker = {
+    packVersionId: targetVersion,
+    loaderType,
+    loaderVersion
+  }
+  writeMarker(instanceId, marker)
+  return marker
+}
+
+// ── Technic pack ─────────────────────────────────────────────────────────────
+
+const TECHNIC_API_INST = 'https://api.technicpack.net'
+const TECHNIC_INST_UA  = 'Mozilla/5.0 TechnicLauncher/4.0.0'
+
+export async function installTechnicPack(
+  instanceId: string,
+  slug: string,
+  packVersionId: string | undefined,
+  onProgress: (msg: string, pct?: number) => void
+): Promise<PackMarker> {
+  const gameDir = instanceGameDir(instanceId)
+
+  onProgress('Fetching modpack info…')
+  const packRes = await fetch(`${TECHNIC_API_INST}/modpack/${slug}?build=latest`, {
+    headers: { 'User-Agent': TECHNIC_INST_UA }
+  })
+  if (!packRes.ok) throw new Error(`Technic ${packRes.status}`)
+  const pack = await packRes.json() as any
+
+  const targetBuild = packVersionId ?? pack.recommended ?? pack.currentBuild
+  if (!targetBuild) throw new Error('No build available for this Technic pack')
+
+  const loaderType = pack.forge ? 'forge' : 'vanilla'
+  const rawForge: string = pack.forge ?? ''
+  const loaderVersion: string | undefined = rawForge ? rawForge.replace(/^forge-/, '') : undefined
+
+  if (pack.solder) {
+    onProgress('Fetching build details…')
+    const solderRes = await fetch(`${pack.solder}/api/modpack/${slug}/${targetBuild}`, {
+      headers: { 'User-Agent': TECHNIC_INST_UA }
+    })
+    if (!solderRes.ok) throw new Error(`Solder API ${solderRes.status}`)
+    const build = await solderRes.json() as any
+
+    const mods: any[] = build.mods ?? []
+    for (let i = 0; i < mods.length; i++) {
+      const mod = mods[i]
+      if (!mod.url) continue
+      onProgress(`Downloading ${mod.name ?? `mod ${i + 1}`}…`, Math.round((i / mods.length) * 90))
+      try {
+        const modRes = await fetch(mod.url)
+        if (!modRes.ok) continue
+        const buf = Buffer.from(await modRes.arrayBuffer())
+        const zip = new AdmZip(buf)
+        zip.extractAllTo(gameDir, true)
+      } catch { /* skip */ }
+    }
+  } else {
+    onProgress('Downloading modpack archive…')
+    const downloadUrl = `${TECHNIC_API_INST}/modpack/${slug}/download/${targetBuild}`
+    const packZipRes = await fetch(downloadUrl, {
+      headers: { 'User-Agent': TECHNIC_INST_UA },
+      redirect: 'follow'
+    })
+    if (!packZipRes.ok) throw new Error(`Technic download ${packZipRes.status}`)
+    const buf = Buffer.from(await packZipRes.arrayBuffer())
+    onProgress('Extracting modpack…', 85)
+    const zip = new AdmZip(buf)
+    zip.extractAllTo(gameDir, true)
+  }
+
+  injectServersDat(gameDir)
+
+  const marker: PackMarker = { packVersionId: targetBuild, loaderType, loaderVersion }
+  writeMarker(instanceId, marker)
+  return marker
 }
 
 // ── CurseForge zip ────────────────────────────────────────────────────────────

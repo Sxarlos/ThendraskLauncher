@@ -16,6 +16,8 @@ import {
   installMrpack,
   installCfPack,
   installFtbPack,
+  installAtlPack,
+  installTechnicPack,
   resolveFabricVersion,
   resolveQuiltVersion,
   resolveForgeVersion,
@@ -93,8 +95,22 @@ export async function launchInstance(instanceId: string): Promise<void> {
             instance.packVersionId,
             (msg, pct) => setState(instanceId, 'downloading', msg, pct)
           )
-        } else if (instance.source === 'ftb') {
+        } else if (instance.source === 'ftb' || instance.source === 'ftb-legacy') {
           effectiveMarker = await installFtbPack(
+            instanceId,
+            instance.externalId,
+            instance.packVersionId,
+            (msg, pct) => setState(instanceId, 'downloading', msg, pct)
+          )
+        } else if (instance.source === 'atlauncher') {
+          effectiveMarker = await installAtlPack(
+            instanceId,
+            instance.externalId,
+            instance.packVersionId,
+            (msg, pct) => setState(instanceId, 'downloading', msg, pct)
+          )
+        } else if (instance.source === 'technic') {
+          effectiveMarker = await installTechnicPack(
             instanceId,
             instance.externalId,
             instance.packVersionId,

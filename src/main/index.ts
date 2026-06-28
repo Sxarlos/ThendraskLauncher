@@ -19,12 +19,17 @@ import {
   searchModrinth,
   searchCurseForge,
   searchFtb,
+  searchFtbLegacy,
+  searchAtlauncher,
+  searchTechnic,
   fetchModrinthScreenshots,
   fetchCurseForgeScreenshots,
   fetchFtbScreenshots,
   fetchModrinthVersions,
   fetchCurseForgeVersions,
   fetchFtbVersions,
+  fetchAtlVersions,
+  fetchTechnicVersions,
   fetchModrinthMods,
   fetchCurseFormMods,
   fetchFtbMods,
@@ -34,11 +39,13 @@ import {
   fetchModrinthPackOverview,
   fetchCurseForgePackOverview,
   fetchFtbPackOverview,
+  fetchAtlPackOverview,
+  fetchTechnicPackOverview,
   fetchModrinthChangelog,
   fetchCurseForgeChangelog,
   fetchFtbChangelog
 } from './browse'
-import { importLocalPack } from './modpack'
+import { importLocalPack, listLoaderVersions, installTechnicPack } from './modpack'
 import { applyToAllInstances } from './chatmod'
 import { detectAllJavas } from './java'
 import { setCustomInstancesDir } from './persist'
@@ -252,13 +259,18 @@ function registerIpcHandlers(): void {
   handle('browse:modrinth', (params: BrowseParams) => searchModrinth(params))
   handle('browse:curseforge', (params: BrowseParams) => searchCurseForge(params))
   handle('browse:ftb', (params: BrowseParams) => searchFtb(params))
+  handle('browse:ftb-legacy', (params: BrowseParams, category: string) => searchFtbLegacy(params, category))
+  handle('browse:atlauncher', (params: BrowseParams, category: string) => searchAtlauncher(params, category))
+  handle('browse:technic', (params: BrowseParams) => searchTechnic(params))
 
   // Modpack detail (versions, mods, switch)
   handle('modpack:versions', async (instanceId: string) => {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
     if (inst.source === 'modrinth') return fetchModrinthVersions(inst.externalId)
-    if (inst.source === 'ftb') return fetchFtbVersions(inst.externalId)
+    if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbVersions(inst.externalId)
+    if (inst.source === 'atlauncher') return fetchAtlVersions(inst.externalId)
+    if (inst.source === 'technic') return fetchTechnicVersions(inst.externalId)
     return fetchCurseForgeVersions(inst.externalId)
   })
 
@@ -266,7 +278,8 @@ function registerIpcHandlers(): void {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
     if (inst.source === 'modrinth') return fetchModrinthMods(inst.externalId, inst.packVersionId)
-    if (inst.source === 'ftb') return fetchFtbMods(inst.externalId, inst.packVersionId)
+    if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbMods(inst.externalId, inst.packVersionId)
+    if (inst.source === 'atlauncher' || inst.source === 'technic') return []
     return fetchCurseFormMods(inst.externalId, inst.packVersionId)
   })
 
@@ -274,7 +287,8 @@ function registerIpcHandlers(): void {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
     if (inst.source === 'modrinth') return fetchModrinthChangelog(inst.externalId)
-    if (inst.source === 'ftb') return fetchFtbChangelog(inst.externalId)
+    if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbChangelog(inst.externalId)
+    if (inst.source === 'atlauncher' || inst.source === 'technic') return []
     return fetchCurseForgeChangelog(inst.externalId)
   })
 
@@ -282,7 +296,9 @@ function registerIpcHandlers(): void {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return null
     if (inst.source === 'modrinth') return fetchModrinthPackOverview(inst.externalId)
-    if (inst.source === 'ftb') return fetchFtbPackOverview(inst.externalId)
+    if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbPackOverview(inst.externalId)
+    if (inst.source === 'atlauncher') return fetchAtlPackOverview(inst.externalId)
+    if (inst.source === 'technic') return fetchTechnicPackOverview(inst.externalId)
     return fetchCurseForgePackOverview(inst.externalId)
   })
 
@@ -297,13 +313,17 @@ function registerIpcHandlers(): void {
     } else if (inst.source === 'curseforge' && inst.externalId) {
       const details = await getCurseForgeFileDetails(inst.externalId, versionId)
       if (details.mcVersion) mcVersion = details.mcVersion
-    } else if (inst.source === 'ftb' && inst.externalId) {
+    } else if ((inst.source === 'ftb' || inst.source === 'ftb-legacy') && inst.externalId) {
       const details = await getFtbVersionDetails(inst.externalId, versionId)
       if (details.mcVersion) mcVersion = details.mcVersion
     }
+    // ATLauncher: versionId is the version string; mcVersion stays as-is
 
     return updateInstance(instanceId, { mcVersion, packVersionId: versionId })
   })
+
+  // Loader version listing (for the New Instance modal)
+  handle('loader:versions', (loader: string, mcVersion: string) => listLoaderVersions(loader, mcVersion))
 
   // Local pack import (.mrpack or CurseForge zip)
   handle('modpack:importFile', async (filePath: string) => {
