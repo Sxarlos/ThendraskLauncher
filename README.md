@@ -41,14 +41,12 @@ The friends feature requires a small relay server that you self-host. See [`rela
 
 ## In-app Updates
 
-Updates are distributed via a public GitHub Gist that points to a download URL. To release a new version:
+The updater checks the GitHub Releases API directly — no gist or extra secrets required. To release a new version:
 
-1. Run `npm run package` to build the installer
-2. Upload the `.exe` to your chosen host (Google Drive, etc.)
-3. Edit your Gist — update `version` and `downloadUrl`
-4. Users will see an update banner within a few minutes
-
-The Gist URL is configured in `src/main/updater.ts`.
+1. Bump `version` in `package.json`
+2. Commit and push to `main`
+3. `git tag vX.Y.Z && git push origin vX.Y.Z`
+4. CI builds the installer, creates a GitHub Release with the `.exe` attached, done. Users see the update banner within ~5 minutes.
 
 ## Acknowledgements
 

@@ -4,32 +4,19 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import type { UpdateInfo } from '@shared/types'
 
-// ── UPDATE MANIFEST ───────────────────────────────────────────────────────────
-// A tiny public GitHub Gist contains the latest version info.
-// Source code stays completely private — the Gist only exposes a version number
-// and a download link. Nothing sensitive.
-//
-// ONE-TIME SETUP:
-//   1. Go to gist.github.com → New gist
-//   2. Filename: latest-version.json
-//   3. Paste the contents below and click "Create public gist"
-//   4. Click "Raw" and copy that URL → paste it below as MANIFEST_URL
+// ── UPDATE CHECK ──────────────────────────────────────────────────────────────
+// Checks the GitHub Releases API for the latest release. No token or gist
+// required — the repo's releases are public. The CI workflow creates a release
+// automatically on every version tag push, so this just works.
 //
 // RELEASING AN UPDATE:
-//   1. Bump version in package.json (e.g. 0.1.4)
-//   2. npm run package  →  builds the installer
-//   3. Upload the .exe wherever you share it (Google Drive, Discord, etc.)
-//   4. Edit your Gist — update "version" and "downloadUrl"
-//   5. Done — the app will notify users within 2 hours
+//   1. Bump version in package.json (e.g. 0.4.0)
+//   2. Commit and push to main
+//   3. git tag v0.4.0 && git push origin v0.4.0
+//   4. CI builds the installer, creates a GitHub Release, done.
+//      Users see the update banner within ~5 minutes.
 //
-// Gist contents (update these values when you release):
-// {
-//   "version": "0.1.8",
-//   "notes": "In-app updates, friends tab",
-//   "downloadUrl": "https://YOUR_DOWNLOAD_LINK_HERE"
-// }
-//
-const MANIFEST_URL = 'https://gist.githubusercontent.com/Sxarlos/09584c4f095954f7d39e93ae6d55b268/raw/latest-version.json'
+const RELEASES_API = 'https://api.github.com/repos/Sxarlos/EnderClient/releases/latest'
 
 // Re-check every 5 minutes while the app is open
 const RECHECK_INTERVAL_MS = 5 * 60 * 1000
@@ -46,15 +33,29 @@ function semverGt(a: string, b: string): boolean {
 }
 
 async function fetchManifest(): Promise<UpdateInfo | null> {
-  if ((MANIFEST_URL as string) === 'PASTE_YOUR_GIST_RAW_URL_HERE') return null
   try {
-    const res = await net.fetch(MANIFEST_URL, {
-      headers: { 'Cache-Control': 'no-cache', 'User-Agent': 'EnderClient-Updater' }
+    const res = await net.fetch(RELEASES_API, {
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'EnderClient-Updater',
+        'Cache-Control': 'no-cache'
+      }
     })
     if (!res.ok) return null
-    const data = (await res.json()) as Partial<UpdateInfo>
-    if (!data.version || !data.downloadUrl) return null
-    return { version: data.version, notes: data.notes, downloadUrl: data.downloadUrl }
+    const data = await res.json() as any
+    const version = (data.tag_name as string | undefined)?.replace(/^v/, '')
+    if (!version) return null
+    const exe = (data.assets as any[] | undefined)?.find(
+      (a: any) => typeof a.name === 'string' && a.name.endsWith('.exe')
+    )
+    if (!exe?.browser_download_url) return null
+    const firstNoteLine = (data.body as string | undefined)
+      ?.split('\n').map((l: string) => l.trim()).find((l: string) => l.length > 0)
+    return {
+      version,
+      notes: firstNoteLine,
+      downloadUrl: exe.browser_download_url as string
+    }
   } catch {
     return null
   }

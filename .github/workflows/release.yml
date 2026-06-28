@@ -56,56 +56,15 @@ jobs:
           files: dist/*.exe
           generate_release_notes: true
 
-      - name: Update Gist update manifest
-        continue-on-error: true
+      - name: Verify release asset
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           TAG: ${{ github.ref_name }}
-          VERSION: ${{ steps.pkg.outputs.version }}
         run: |
-          $gistId = '09584c4f095954f7d39e93ae6d55b268'
-
-          Write-Host "GIST_TOKEN present: $([bool]$env:GIST_TOKEN)"
-          Write-Host "TAG: $env:TAG  VERSION: $env:VERSION"
-
-          if (-not $env:GIST_TOKEN) { throw "GIST_TOKEN secret is not set. Add a GitHub PAT with 'gist' scope to repo secrets." }
-
           $rel = Invoke-RestMethod `
             -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/$env:TAG" `
             -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
-
           $exe = $rel.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
-          if (-not $exe) { throw "No .exe asset found on release — check that npm run package produced a dist/*.exe" }
-
-          Write-Host "Asset URL: $($exe.browser_download_url)"
-
-          $firstLine = $rel.body -split "`n" | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1
-          $notes = if ($firstLine) { $firstLine } else { "Ender Client v$env:VERSION" }
-
-          $content = [ordered]@{
-            version     = $env:VERSION
-            notes       = $notes
-            downloadUrl = $exe.browser_download_url
-          } | ConvertTo-Json -Compress
-
-          Write-Host "Patching Gist $gistId with: $content"
-
-          $payload = @{
-            files = @{
-              "latest-version.json" = @{ content = $content }
-            }
-          } | ConvertTo-Json -Depth 5
-
-          try {
-            Invoke-RestMethod `
-              -Uri "https://api.github.com/gists/$gistId" `
-              -Method PATCH `
-              -Headers @{ Authorization = "Bearer $env:GIST_TOKEN"; "Content-Type" = "application/json" } `
-              -Body $payload
-            Write-Host "Done: v$env:VERSION -> $($exe.browser_download_url)"
-          } catch {
-            Write-Host "Gist PATCH failed: $_"
-            throw
-          }
+          if (-not $exe) { throw "No .exe asset on release — check that electron-builder produced a dist/*.exe" }
+          Write-Host "Release asset: $($exe.browser_download_url)"
