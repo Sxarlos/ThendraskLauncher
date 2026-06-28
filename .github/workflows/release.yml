@@ -20,11 +20,26 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache electron-builder tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron-builder\cache
+            ~\AppData\Local\electron\Cache
+          key: ${{ runner.os }}-electron-builder-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-builder-
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and package
-        run: npm run package
+      - name: Build
+        run: npx electron-vite build
+
+      - name: Package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --publish never
 
       - name: Read version from package.json
         id: pkg
@@ -50,7 +65,6 @@ jobs:
           TAG: ${{ github.ref_name }}
           VERSION: ${{ steps.pkg.outputs.version }}
         run: |
-          # Fetch the release we just created to get the asset URL
           $rel = Invoke-RestMethod `
             -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/$env:TAG" `
             -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
@@ -58,7 +72,6 @@ jobs:
           $exe = $rel.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
           if (-not $exe) { throw "No .exe asset found on release — check that npm run package produced a dist/*.exe" }
 
-          # First line of auto-generated release notes, falling back to a default
           $notes = ($rel.body -split "`n" | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1) `
                    ?? "Ender Client v$env:VERSION"
 
@@ -80,4 +93,4 @@ jobs:
             -Headers @{ Authorization = "Bearer $env:GIST_TOKEN"; "Content-Type" = "application/json" } `
             -Body $payload
 
-          Write-Host "Done: v$env:VERSION → $($exe.browser_download_url)"
+          Write-Host "Done: v$env:VERSION -> $($exe.browser_download_url)"
