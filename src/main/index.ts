@@ -179,6 +179,12 @@ function registerIpcHandlers(): void {
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
+  // Single file picker
+  handle('dialog:pickFile', async (_: unknown, filters: Electron.FileFilter[] = []) => {
+    const result = await dialog.showOpenDialog({ properties: ['openFile'], filters })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+
   // Mod file picker — returns selected .jar paths
   handle('dialog:pickModFiles', async () => {
     const result = await dialog.showOpenDialog({
@@ -302,7 +308,7 @@ app.whenReady().then(() => {
 
   // Auto-apply the default relay URL if none is saved yet
   const DEFAULT_RELAY_URL = 'https://relay.sxarlos.store'
-  if (DEFAULT_RELAY_URL !== 'PASTE_YOUR_RELAY_URL_HERE') {
+  if ((DEFAULT_RELAY_URL as string) !== 'PASTE_YOUR_RELAY_URL_HERE') {
     const { relayUrl } = getSettings()
     if (!relayUrl) setSettings({ relayUrl: DEFAULT_RELAY_URL })
   }

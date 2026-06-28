@@ -24,7 +24,6 @@ import {
   installNeoforgeLoader
 } from './modpack'
 import { autoInstallShader } from './shaders'
-import { injectCosmetics } from './cosmetics'
 
 /** Instances currently running, keyed by instance id. */
 const running = new Map<string, ChildProcess>()
@@ -177,11 +176,6 @@ export async function launchInstance(instanceId: string): Promise<void> {
   if (settings.noChatRestrictions) {
     setState(instanceId, 'preparing', 'Injecting No Chat Reports…')
     await ensureChatMod(instance).catch(() => { /* non-fatal */ })
-  }
-
-  // Inject cosmetics mod (hidden setting — off by default, not shown in UI)
-  if (settings.cosmeticsEnabled) {
-    try { injectCosmetics(instanceId, resolvedLoaderType as any, instance.mcVersion) } catch { /* non-fatal */ }
   }
 
   // Write default game options for fresh instances (1.12+ only)

@@ -24,7 +24,7 @@ import type { UpdateInfo } from '@shared/types'
 //
 // Gist contents (update these values when you release):
 // {
-//   "version": "0.1.7",
+//   "version": "0.1.8",
 //   "notes": "In-app updates, friends tab",
 //   "downloadUrl": "https://YOUR_DOWNLOAD_LINK_HERE"
 // }
@@ -46,9 +46,9 @@ function semverGt(a: string, b: string): boolean {
 }
 
 async function fetchManifest(): Promise<UpdateInfo | null> {
-  if (MANIFEST_URL === 'PASTE_YOUR_GIST_RAW_URL_HERE') return null
+  if ((MANIFEST_URL as string) === 'PASTE_YOUR_GIST_RAW_URL_HERE') return null
   try {
-    const res = await fetch(MANIFEST_URL, {
+    const res = await net.fetch(MANIFEST_URL, {
       headers: { 'Cache-Control': 'no-cache', 'User-Agent': 'EnderClient-Updater' }
     })
     if (!res.ok) return null

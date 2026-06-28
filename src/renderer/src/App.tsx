@@ -56,17 +56,13 @@ export default function App(): JSX.Element {
       if (p.state === 'preparing') clearLogs(p.instanceId)
       setProgress(p)
     })
-    // onLog was added in a later preload version — guard so older builds don't crash
-    const unsubLog = (window.api.launch as any).onLog?.((e: { instanceId: string; line: string }) =>
-      addLog(e.instanceId, e.line)
-    ) as (() => void) | undefined
-
-    const unsubUpdate = (window.api as any).update?.onAvailable?.((info: any) => setUpdateInfo(info)) as (() => void) | undefined
-    const unsubDownload = (window.api as any).update?.onDownloadProgress?.((percent: number) =>
+    const unsubLog = window.api.launch.onLog((e) => addLog(e.instanceId, e.line))
+    const unsubUpdate = window.api.update.onAvailable((info) => setUpdateInfo(info))
+    const unsubDownload = window.api.update.onDownloadProgress((percent) =>
       setUpdateDownload({ progress: percent })
-    ) as (() => void) | undefined
+    )
 
-    return () => { unsubProgress(); unsubLog?.(); unsubUpdate?.(); unsubDownload?.() }
+    return () => { unsubProgress(); unsubLog(); unsubUpdate(); unsubDownload() }
   }, [loadTheme, refreshAccounts, refreshInstances, setProgress, addLog, clearLogs, setUpdateInfo])
 
   return (

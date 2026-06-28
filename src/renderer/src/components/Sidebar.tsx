@@ -81,7 +81,7 @@ function IconChevronRight(): JSX.Element {
 
 /* ── Nav config ─────────────────────────────────────────────── */
 
-const NAV: { id: Page; label: string; icon: JSX.Element; comingSoon?: boolean }[] = [
+const NAV: { id: Page; label: string; icon: JSX.Element }[] = [
   { id: 'home',     label: 'Home',     icon: <IconHome /> },
   { id: 'library',  label: 'Library',  icon: <IconLibrary /> },
   { id: 'servers',  label: 'Servers',  icon: <IconServers /> },
@@ -155,62 +155,6 @@ export default function Sidebar(): JSX.Element {
       <nav className="flex-1 p-2 space-y-0.5 overflow-hidden">
         {NAV.map((item) => {
           const active = page === item.id
-          const locked = !!item.comingSoon
-
-          if (locked) {
-            return (
-              <div
-                key={item.id}
-                title={collapsed ? 'Friends — Coming Soon' : undefined}
-                className="relative w-full flex items-center rounded-lg text-sm"
-                style={{
-                  gap: collapsed ? 0 : 12,
-                  padding: collapsed ? '10px 0' : '10px 12px',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  color: 'var(--text-dim)',
-                  cursor: 'not-allowed',
-                  opacity: 0.55,
-                }}
-              >
-                <span className="relative shrink-0">{item.icon}</span>
-
-                <span
-                  className="font-medium whitespace-nowrap overflow-hidden flex-1"
-                  style={{
-                    opacity: collapsed ? 0 : 1,
-                    maxWidth: collapsed ? 0 : 160,
-                    transition: 'opacity 0.12s ease, max-width 0.22s cubic-bezier(0.4,0,0.2,1)',
-                    display: 'block',
-                  }}
-                >
-                  {item.label}
-                </span>
-
-                {/* Coming soon pill */}
-                <span
-                  style={{
-                    opacity: collapsed ? 0 : 1,
-                    maxWidth: collapsed ? 0 : 80,
-                    overflow: 'hidden',
-                    transition: 'opacity 0.12s ease, max-width 0.22s cubic-bezier(0.4,0,0.2,1)',
-                    fontSize: 9,
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    color: 'var(--text-faint)',
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--border-soft)',
-                    borderRadius: 4,
-                    padding: '2px 5px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  Soon
-                </span>
-              </div>
-            )
-          }
 
           return (
             <button
@@ -326,7 +270,7 @@ export default function Sidebar(): JSX.Element {
                   </p>
                 )}
                 <button
-                  onClick={() => (window.api as any).update?.openDownload?.(updateInfo.downloadUrl)}
+                  onClick={() => window.api.update.openDownload(updateInfo.downloadUrl)}
                   className="mt-2 w-full text-xs font-semibold rounded-md py-1 transition-opacity hover:opacity-80"
                   style={{
                     background: 'var(--accent)',

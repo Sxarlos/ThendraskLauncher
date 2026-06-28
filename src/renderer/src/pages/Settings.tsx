@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AppSettings, JavaInstall, ThemeId } from '@shared/types'
+import type { AppSettings, DefaultGameSettings, JavaInstall, ThemeId } from '@shared/types'
 import { useApp } from '../store'
 
 type SettingsTab = 'general' | 'appearance' | 'apikeys'
@@ -182,7 +182,7 @@ function UpdateCheckRow(): JSX.Element {
   const check = async (): Promise<void> => {
     setState('checking')
     try {
-      const result = await (window.api as any).update?.check?.()
+      const result = await window.api.update.check()
       setState(result ? 'available' : 'up-to-date')
     } catch {
       setState('idle')
@@ -193,7 +193,7 @@ function UpdateCheckRow(): JSX.Element {
     if (!updateInfo) return
     setUpdateDownload({ state: 'downloading', progress: 0, path: null })
     try {
-      const path = await (window.api as any).update.download(updateInfo.downloadUrl)
+      const path = await window.api.update.download(updateInfo.downloadUrl)
       setUpdateDownload({ state: 'ready', progress: 100, path })
     } catch {
       setUpdateDownload({ state: 'error', progress: 0, path: null })
@@ -201,7 +201,7 @@ function UpdateCheckRow(): JSX.Element {
   }
 
   const installUpdate = (): void => {
-    if (updateDownload.path) (window.api as any).update.install(updateDownload.path)
+    if (updateDownload.path) window.api.update.install(updateDownload.path)
   }
 
   return (
@@ -332,15 +332,24 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
   }
 
   const pickJava = async (): Promise<void> => {
-    // Re-use pickDir — user navigates to the java binary's folder
-    const dir = await window.api.dialog.pickDir()
-    if (dir) {
-      setJavaPath(dir)
-      onChange({ javaPath: dir })
+    const file = await window.api.dialog.pickFile([{ name: 'Java Executable', extensions: ['exe'] }])
+    if (file) {
+      setJavaPath(file)
+      onChange({ javaPath: file })
     }
   }
 
   const ramOptions = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384]
+
+  const dgs = settings.defaultGameSettings
+  const dgsEnabled = dgs !== undefined
+  const setDgs = (patch: Partial<DefaultGameSettings>): void => {
+    const next = { ...(dgs ?? {}), ...patch }
+    for (const k of Object.keys(next)) {
+      if ((next as Record<string, unknown>)[k] === undefined) delete (next as Record<string, unknown>)[k]
+    }
+    onChange({ defaultGameSettings: next })
+  }
 
   return (
     <div>
@@ -488,6 +497,120 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
       <Row label="Discord Rich Presence" desc="Show what you're playing in Discord">
         <Toggle checked={!!settings.discordRpc} onChange={(v) => onChange({ discordRpc: v })} />
       </Row>
+
+      <SectionHeader>New Instance Defaults</SectionHeader>
+
+      <Row
+        label="Set default video options"
+        desc="Writes an options.txt on first launch of each new instance. Never overwrites existing settings."
+      >
+        <Toggle
+          checked={dgsEnabled}
+          onChange={(v) => onChange({ defaultGameSettings: v ? {} : undefined })}
+        />
+      </Row>
+
+      {dgsEnabled && (
+        <>
+          {/* Render Distance */}
+          <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>Render Distance</div>
+              {dgs?.renderDistance !== undefined && (
+                <span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)' }}>
+                  {dgs.renderDistance} chunks
+                </span>
+              )}
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {([undefined, 4, 6, 8, 10, 12, 16] as (number | undefined)[]).map((v) => {
+                const active = dgs?.renderDistance === v
+                return (
+                  <button
+                    key={v ?? 'default'}
+                    onClick={() => setDgs({ renderDistance: dgs?.renderDistance === v ? undefined : v })}
+                    className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+                    style={active
+                      ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                      : { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
+                    }
+                  >
+                    {v === undefined ? 'Default' : v}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Graphics */}
+          <Row label="Graphics" desc="Fast improves performance; Fabulous adds screen-space effects (1.16+)">
+            <div className="flex gap-1.5">
+              {(['fast', 'fancy', 'fabulous'] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setDgs({ graphics: dgs?.graphics === g ? undefined : g })}
+                  className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+                  style={dgs?.graphics === g
+                    ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                    : { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
+                  }
+                >
+                  {g.charAt(0).toUpperCase() + g.slice(1)}
+                </button>
+              ))}
+            </div>
+          </Row>
+
+          {/* Particles */}
+          <Row label="Particles">
+            <div className="flex gap-1.5">
+              {(['all', 'decreased', 'minimal'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setDgs({ particles: dgs?.particles === p ? undefined : p })}
+                  className="px-3 py-1 rounded-lg text-xs font-medium capitalize transition-all"
+                  style={dgs?.particles === p
+                    ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                    : { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
+                  }
+                >
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+            </div>
+          </Row>
+
+          {/* FOV */}
+          <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>FOV</div>
+              {dgs?.fov !== undefined && (
+                <span className="text-sm font-bold px-2.5 py-0.5 rounded-lg" style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)' }}>
+                  {dgs.fov}°
+                </span>
+              )}
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {([undefined, 60, 70, 80, 90, 100, 110] as (number | undefined)[]).map((v) => {
+                const active = dgs?.fov === v
+                return (
+                  <button
+                    key={v ?? 'default'}
+                    onClick={() => setDgs({ fov: dgs?.fov === v ? undefined : v })}
+                    className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+                    style={active
+                      ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                      : { background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }
+                    }
+                  >
+                    {v === undefined ? 'Default' : `${v}°`}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
       <SectionHeader>Updates</SectionHeader>
 
