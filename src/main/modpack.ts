@@ -5,13 +5,10 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { spawn } from 'child_process'
 import AdmZip from 'adm-zip'
 import { instanceGameDir } from './instances'
 import { getSettings } from './settings'
-
-const execFileAsync = promisify(execFile)
 
 const MR_BASE = 'https://api.modrinth.com/v2'
 const CF_BASE = 'https://api.curseforge.com/v1'
@@ -270,7 +267,8 @@ export async function installNeoforgeProfile(
   gameDir: string,
   neoforgeVersion: string,
   javaExecutable: string,
-  onProgress: (msg: string) => void
+  onProgress: (msg: string) => void,
+  onLog?: (line: string) => void
 ): Promise<string> {
   const versionId = `neoforge-${neoforgeVersion}`
   const versionJson = join(gameDir, 'versions', versionId, `${versionId}.json`)
@@ -281,14 +279,32 @@ export async function installNeoforgeProfile(
   const installerPath = await installNeoforgeLoader(gameDir, neoforgeVersion)
 
   onProgress(`Running NeoForge ${neoforgeVersion} installer (this may take a minute)…`)
-  await execFileAsync(
-    javaExecutable === 'java' ? 'java' : javaExecutable,
-    ['-jar', installerPath, '--installClient', gameDir],
-    { timeout: 5 * 60 * 1000 }
-  )
+
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn(
+      javaExecutable,
+      ['-jar', installerPath, '--installClient', gameDir],
+      { cwd: gameDir, windowsHide: true, timeout: 5 * 60 * 1000 }
+    )
+
+    const emit = (data: Buffer): void => {
+      for (const line of data.toString('utf-8').split(/\r?\n/)) {
+        const t = line.trim()
+        if (t) onLog?.(`[NeoForge installer] ${t}`)
+      }
+    }
+    proc.stdout?.on('data', emit)
+    proc.stderr?.on('data', emit)
+
+    proc.on('error', reject)
+    proc.on('close', (code) => {
+      if (code === 0) resolve()
+      else reject(new Error(`NeoForge installer exited with code ${code}`))
+    })
+  })
 
   if (!existsSync(versionJson)) {
-    throw new Error(`NeoForge installer completed but version profile not found at ${versionJson}`)
+    throw new Error(`NeoForge installer finished but version profile not found at ${versionJson}`)
   }
 
   return versionId
