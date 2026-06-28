@@ -1,4 +1,5 @@
 import { join } from 'path'
+import { spawn } from 'child_process'
 import { BrowserWindow } from 'electron'
 import { Client } from 'minecraft-launcher-core'
 import type { ChildProcess } from 'child_process'
@@ -234,6 +235,25 @@ export async function launchInstance(instanceId: string): Promise<void> {
 
   const client = new Client()
 
+  // Override startMinecraft to suppress the console/terminal window that MCLC's
+  // default detached spawn creates on Windows, while still piping stdout/stderr.
+  ;(client as any).startMinecraft = function(launchArguments: string[]): ChildProcess {
+    const proc = spawn(
+      (this.options.javaPath as string | undefined) ?? 'java',
+      launchArguments,
+      {
+        cwd: (this.options.overrides?.cwd as string | undefined) ?? this.options.root as string,
+        detached: false,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      }
+    )
+    proc.stdout!.on('data', (d: Buffer) => this.emit('data', d.toString('utf-8')))
+    proc.stderr!.on('data', (d: Buffer) => this.emit('data', d.toString('utf-8')))
+    proc.on('close', (code: number) => this.emit('close', code))
+    return proc
+  }
+
   // Capture MCLC's internal errors — without this listener they are silently
   // swallowed and `client.launch()` returns undefined with no explanation.
   let mclcError: Error | undefined
@@ -296,7 +316,12 @@ export async function launchInstance(instanceId: string): Promise<void> {
     running.delete(instanceId)
     if (sessionStart > 0) addPlayTime(instanceId, Date.now() - sessionStart)
     emitLog(`\n[Launcher] Game exited with code ${code}.`)
-    setState(instanceId, 'closed', `Game exited (code ${code}).`)
+    if (!launched) {
+      // Game process exited before producing any output — it crashed on startup.
+      setState(instanceId, 'error', `Game crashed on startup (exit code ${code}). Open the log panel for details.`)
+    } else {
+      setState(instanceId, 'closed', `Game exited (code ${code}).`)
+    }
     setIdle()
   })
 
