@@ -41,14 +41,12 @@ The friends feature requires a small relay server that you self-host. See [`rela
 
 ## In-app Updates
 
-The updater checks a public GitHub Gist manifest. CI patches the Gist automatically on every tagged release. To release a new version:
+The updater checks the GitHub Releases API directly — no token or extra secrets needed. To release a new version:
 
 1. Bump `version` in `package.json`
 2. Commit and push to `main`
 3. `git tag vX.Y.Z && git push origin vX.Y.Z`
-4. CI builds the installer, creates a GitHub Release, and updates the Gist. Users see the update banner within ~5 minutes.
-
-> **CI requirement:** The repo needs a `GIST_TOKEN` secret — a GitHub PAT with the `gist` scope — for CI to patch the Gist on release.
+4. CI builds the installer and creates a GitHub Release with the `.exe` attached. Users see the update banner within ~5 minutes.
 
 ## Acknowledgements
 

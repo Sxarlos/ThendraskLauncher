@@ -56,8 +56,7 @@ jobs:
           files: dist/*.exe
           generate_release_notes: true
 
-      - name: Get release download URL
-        id: asset
+      - name: Verify release asset
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,29 +68,3 @@ jobs:
           $exe = $rel.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
           if (-not $exe) { throw "No .exe asset on release — check that electron-builder produced a dist/*.exe" }
           Write-Host "Release asset: $($exe.browser_download_url)"
-          "download_url=$($exe.browser_download_url)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Update Gist manifest
-        shell: pwsh
-        env:
-          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
-          VERSION: ${{ steps.pkg.outputs.version }}
-          DOWNLOAD_URL: ${{ steps.asset.outputs.download_url }}
-        run: |
-          $body = @{
-            files = @{
-              "latest-version.json" = @{
-                content = (ConvertTo-Json @{
-                  version     = $env:VERSION
-                  notes       = "Ender Client v$($env:VERSION)"
-                  downloadUrl = $env:DOWNLOAD_URL
-                } -Compress)
-              }
-            }
-          } | ConvertTo-Json -Depth 5
-          Invoke-RestMethod `
-            -Method Patch `
-            -Uri "https://api.github.com/gists/09584c4f095954f7d39e93ae6d55b268" `
-            -Headers @{ Authorization = "Bearer $env:GIST_TOKEN"; "Content-Type" = "application/json" } `
-            -Body $body
-          Write-Host "Gist updated to v$($env:VERSION)"
