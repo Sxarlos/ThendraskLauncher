@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import eyeIcon from '../assets/EyeofEnder.png'
+import eyeIcon from '../assets/logo.png'
 
 type Phase = 'appear' | 'float' | 'pop' | 'done'
 

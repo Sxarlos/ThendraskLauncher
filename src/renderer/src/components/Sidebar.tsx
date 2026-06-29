@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Page } from '@shared/types'
 import { useApp } from '../store'
-import eyeIcon from '../assets/EyeofEnder.png'
+import eyeIcon from '../assets/logo.png'
 
 /* ── Icons ─────────────────────────────────────────────────── */
 
