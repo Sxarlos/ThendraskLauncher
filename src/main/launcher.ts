@@ -26,7 +26,8 @@ import {
   installFabricLoader,
   installQuiltLoader,
   installForgeLoader,
-  installNeoforgeProfile
+  installNeoforgeProfile,
+  readNeoforgeJvmArgs
 } from './modpack'
 import { autoInstallShader } from './shaders'
 
@@ -155,6 +156,7 @@ export async function launchInstance(instanceId: string): Promise<void> {
 
   let customVersion: string | undefined
   let forgeInstallerPath: string | undefined
+  let neoforgeJvmArgs: string[] = []
 
   if (resolvedLoaderType === 'fabric') {
     // MCLC has no built-in Fabric support — we install the Fabric profile JSON
@@ -213,6 +215,7 @@ export async function launchInstance(instanceId: string): Promise<void> {
             }
           }
         )
+        neoforgeJvmArgs = readNeoforgeJvmArgs(instanceGameDir(instanceId), customVersion)
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
         console.error('[Launcher] NeoForge install failed:', reason)
@@ -367,9 +370,11 @@ export async function launchInstance(instanceId: string): Promise<void> {
       min: '512M'
     },
     javaPath: resolvedJavaPath === 'java' ? undefined : resolvedJavaPath,
-    ...(instance.jvmArgs?.trim()
-      ? { customArgs: instance.jvmArgs.trim().split(/\s+/).filter(Boolean) }
-      : {})
+    ...(() => {
+      const userArgs = instance.jvmArgs?.trim() ? instance.jvmArgs.trim().split(/\s+/).filter(Boolean) : []
+      const allArgs = [...neoforgeJvmArgs, ...userArgs]
+      return allArgs.length > 0 ? { customArgs: allArgs } : {}
+    })()
   })
 
   if (!proc) {

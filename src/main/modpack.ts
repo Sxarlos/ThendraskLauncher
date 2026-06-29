@@ -323,6 +323,32 @@ export async function installNeoforgeProfile(
   return versionId
 }
 
+/**
+ * Read the NeoForge version profile JVM args and resolve template variables.
+ * MCLC doesn't apply these from custom version profiles, so we pass them as
+ * customArgs ourselves. This sets up the JPMS module path that NeoForge needs.
+ */
+export function readNeoforgeJvmArgs(gameDir: string, versionId: string): string[] {
+  const versionJson = join(gameDir, 'versions', versionId, `${versionId}.json`)
+  if (!existsSync(versionJson)) return []
+  try {
+    const profile = JSON.parse(readFileSync(versionJson, 'utf-8')) as { arguments?: { jvm?: unknown[] } }
+    const raw = profile?.arguments?.jvm ?? []
+    const sep = process.platform === 'win32' ? ';' : ':'
+    const libDir = join(gameDir, 'libraries')
+    return raw
+      .filter((a): a is string => typeof a === 'string')
+      .map((a) =>
+        a
+          .replace(/\$\{library_directory\}/g, libDir)
+          .replace(/\$\{classpath_separator\}/g, sep)
+          .replace(/\$\{version_name\}/g, versionId)
+      )
+  } catch {
+    return []
+  }
+}
+
 // ── servers.dat injection ─────────────────────────────────────────────────────
 // Writes Minecraft's multiplayer server list (NBT format) so the permanent
 // servers appear in-game the first time a player opens the Multiplayer screen.
