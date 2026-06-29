@@ -177,11 +177,12 @@ export async function ensureJava(
   overridePath: string | undefined,
   onProgress: (msg: string, pct?: number) => void
 ): Promise<string> {
-  // 1. User-configured path takes top priority — validate it, don't try to fix it
+  // 1. User-configured path — use it only if it meets the version requirement
   if (overridePath) {
     const info = await probeJava(overridePath)
     if (!info) throw new Error(`Java not found at configured path: ${overridePath}`)
-    return overridePath
+    if (info.major >= requiredMajor) return overridePath
+    // configured Java is too old for this launch; fall through to auto-detect
   }
 
   // 2. Check system-installed Java
