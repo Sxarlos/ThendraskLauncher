@@ -52,7 +52,7 @@ import { importLocalPack, listLoaderVersions, installTechnicPack } from './modpa
 import { applyToAllInstances } from './chatmod'
 import { detectAllJavas } from './java'
 import { setCustomInstancesDir } from './persist'
-import { startRelayRegistration, getOwnPresence } from './presence'
+import { startRelayRegistration, getOwnPresence, setIdleState } from './presence'
 import { initDiscord, destroyDiscord } from './discord'
 import { listFriends, addFriend, removeFriend, pollFriend, generateFriendCode } from './friends'
 import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart } from './updater'
@@ -86,12 +86,13 @@ function createWindow(): BrowserWindow {
   mainWindow.on('ready-to-show', () => mainWindow.show())
 
   mainWindow.on('minimize', () => {
-    // Free main-process heap
     if (typeof global.gc === 'function') global.gc()
+    setIdleState(true)
     mainWindow.webContents.send('app:idle')
   })
 
   mainWindow.on('restore', () => {
+    setIdleState(false)
     mainWindow.webContents.send('app:active')
   })
 

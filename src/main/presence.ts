@@ -5,6 +5,7 @@ import { listAccounts } from './accounts'
 import { getSettings } from './settings'
 
 let registrationTimer: ReturnType<typeof setInterval> | null = null
+let _idle = false
 
 function ownStatus(): object {
   const active = listAccounts().find((a) => a.active)
@@ -13,12 +14,18 @@ function ownStatus(): object {
 
   return {
     username: active?.username ?? 'Unknown',
+    idle: _idle,
     playing: inst?.name ?? null,
     mcVersion: inst?.mcVersion ?? null,
     loader: inst?.loader ?? null,
     since: inst ? Date.now() : null,
     appVersion: app.getVersion(),
   }
+}
+
+export function setIdleState(idle: boolean): void {
+  _idle = idle
+  void pushPresence()
 }
 
 async function pushPresence(): Promise<void> {

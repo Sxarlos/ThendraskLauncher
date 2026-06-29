@@ -24,9 +24,13 @@ function loaderBadge(loader: string): { bg: string; text: string } {
 function OwnCard({ settings }: { settings: AppSettings }): JSX.Element {
   const [status, setStatus] = useState<FriendPresence | null>(null)
   const [copied, setCopied] = useState(false)
+  const [idle, setIdle] = useState(false)
 
   useEffect(() => {
     window.api.presence.own().then(setStatus)
+    const unsubIdle = window.api.window.onIdle(() => setIdle(true))
+    const unsubActive = window.api.window.onActive(() => setIdle(false))
+    return () => { unsubIdle(); unsubActive() }
   }, [])
 
   const friendCode = settings.friendCode
@@ -49,10 +53,16 @@ function OwnCard({ settings }: { settings: AppSettings }): JSX.Element {
       <div className="flex items-center gap-3 mb-3">
         <div
           className="w-2.5 h-2.5 rounded-full shrink-0"
-          style={{ background: 'var(--accent-strong)', boxShadow: '0 0 8px rgba(var(--accent-rgb),0.6)' }}
+          style={
+            idle
+              ? { background: '#f59e0b', boxShadow: '0 0 8px rgba(245,158,11,0.5)' }
+              : { background: 'var(--accent-strong)', boxShadow: '0 0 8px rgba(var(--accent-rgb),0.6)' }
+          }
         />
         <span className="font-semibold text-white">You — {status?.username ?? '…'}</span>
-        <span className="ml-auto text-xs" style={{ color: 'var(--accent)' }}>Online</span>
+        <span className="ml-auto text-xs" style={{ color: idle ? '#f59e0b' : 'var(--accent)' }}>
+          {idle ? 'Idle' : 'Online'}
+        </span>
       </div>
 
       {status?.playing ? (
@@ -141,22 +151,26 @@ function FriendCard({
   }, [poll])
 
   const online = presence?.online ?? false
+  const idle = online && !!presence?.idle
 
   return (
     <div
       className="rounded-2xl p-4 transition-all"
       style={{
         background: 'var(--surface)',
-        border: `1px solid ${online ? 'rgba(var(--accent-rgb),0.15)' : 'var(--border-soft)'}`,
+        border: `1px solid ${online ? (idle ? 'rgba(245,158,11,0.15)' : 'rgba(var(--accent-rgb),0.15)') : 'var(--border-soft)'}`,
       }}
     >
       <div className="flex items-center gap-3">
         <div
           className="w-2.5 h-2.5 rounded-full shrink-0 transition-colors"
-          style={{
-            background: online ? 'var(--accent-strong)' : 'var(--text-dim)',
-            boxShadow: online ? '0 0 8px rgba(var(--accent-rgb),0.5)' : 'none',
-          }}
+          style={
+            online
+              ? idle
+                ? { background: '#f59e0b', boxShadow: '0 0 8px rgba(245,158,11,0.4)' }
+                : { background: 'var(--accent-strong)', boxShadow: '0 0 8px rgba(var(--accent-rgb),0.5)' }
+              : { background: 'var(--text-dim)' }
+          }
         />
 
         <div className="flex-1 min-w-0">
@@ -175,7 +189,9 @@ function FriendCard({
           ) : presence === null ? (
             <span className="text-xs text-muted">Checking…</span>
           ) : online ? (
-            <span className="text-xs font-medium" style={{ color: 'var(--accent)' }}>Online</span>
+            <span className="text-xs font-medium" style={{ color: idle ? '#f59e0b' : 'var(--accent)' }}>
+              {idle ? 'Idle' : 'Online'}
+            </span>
           ) : (
             <span className="text-xs text-muted">
               Offline{presence.lastSeen ? ` · ${timeSince(presence.lastSeen)}` : ''}
@@ -229,7 +245,7 @@ function FriendCard({
 
       {online && !presence?.playing && (
         <div className="mt-3 pt-3 text-xs text-muted" style={{ borderTop: '1px solid var(--border-soft)' }}>
-          In the launcher
+          {idle ? 'Idle — in launcher' : 'In the launcher'}
         </div>
       )}
     </div>

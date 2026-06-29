@@ -127,6 +127,7 @@ export interface Friend {
 
 export interface FriendPresence {
   online: boolean
+  idle?: boolean
   username?: string
   playing?: string | null
   mcVersion?: string | null
