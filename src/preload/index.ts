@@ -154,6 +154,9 @@ const api = {
     ping: (host: string, port?: number): Promise<ServerStatus> =>
       ipcRenderer.invoke('servers:ping', host, port)
   },
+  shell: {
+    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url)
+  },
   update: {
     check: (): Promise<UpdateInfo | null> => ipcRenderer.invoke('update:check'),
     onAvailable: (cb: (info: UpdateInfo) => void): (() => void) => {

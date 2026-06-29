@@ -133,6 +133,7 @@ async function fetchAndStoreScreenshots(
 
 function registerIpcHandlers(): void {
   handle('app:version', () => app.getVersion())
+  handle('shell:openExternal', (url: string) => shell.openExternal(url))
 
   // Accounts
   handle('accounts:list', () => listAccounts())
