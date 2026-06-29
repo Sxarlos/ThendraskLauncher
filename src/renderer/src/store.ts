@@ -34,6 +34,7 @@ interface AppState {
   logs: Record<string, string[]>
   addLog: (instanceId: string, line: string) => void
   clearLogs: (instanceId: string) => void
+  clearAllLogs: () => void
 
   updateInfo: UpdateInfo | null
   setUpdateInfo: (info: UpdateInfo | null) => void
@@ -95,6 +96,7 @@ export const useApp = create<AppState>((set) => ({
     }),
   clearLogs: (instanceId) =>
     set((s) => ({ logs: { ...s.logs, [instanceId]: [] } })),
+  clearAllLogs: () => set({ logs: {} }),
 
   updateInfo: null,
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
