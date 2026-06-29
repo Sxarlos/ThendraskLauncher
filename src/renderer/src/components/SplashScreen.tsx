@@ -141,9 +141,8 @@ export default function SplashScreen({ appReady }: Props): JSX.Element | null {
             width={112}
             height={112}
             style={{
-              imageRendering: 'pixelated',
               display: 'block',
-              filter: 'drop-shadow(0 0 14px rgba(var(--accent-rgb),0.7)) drop-shadow(0 0 32px rgba(0,180,80,0.4))',
+              filter: 'drop-shadow(0 0 10px rgba(var(--accent-rgb),0.35))',
             }}
             alt=""
           />

@@ -148,7 +148,7 @@ export default function Sidebar(): JSX.Element {
             src={eyeIcon}
             width={28}
             height={28}
-            style={{ imageRendering: 'pixelated', display: 'block' }}
+            style={{ display: 'block' }}
             alt="Ender Client"
           />
         </div>
