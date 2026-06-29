@@ -38,6 +38,7 @@ export default function App(): JSX.Element {
   const loadTheme = useApp((s) => s.loadTheme)
   const setUpdateInfo = useApp((s) => s.setUpdateInfo)
   const setUpdateDownload = useApp((s) => s.setUpdateDownload)
+  const clearAllLogs = useApp((s) => s.clearAllLogs)
   const Current = PAGES[page]
 
   const [appReady, setAppReady] = useState(false)
@@ -64,6 +65,17 @@ export default function App(): JSX.Element {
 
     return () => { unsubProgress(); unsubLog(); unsubUpdate(); unsubDownload() }
   }, [loadTheme, refreshAccounts, refreshInstances, setProgress, addLog, clearLogs, setUpdateInfo])
+
+  useEffect(() => {
+    const unsubIdle = window.api.window.onIdle(() => {
+      clearAllLogs()
+      // Free renderer V8 heap if GC was exposed via --expose-gc
+      if (typeof (window as { gc?: () => void }).gc === 'function') {
+        ;(window as { gc?: () => void }).gc!()
+      }
+    })
+    return () => { unsubIdle() }
+  }, [clearAllLogs])
 
   return (
     <div className="h-screen w-screen flex bg-bg" style={{ color: 'var(--text)' }}>

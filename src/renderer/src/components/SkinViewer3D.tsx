@@ -67,6 +67,28 @@ export default function SkinViewer3D({ uuid, capeUrl, width = 240, height = 380 
     }
   }, [capeUrl])
 
+  /* Pause WebGL animation loop when the window is minimised */
+  useEffect(() => {
+    const pause = (): void => {
+      const v = viewerRef.current
+      if (!v) return
+      v.animation = null
+      v.autoRotate = false
+    }
+    const resume = (): void => {
+      const v = viewerRef.current
+      if (!v) return
+      const anim = new WalkingAnimation()
+      anim.speed = 0.45
+      v.animation = anim
+      v.autoRotate = true
+      v.autoRotateSpeed = 0.3
+    }
+    const unsubIdle = window.api.window.onIdle(pause)
+    const unsubActive = window.api.window.onActive(resume)
+    return () => { unsubIdle(); unsubActive() }
+  }, [])
+
   return (
     <canvas
       ref={canvasRef}

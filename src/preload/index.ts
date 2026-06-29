@@ -157,6 +157,18 @@ const api = {
   shell: {
     openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:openExternal', url)
   },
+  window: {
+    onIdle: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('app:idle', listener)
+      return () => ipcRenderer.removeListener('app:idle', listener)
+    },
+    onActive: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('app:active', listener)
+      return () => ipcRenderer.removeListener('app:active', listener)
+    }
+  },
   update: {
     check: (): Promise<UpdateInfo | null> => ipcRenderer.invoke('update:check'),
     onAvailable: (cb: (info: UpdateInfo) => void): (() => void) => {

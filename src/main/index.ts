@@ -1,3 +1,6 @@
+// Allow explicit GC calls (global.gc) used in idle mode
+app.commandLine.appendSwitch('js-flags', '--expose-gc')
+
 import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog } from 'electron'
 import { join, basename } from 'path'
 import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'fs'
@@ -81,6 +84,16 @@ function createWindow(): BrowserWindow {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow.show())
+
+  mainWindow.on('minimize', () => {
+    // Free main-process heap
+    if (typeof global.gc === 'function') global.gc()
+    mainWindow.webContents.send('app:idle')
+  })
+
+  mainWindow.on('restore', () => {
+    mainWindow.webContents.send('app:active')
+  })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
