@@ -104,6 +104,24 @@ export function requiredJavaMajor(mcVersion: string): number {
   return 8
 }
 
+/**
+ * Inspects the bootstraplauncher library installed by NeoForge and returns
+ * the Java major version required to run it. Returns null if not installed yet.
+ * bootstraplauncher 2.x requires Java 21; 1.x requires Java 17.
+ */
+export function detectNeoforgeJavaMajor(gameDir: string): number | null {
+  const libBase = join(gameDir, 'libraries', 'cpw', 'mods', 'bootstraplauncher')
+  if (!existsSync(libBase)) return null
+  try {
+    for (const entry of readdirSync(libBase, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      const majorVer = parseInt(entry.name.split('.')[0] ?? '1', 10)
+      if (majorVer >= 2) return 21
+    }
+  } catch { /* non-fatal */ }
+  return 17
+}
+
 /** Find java(.exe) inside a directory that may contain a single top-level JRE folder. */
 function findJavaExeInDir(dir: string): string | undefined {
   if (!existsSync(dir)) return undefined

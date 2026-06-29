@@ -7,7 +7,7 @@ import type { LaunchProgress, LaunchState } from '@shared/types'
 import { getActiveMclcUser } from './accounts'
 import { getInstance, instanceGameDir, markPlayed, addPlayTime, updateInstance } from './instances'
 import { getSettings } from './settings'
-import { ensureJava, requiredJavaMajor } from './java'
+import { ensureJava, requiredJavaMajor, detectNeoforgeJavaMajor } from './java'
 import { ensureChatMod } from './chatmod'
 import { writeDefaultOptions } from './gameoptions'
 import { getVersions } from './mojang'
@@ -138,7 +138,7 @@ export async function launchInstance(instanceId: string): Promise<void> {
 
   // ── Java: auto-detect or auto-download the correct version ─────────────────
   // Must happen before loader setup — NeoForge needs Java to run its installer.
-  const requiredMajor = requiredJavaMajor(instance.mcVersion)
+  let requiredMajor = requiredJavaMajor(instance.mcVersion)
   let resolvedJavaPath: string
   try {
     resolvedJavaPath = await ensureJava(
@@ -216,6 +216,24 @@ export async function launchInstance(instanceId: string): Promise<void> {
           }
         )
         neoforgeJvmArgs = readNeoforgeJvmArgs(instanceGameDir(instanceId), customVersion)
+
+        // bootstraplauncher 2.x requires Java 21 even on MC versions < 1.21
+        const neoJavaMajor = detectNeoforgeJavaMajor(instanceGameDir(instanceId))
+        if (neoJavaMajor !== null && neoJavaMajor > requiredMajor) {
+          setState(instanceId, 'preparing', `NeoForge requires Java ${neoJavaMajor} — checking…`)
+          try {
+            resolvedJavaPath = await ensureJava(
+              neoJavaMajor,
+              settings.javaPath || undefined,
+              (msg, pct) => setState(instanceId, 'preparing', msg, pct)
+            )
+            requiredMajor = neoJavaMajor
+          } catch (javaErr) {
+            const msg = (javaErr as Error).message
+            setState(instanceId, 'error', msg)
+            throw new Error(msg)
+          }
+        }
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
         console.error('[Launcher] NeoForge install failed:', reason)

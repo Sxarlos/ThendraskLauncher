@@ -1,7 +1,7 @@
 {
   "name": "ender-client",
   "productName": "Ender Client",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "description": "Ender Client",
   "main": "./out/main/index.js",
   "author": "",
