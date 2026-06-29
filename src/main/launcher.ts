@@ -216,24 +216,6 @@ export async function launchInstance(instanceId: string): Promise<void> {
           }
         )
         neoforgeJvmArgs = readNeoforgeJvmArgs(instanceGameDir(instanceId), customVersion)
-
-        // bootstraplauncher 2.x requires Java 21 even on MC versions < 1.21
-        const neoJavaMajor = detectNeoforgeJavaMajor(instanceGameDir(instanceId))
-        if (neoJavaMajor !== null && neoJavaMajor > requiredMajor) {
-          setState(instanceId, 'preparing', `NeoForge requires Java ${neoJavaMajor} — checking…`)
-          try {
-            resolvedJavaPath = await ensureJava(
-              neoJavaMajor,
-              settings.javaPath || undefined,
-              (msg, pct) => setState(instanceId, 'preparing', msg, pct)
-            )
-            requiredMajor = neoJavaMajor
-          } catch (javaErr) {
-            const msg = (javaErr as Error).message
-            setState(instanceId, 'error', msg)
-            throw new Error(msg)
-          }
-        }
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
         console.error('[Launcher] NeoForge install failed:', reason)
@@ -250,6 +232,27 @@ export async function launchInstance(instanceId: string): Promise<void> {
   }
 
   // ── Pre-launch helpers ──────────────────────────────────────────────────────
+
+  // bootstraplauncher 2.x (shipped by NeoForge) requires Java 21 regardless of
+  // MC version. Check on every launch so already-installed instances are covered.
+  if (resolvedLoaderType === 'neoforge') {
+    const neoJavaMajor = detectNeoforgeJavaMajor(instanceGameDir(instanceId))
+    if (neoJavaMajor !== null && neoJavaMajor > requiredMajor) {
+      setState(instanceId, 'preparing', `NeoForge requires Java ${neoJavaMajor} — checking…`)
+      try {
+        resolvedJavaPath = await ensureJava(
+          neoJavaMajor,
+          settings.javaPath || undefined,
+          (msg, pct) => setState(instanceId, 'preparing', msg, pct)
+        )
+        requiredMajor = neoJavaMajor
+      } catch (javaErr) {
+        const msg = (javaErr as Error).message
+        setState(instanceId, 'error', msg)
+        throw new Error(msg)
+      }
+    }
+  }
 
   // Inject No Chat Reports if the setting is on
   if (settings.noChatRestrictions) {
