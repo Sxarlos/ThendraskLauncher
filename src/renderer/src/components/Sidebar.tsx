@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import type { Page } from '@shared/types'
 import { useApp } from '../store'
 import eyeIcon from '../assets/logo.png'
@@ -218,7 +218,7 @@ export default function Sidebar(): JSX.Element {
                 )}
               </span>
 
-              {/* Label — fades out when collapsing */}
+              {/* Label - fades out when collapsing */}
               <span
                 className="font-medium whitespace-nowrap overflow-hidden"
                 style={{

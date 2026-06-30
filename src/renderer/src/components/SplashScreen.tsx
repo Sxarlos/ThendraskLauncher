@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import eyeIcon from '../assets/logo.png'
 
 type Phase = 'appear' | 'float' | 'pop' | 'done'
@@ -110,7 +110,7 @@ export default function SplashScreen({ appReady }: Props): JSX.Element | null {
         ))}
       </div>
 
-      {/* Eye container — fixed size so particles have a stable origin */}
+      {/* Eye container - fixed size so particles have a stable origin */}
       <div className="relative flex items-center justify-center" style={{ width: 220, height: 220 }}>
 
         {/* Pulsing glow ring behind the eye */}
@@ -170,7 +170,7 @@ export default function SplashScreen({ appReady }: Props): JSX.Element | null {
           </>
         )}
 
-        {/* Burst particles — rendered from the centre of the container */}
+        {/* Burst particles - rendered from the centre of the container */}
         {isPopping && PARTICLES.map((p, i) => (
           <div
             key={i}
@@ -193,7 +193,7 @@ export default function SplashScreen({ appReady }: Props): JSX.Element | null {
         ))}
       </div>
 
-      {/* Title — visible only during float */}
+      {/* Title - visible only during float */}
       <div
         style={{
           marginTop: 24,

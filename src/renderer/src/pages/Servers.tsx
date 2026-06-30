@@ -11,7 +11,7 @@ function pingColor(ms?: number): string {
 }
 
 function pingLabel(ms?: number): string {
-  if (ms === undefined) return '—'
+  if (ms === undefined) return '-'
   return `${ms}ms`
 }
 
