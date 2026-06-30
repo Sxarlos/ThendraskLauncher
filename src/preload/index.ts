@@ -57,7 +57,8 @@ const api = {
       ipcRenderer.invoke('instances:fetchScreenshots', id)
   },
   launch: {
-    start: (instanceId: string): Promise<void> => ipcRenderer.invoke('launch:start', instanceId),
+    start: (instanceId: string, serverAddress?: string): Promise<void> =>
+      ipcRenderer.invoke('launch:start', instanceId, serverAddress),
     onProgress: (cb: (p: LaunchProgress) => void): (() => void) => {
       const listener = (_e: unknown, p: LaunchProgress): void => cb(p)
       ipcRenderer.on('launch:progress', listener)
@@ -132,6 +133,8 @@ const api = {
       ipcRenderer.invoke('modpack:importFile', filePath)
   },
   instance: {
+    savedServers: (instanceId: string): Promise<{ name: string; ip: string }[]> =>
+      ipcRenderer.invoke('instance:savedServers', instanceId),
     openDir: (instanceId: string): Promise<void> =>
       ipcRenderer.invoke('instance:openDir', instanceId),
     addMod: (instanceId: string, sourcePath: string): Promise<string> =>

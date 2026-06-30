@@ -49,6 +49,7 @@ import {
   fetchFtbChangelog
 } from './browse'
 import { importLocalPack, listLoaderVersions, installTechnicPack } from './modpack'
+import { readSavedServers } from './nbtReader'
 import { applyToAllInstances } from './chatmod'
 import { detectAllJavas } from './java'
 import { setCustomInstancesDir } from './persist'
@@ -191,7 +192,8 @@ function registerIpcHandlers(): void {
   })
 
   // Launch
-  handle('launch:start', (instanceId: string) => launchInstance(instanceId))
+  handle('launch:start', (instanceId: string, serverAddress?: string) => launchInstance(instanceId, serverAddress))
+  handle('instance:savedServers', (instanceId: string) => readSavedServers(instanceGameDir(instanceId)))
 
   // Mojang versions
   handle('mojang:versions', () => getVersions())

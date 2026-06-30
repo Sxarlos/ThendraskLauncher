@@ -52,11 +52,17 @@ export function runningInstanceIds(): string[] {
   return [...running.keys()]
 }
 
+function quickPlayType(mcVersion: string): 'multiplayer' | 'legacy' {
+  const [, minor = '0'] = mcVersion.split('.')
+  return parseInt(minor, 10) >= 20 ? 'multiplayer' : 'legacy'
+}
+
 /**
  * Download (if needed) and launch an instance with the active account.
+ * Pass serverAddress (e.g. "play.example.com:25565") to auto-connect on launch.
  * Progress and lifecycle are streamed to the renderer via 'launch:progress'.
  */
-export async function launchInstance(instanceId: string): Promise<void> {
+export async function launchInstance(instanceId: string, serverAddress?: string): Promise<void> {
   if (running.has(instanceId)) throw new Error('This instance is already running.')
 
   const instance = getInstance(instanceId)
@@ -391,6 +397,7 @@ export async function launchInstance(instanceId: string): Promise<void> {
       min: '512M'
     },
     javaPath: resolvedJavaPath === 'java' ? undefined : resolvedJavaPath,
+    ...(serverAddress ? { quickPlay: { type: quickPlayType(instance.mcVersion), identifier: serverAddress } } : {}),
     ...(() => {
       const userArgs = instance.jvmArgs?.trim() ? instance.jvmArgs.trim().split(/\s+/).filter(Boolean) : []
       const allArgs = [...neoforgeJvmArgs, ...userArgs]
