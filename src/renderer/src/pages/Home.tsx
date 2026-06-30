@@ -248,6 +248,8 @@ export default function Home(): JSX.Element {
   const [updateDismissed, setUpdateDismissed] = useState(false)
   const [dismissedNews, setDismissedNews] = useState<Set<string>>(getDismissed)
   const [appVersion, setAppVersion] = useState(() => localStorage.getItem(VERSION_KEY) ?? '')
+  const [savedServers, setSavedServers] = useState<{ name: string; ip: string }[]>([])
+  const [serverPickerOpen, setServerPickerOpen] = useState(false)
 
   const dismissNews = (id: string): void => {
     setDismissedNews((prev) => {
@@ -303,6 +305,15 @@ export default function Home(): JSX.Element {
       .catch(() => { /* silent — just won't have screenshots */ })
   }, [featured?.id])
 
+  useEffect(() => {
+    setSavedServers([])
+    setServerPickerOpen(false)
+    if (!featured) return
+    window.api.instance.savedServers(featured.id)
+      .then(setSavedServers)
+      .catch(() => {})
+  }, [featured?.id])
+
   const signedIn = !!activeAccount(accounts)
   const prog     = featured ? progress[featured.id] : undefined
   const busy     = !!prog && ['preparing', 'downloading', 'launching'].includes(prog.state)
@@ -310,11 +321,12 @@ export default function Home(): JSX.Element {
   const hasBg    = !!featured?.iconUrl
   const screenshots = featured?.screenshotUrls ?? []
 
-  const play = async (): Promise<void> => {
+  const play = async (serverAddress?: string): Promise<void> => {
     if (!featured) return
     setError(null)
+    setServerPickerOpen(false)
     try {
-      await window.api.launch.start(featured.id)
+      await window.api.launch.start(featured.id, serverAddress)
     } catch (e) {
       setError(ipcError(e))
     }
@@ -559,9 +571,70 @@ export default function Home(): JSX.Element {
               </div>
             </div>
 
+            {/* Quick Connect button — only shown when servers.dat has entries */}
+            {savedServers.length > 0 && !running && (
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setServerPickerOpen((v) => !v)}
+                  disabled={!signedIn || busy}
+                  className="flex items-center gap-1.5 px-3 py-3 rounded-xl font-semibold text-[13px] transition-all duration-200 disabled:opacity-50"
+                  style={{
+                    background: 'rgba(var(--overlay-rgb),0.12)',
+                    color: 'rgba(var(--overlay-rgb),0.75)',
+                    border: '1px solid rgba(var(--overlay-rgb),0.15)',
+                  }}
+                  title="Quick Connect — join a server directly on launch"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <path d="M8 21h8M12 17v4"/>
+                  </svg>
+                  Connect
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2 4l4 4 4-4"/>
+                  </svg>
+                </button>
+
+                {serverPickerOpen && (
+                  <>
+                    {/* Invisible backdrop to close picker on outside click */}
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setServerPickerOpen(false)}
+                    />
+                  <div
+                    className="absolute bottom-full mb-2 right-0 rounded-xl overflow-hidden z-50 min-w-[200px]"
+                    style={{
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border)',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                    }}
+                  >
+                    <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.15em]" style={{ color: 'var(--text-faint)', borderBottom: '1px solid var(--border-soft)' }}>
+                      Saved Servers
+                    </div>
+                    {savedServers.map((s) => (
+                      <button
+                        key={s.ip}
+                        onClick={() => play(s.ip)}
+                        className="w-full text-left px-3 py-2.5 transition-colors"
+                        style={{ color: 'var(--text-bright)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-3)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <div className="text-[13px] font-medium">{s.name}</div>
+                        <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-faint)', fontFamily: 'monospace' }}>{s.ip}</div>
+                      </button>
+                    ))}
+                  </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Play button */}
             <button
-              onClick={play}
+              onClick={() => play()}
               disabled={!signedIn || busy}
               className="shrink-0 px-7 py-3 rounded-xl font-bold text-[15px] transition-all duration-200 disabled:opacity-50"
               style={
