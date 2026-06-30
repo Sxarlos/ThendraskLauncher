@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import type { Account } from '@shared/types'
 import { useApp } from '../store'
 
@@ -50,7 +50,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
       <div>
         <h1 className="text-2xl font-black text-white mb-2">Welcome to Ender Client</h1>
         <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)', maxWidth: 340 }}>
-          Let's get you set up in a couple of quick steps — signing in and optionally connecting CurseForge.
+          Let's get you set up in a couple of quick steps - signing in and optionally connecting CurseForge.
         </p>
       </div>
 
@@ -213,7 +213,7 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
       await window.api.settings.set({ curseforgeApiKey: trimmed })
       onNext()
     } catch {
-      setError('Failed to save key — try again')
+      setError('Failed to save key - try again')
     } finally {
       setBusy(false)
     }
@@ -232,7 +232,7 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
       setTestState('fail')
       const msg = e instanceof Error ? e.message : String(e)
       if (msg.includes('403') || msg.includes('401')) {
-        setError('Key rejected by CurseForge — make sure you copied the full key from the API Keys section of the console.')
+        setError('Key rejected by CurseForge - make sure you copied the full key from the API Keys section of the console.')
       } else {
         setError(`Test failed: ${msg}`)
       }
@@ -246,7 +246,7 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
       <div className="text-center">
         <h2 className="text-xl font-black text-white mb-1.5">CurseForge Access</h2>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          Optional — required to browse &amp; install CurseForge modpacks.
+          Optional - required to browse &amp; install CurseForge modpacks.
         </p>
       </div>
 
@@ -260,7 +260,7 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
           ['1', 'Open the CurseForge console (button below)'],
           ['2', 'Sign in or create a free account'],
           ['3', 'Click "API Keys" in the left sidebar'],
-          ['4', 'Copy the key — it starts with $2a$10$'],
+          ['4', 'Copy the key - it starts with $2a$10$'],
         ] as [string, string][]).map(([n, text]) => (
           <div key={n} className="flex items-start gap-3">
             <span
@@ -381,7 +381,7 @@ function FriendsStep({ onNext }: { onNext: () => void }): JSX.Element {
       <div className="text-center">
         <h2 className="text-xl font-black text-white mb-1.5">Friends</h2>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          See when your mates are online and what they're playing — right inside the launcher.
+          See when your mates are online and what they're playing - right inside the launcher.
         </p>
       </div>
 
@@ -391,9 +391,9 @@ function FriendsStep({ onNext }: { onNext: () => void }): JSX.Element {
         style={{ background: 'var(--surface-2)', border: '1px solid var(--border-soft)' }}
       >
         {([
-          ['👥', 'Add friends by code', 'No IP addresses — just share your unique friend code'],
+          ['👥', 'Add friends by code', 'No IP addresses - just share your unique friend code'],
           ['🟢', 'Live status', 'See who\'s online, what modpack they\'re playing, and for how long'],
-          ['🌐', 'Works anywhere', 'Friends on different networks, different countries — it all works'],
+          ['🌐', 'Works anywhere', 'Friends on different networks, different countries - it all works'],
         ] as [string, string, string][]).map(([icon, title, desc]) => (
           <div key={title} className="flex items-start gap-3">
             <span className="text-lg shrink-0">{icon}</span>
@@ -413,7 +413,7 @@ function FriendsStep({ onNext }: { onNext: () => void }): JSX.Element {
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          All set — head to the Friends tab to add your first friend.
+          All set - head to the Friends tab to add your first friend.
         </div>
       )}
 

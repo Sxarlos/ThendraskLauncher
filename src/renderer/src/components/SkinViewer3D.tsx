@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+﻿import { useEffect, useRef } from 'react'
 import { SkinViewer, WalkingAnimation } from 'skinview3d'
 
 interface Props {
@@ -13,7 +13,7 @@ export default function SkinViewer3D({ uuid, capeUrl, width = 240, height = 380 
   const viewerRef  = useRef<SkinViewer | null>(null)
   const mountedRef = useRef(true)
 
-  /* uuid format may be dashes or not — mc-heads accepts both */
+  /* uuid format may be dashes or not - mc-heads accepts both */
   const skinUrl = `https://mc-heads.net/skin/${uuid}`
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export default function SkinViewer3D({ uuid, capeUrl, width = 240, height = 380 
       viewer.dispose()
       viewerRef.current = null
     }
-  // Only recreate when uuid/dimensions change — cape is handled below
+  // Only recreate when uuid/dimensions change - cape is handled below
   }, [uuid, width, height, skinUrl])
 
   /* Update cape without tearing down the whole viewer */

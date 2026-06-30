@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Instance } from '@shared/types'
 import { useApp, activeAccount } from '../store'
 import { ipcError } from '../lib/ipcError'
@@ -7,7 +7,7 @@ import NEWS from '../lib/news'
 
 /* ── Screenshot slideshow background ─────────────────────── */
 
-// Duration of one panDrift cycle in ms — must match the CSS animation-duration.
+// Duration of one panDrift cycle in ms - must match the CSS animation-duration.
 const PAN_MS = 30_000
 
 function HeroSlideshow({ urls }: { urls: string[] }): JSX.Element {
@@ -20,7 +20,7 @@ function HeroSlideshow({ urls }: { urls: string[] }): JSX.Element {
 
   // Negative animation-delay to apply to the outgoing (prev) element so its
   // panDrift resumes at the exact point the current element was at when the
-  // transition fired — eliminating the jump on slide change.
+  // transition fired - eliminating the jump on slide change.
   const prevPanDelayRef = useRef('0s')
 
   const advance = useCallback(() => {
@@ -54,7 +54,7 @@ function HeroSlideshow({ urls }: { urls: string[] }): JSX.Element {
 
   return (
     <>
-      {/* Current slide — rendered first so it sits beneath everything */}
+      {/* Current slide - rendered first so it sits beneath everything */}
       <img
         key={`cur-${current}`}
         src={urls[current]}
@@ -65,7 +65,7 @@ function HeroSlideshow({ urls }: { urls: string[] }): JSX.Element {
         alt=""
         draggable={false}
       />
-      {/* Previous slide — fades out on top; negative pan delay keeps it panning
+      {/* Previous slide - fades out on top; negative pan delay keeps it panning
           from exactly where the current element left off, eliminating any jump. */}
       {prev !== null && (
         <img
@@ -136,7 +136,7 @@ function QuickCard({
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >
-      {/* Coloured atmosphere blur — same trick as Browse cards */}
+      {/* Coloured atmosphere blur - same trick as Browse cards */}
       <div
         className="absolute inset-0 pointer-events-none transition-opacity duration-500"
         style={{
@@ -259,7 +259,7 @@ export default function Home(): JSX.Element {
     })
   }
 
-  // Only show news items for the current version or newer — older items are noise after an upgrade.
+  // Only show news items for the current version or newer - older items are noise after an upgrade.
   const visibleNews = NEWS.filter((n) =>
     !dismissedNews.has(n.id) && (appVersion === '' || semverGte(n.id, appVersion))
   )
@@ -302,7 +302,7 @@ export default function Home(): JSX.Element {
     if (!featured.externalId || featured.source === 'manual') return  // no source to fetch from
     window.api.instances.fetchScreenshots(featured.id)
       .then((urls) => { if (urls?.length) void refreshInstances() })
-      .catch(() => { /* silent — just won't have screenshots */ })
+      .catch(() => { /* silent - just won't have screenshots */ })
   }, [featured?.id])
 
   useEffect(() => {
@@ -361,7 +361,7 @@ export default function Home(): JSX.Element {
               <span style={{ color: 'var(--accent)', fontWeight: 700 }}>v{updateInfo.version}</span>
               <span style={{ color: 'var(--text-bright)' }}> is available</span>
               {updateInfo.notes && (
-                <span style={{ color: 'var(--text-muted)' }}> — {updateInfo.notes}</span>
+                <span style={{ color: 'var(--text-muted)' }}> - {updateInfo.notes}</span>
               )}
             </span>
           </div>
@@ -440,7 +440,7 @@ export default function Home(): JSX.Element {
                 )}
                 <span style={{ color: 'var(--text-bright)' }}>{item.title}</span>
                 {item.body && (
-                  <span style={{ color: 'var(--text-muted)' }}> — {item.body}</span>
+                  <span style={{ color: 'var(--text-muted)' }}> - {item.body}</span>
                 )}
               </span>
             </div>
@@ -461,7 +461,7 @@ export default function Home(): JSX.Element {
       {/* ─── HERO PANEL ──────────────────────────────────────────── */}
       <div className="relative overflow-hidden shrink-0" style={{ height: '56%', minHeight: 280 }}>
 
-        {/* Background — screenshots → blurred icon → night sky */}
+        {/* Background - screenshots → blurred icon → night sky */}
         {screenshots.length > 0 ? (
           <HeroSlideshow urls={screenshots} />
         ) : hasBg ? (
@@ -486,7 +486,7 @@ export default function Home(): JSX.Element {
           />
         )}
 
-        {/* Star field — subtle shimmer in sky */}
+        {/* Star field - subtle shimmer in sky */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -516,7 +516,7 @@ export default function Home(): JSX.Element {
         {featured ? (
           /* Existing instances: bottom-pinned info + play */
           <div className="absolute inset-x-0 bottom-0 px-6 pb-6 flex items-end gap-4" style={{ zIndex: 10 }}>
-            {/* Pack icon — click to open detail panel */}
+            {/* Pack icon - click to open detail panel */}
             <div
               className="shrink-0 rounded-2xl overflow-hidden cursor-pointer transition-transform duration-150 hover:scale-105"
               style={{
@@ -539,7 +539,7 @@ export default function Home(): JSX.Element {
               )}
             </div>
 
-            {/* Name / meta — click to open detail panel */}
+            {/* Name / meta - click to open detail panel */}
             <div
               className="flex-1 min-w-0 pb-1 cursor-pointer"
               onClick={() => openInstance(featured.id)}
@@ -571,7 +571,7 @@ export default function Home(): JSX.Element {
               </div>
             </div>
 
-            {/* Quick Connect button — only shown when servers.dat has entries */}
+            {/* Quick Connect button - only shown when servers.dat has entries */}
             {savedServers.length > 0 && !running && (
               <div className="relative shrink-0">
                 <button
@@ -583,7 +583,7 @@ export default function Home(): JSX.Element {
                     color: 'rgba(var(--overlay-rgb),0.75)',
                     border: '1px solid rgba(var(--overlay-rgb),0.15)',
                   }}
-                  title="Quick Connect — join a server directly on launch"
+                  title="Quick Connect - join a server directly on launch"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="3" width="20" height="14" rx="2"/>
@@ -712,7 +712,7 @@ export default function Home(): JSX.Element {
 
         {instances.length === 0 ? (
           <p className="text-xs" style={{ color: 'var(--surface-3)' }}>
-            No instances yet — browse modpacks or create a vanilla instance.
+            No instances yet - browse modpacks or create a vanilla instance.
           </p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
@@ -737,7 +737,7 @@ export default function Home(): JSX.Element {
           </div>
         )}
 
-        {/* Quick-action cards — same bordered-cube style as Browse modpacks */}
+        {/* Quick-action cards - same bordered-cube style as Browse modpacks */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <QuickCard
             onClick={() => setPage('library')}

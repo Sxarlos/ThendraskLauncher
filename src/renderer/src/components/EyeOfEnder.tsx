@@ -1,6 +1,6 @@
-interface Props {
+﻿interface Props {
   size?: number
-  /** Adds outer glow rings and filter — looks great on dark backgrounds */
+  /** Adds outer glow rings and filter - looks great on dark backgrounds */
   glow?: boolean
 }
 
@@ -51,7 +51,7 @@ export default function EyeOfEnder({ size = 64, glow = false }: Props): JSX.Elem
         </filter>
       </defs>
 
-      {/* Outer ambient aura — only when glow is on */}
+      {/* Outer ambient aura - only when glow is on */}
       {glow && (
         <>
           <ellipse cx="32" cy="32" rx="31" ry="31" fill="#00cc55" opacity="0.07" />
@@ -75,7 +75,7 @@ export default function EyeOfEnder({ size = 64, glow = false }: Props): JSX.Elem
       {/* Vertical cat-eye pupil */}
       <ellipse cx="32" cy="32" rx="4.2" ry="9.5" fill="url(#eoe-pupil)" />
 
-      {/* Primary highlight — upper-left catch-light */}
+      {/* Primary highlight - upper-left catch-light */}
       <ellipse cx="29.2" cy="26.5" rx="2.8" ry="3.8" fill="white" opacity="0.95" />
 
       {/* Smaller secondary sparkle */}

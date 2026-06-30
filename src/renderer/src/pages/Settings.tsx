@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import type { AppSettings, DefaultGameSettings, JavaInstall, ThemeId } from '@shared/types'
 import { useApp } from '../store'
 
@@ -163,7 +163,7 @@ function NoChatRow({
             color: 'var(--danger-soft)',
           }}
         >
-          Failed to apply — check your internet connection and try again.
+          Failed to apply - check your internet connection and try again.
         </div>
       )}
     </div>
@@ -243,7 +243,7 @@ function UpdateCheckRow(): JSX.Element {
           <div className="flex items-center justify-between gap-3 text-xs">
             <span style={{ color: 'var(--text-bright)' }}>
               <span style={{ color: 'var(--accent)', fontWeight: 600 }}>v{updateInfo.version}</span> is available
-              {updateInfo.notes && <span style={{ color: 'var(--text-muted)' }}> — {updateInfo.notes}</span>}
+              {updateInfo.notes && <span style={{ color: 'var(--text-muted)' }}> - {updateInfo.notes}</span>}
             </span>
 
             {updateDownload.state === 'idle' || updateDownload.state === 'error' ? (
@@ -281,13 +281,13 @@ function UpdateCheckRow(): JSX.Element {
 
           {updateDownload.state === 'error' && (
             <p className="mt-1.5 text-xs" style={{ color: 'var(--danger-soft)' }}>
-              Download failed — check your connection and try again.
+              Download failed - check your connection and try again.
             </p>
           )}
 
           {updateDownload.state === 'ready' && (
             <p className="mt-1.5 text-xs" style={{ color: 'var(--accent)' }}>
-              ✓ Downloaded — click Install &amp; Restart to apply the update.
+              ✓ Downloaded - click Install &amp; Restart to apply the update.
             </p>
           )}
         </div>
@@ -317,7 +317,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
         onChange({ javaPath: result.path })
         setDetectMsg(`Detected: Java ${result.version ?? '?'}`)
       } else {
-        setDetectMsg('No Java found — install Java 17+ or set path manually')
+        setDetectMsg('No Java found - install Java 17+ or set path manually')
       }
     } catch {
       setDetectMsg('Detection failed')

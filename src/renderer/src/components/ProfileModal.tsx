@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import type { MinecraftCape, MinecraftProfile } from '@shared/types'
 import SkinViewer3D from './SkinViewer3D'
 
@@ -14,7 +14,7 @@ interface Props {
  * Front face: x=1, y=1, w=10, h=16.
  * Display at 5× scale → 50×80 px container.
  *
- * The texture URL from Mojang is http:// — convert to https:// so our CSP
+ * The texture URL from Mojang is http:// - convert to https:// so our CSP
  * (img-src https:) doesn't silently block it. CSS background-image avoids
  * canvas CORS restrictions entirely.
  */
@@ -61,7 +61,7 @@ function CapeTile({
         minWidth: 72,
       }}
     >
-      {/* Front-face crop via CSS background — no CORS, no canvas taint */}
+      {/* Front-face crop via CSS background - no CORS, no canvas taint */}
       <div
         style={{
           width: 50,
@@ -302,7 +302,7 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
 
         {/* Body */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {/* Left — 3D skin viewer */}
+          {/* Left - 3D skin viewer */}
           <div
             style={{
               width: 260,
@@ -323,7 +323,7 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
             />
           </div>
 
-          {/* Right — cape selector + info */}
+          {/* Right - cape selector + info */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
             {loading && (
               <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>

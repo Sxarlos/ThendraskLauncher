@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useRef, useState } from 'react'
+﻿import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
 import type { BrowseParams, Instance, ModpackResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
 import { activeAccount, useApp } from '../store'
@@ -7,7 +7,7 @@ import { ipcError } from '../lib/ipcError'
 import { formatPlayTime } from '../lib/formatPlayTime'
 
 /* ════════════════════════════════════════════════
-   Error boundary — catches render crashes in the detail panel
+   Error boundary - catches render crashes in the detail panel
 ════════════════════════════════════════════════ */
 
 class PanelErrorBoundary extends Component<
@@ -38,7 +38,7 @@ class PanelErrorBoundary extends Component<
         }}>
           <div style={{ fontSize: 32 }}>⚠️</div>
           <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger)' }}>
-            Panel render error — check DevTools console (F12) for full details
+            Panel render error - check DevTools console (F12) for full details
           </p>
           <p style={{
             fontSize: 12, fontFamily: 'monospace', padding: '8px 14px', borderRadius: 8,
@@ -179,7 +179,7 @@ function InstanceCard({
           style={{ color: progress.state === 'error' ? '#f87171' : 'var(--text-muted)' }}
         >
           <div className="flex justify-between mb-1">
-            <span>{progressLabel(progress.state)}{progress.message ? ` — ${progress.message}` : ''}</span>
+            <span>{progressLabel(progress.state)}{progress.message ? ` - ${progress.message}` : ''}</span>
             {typeof progress.percent === 'number' && <span>{progress.percent}%</span>}
           </div>
           {typeof progress.percent === 'number' && (
@@ -736,7 +736,7 @@ function BrowseModpacks(): JSX.Element {
           </div>
         )}
 
-        {/* Sort + category filters — shown for Modrinth and CurseForge */}
+        {/* Sort + category filters - shown for Modrinth and CurseForge */}
         {(source === 'modrinth' || source === 'curseforge') && (
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex gap-1">
@@ -781,7 +781,7 @@ function BrowseModpacks(): JSX.Element {
           </div>
         )}
 
-        {/* Loader filter pills — hidden for ATLauncher/Technic (no loader data) and FTB Legacy private */}
+        {/* Loader filter pills - hidden for ATLauncher/Technic (no loader data) and FTB Legacy private */}
         {source !== 'atlauncher' && source !== 'technic' && !(source === 'ftb-legacy' && ftbLegacyCat === 'private') && (
           <div className="flex gap-1.5">
             {LOADERS.map((l) => {
@@ -886,7 +886,7 @@ function BrowseModpacks(): JSX.Element {
 }
 
 /* ════════════════════════════════════════════════
-   Instance detail — Mods sub-components
+   Instance detail - Mods sub-components
 ════════════════════════════════════════════════ */
 
 function ModGroup({ label, mods }: { label: string; mods: PackMod[] }): JSX.Element {
@@ -1043,7 +1043,7 @@ function ModsTabContent({
 }
 
 /* ════════════════════════════════════════════════
-   Instance detail — Versions sub-component
+   Instance detail - Versions sub-component
 ════════════════════════════════════════════════ */
 
 function VersionsTabContent({
@@ -1208,7 +1208,7 @@ function VersionsTabContent({
 }
 
 /* ════════════════════════════════════════════════
-   Instance detail — Console tab
+   Instance detail - Console tab
 ════════════════════════════════════════════════ */
 
 function logLineStyle(line: string): string {
@@ -1274,7 +1274,7 @@ function ConsoleTabContent({
 ════════════════════════════════════════════════ */
 
 /* ════════════════════════════════════════════════
-   Instance detail — Overview tab
+   Instance detail - Overview tab
 ════════════════════════════════════════════════ */
 
 function stripMarkdown(text: string): string {
@@ -1461,7 +1461,7 @@ function OverviewTabContent({
 }
 
 /* ════════════════════════════════════════════════
-   Instance detail — Changelog tab
+   Instance detail - Changelog tab
 ════════════════════════════════════════════════ */
 
 function ChangelogTabContent({
@@ -1539,7 +1539,7 @@ function ChangelogTabContent({
               background: isCurrent ? 'rgba(var(--accent-rgb),0.04)' : 'var(--surface)',
             }}
           >
-            {/* Header row — always visible, clickable to expand */}
+            {/* Header row - always visible, clickable to expand */}
             <button
               className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
               onClick={() => hasNotes && toggle(entry.id)}
@@ -1611,7 +1611,7 @@ function ChangelogTabContent({
 }
 
 /* ════════════════════════════════════════════════
-   Instance detail — Settings tab
+   Instance detail - Settings tab
 ════════════════════════════════════════════════ */
 
 function InstanceSettingsTab({
@@ -2155,7 +2155,7 @@ function InstanceDetailPanel({
         className="shrink-0 flex gap-1 px-6 pt-3"
         style={{ borderBottom: '1px solid var(--border-soft)' }}
       >
-        {/* Overview tab — only for modpack instances */}
+        {/* Overview tab - only for modpack instances */}
         {hasModSource && (
           <button
             onClick={() => setDetailTab('overview')}
@@ -2170,7 +2170,7 @@ function InstanceDetailPanel({
           </button>
         )}
 
-        {/* Changelog tab — only for modpack instances */}
+        {/* Changelog tab - only for modpack instances */}
         {hasModSource && (
           <button
             onClick={() => setDetailTab('changelog')}
@@ -2235,7 +2235,7 @@ function InstanceDetailPanel({
           )}
         </button>
 
-        {/* Settings tab — always visible */}
+        {/* Settings tab - always visible */}
         <button
           onClick={() => setDetailTab('settings')}
           className="relative px-4 py-2.5 text-sm font-medium transition-colors duration-150 ml-auto"
@@ -2443,7 +2443,7 @@ export default function Library(): JSX.Element {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Tab bar + action button — hidden while viewing instance detail */}
+      {/* Tab bar + action button - hidden while viewing instance detail */}
       {!isInDetail && (
         <div
           className="shrink-0 flex items-center justify-between px-6 pt-4"
@@ -2513,7 +2513,7 @@ export default function Library(): JSX.Element {
         </div>
       )}
 
-      {/* Tab content — relative+overflow-hidden when detail is open so the panel can use absolute inset-0 */}
+      {/* Tab content - relative+overflow-hidden when detail is open so the panel can use absolute inset-0 */}
       <div
         className="flex-1 min-h-0"
         style={isInDetail ? { position: 'relative', overflow: 'hidden' } : { overflowY: 'auto' }}

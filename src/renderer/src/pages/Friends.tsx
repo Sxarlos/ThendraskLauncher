@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppSettings, Friend, FriendPresence } from '@shared/types'
 import { normalizeFriendCode, formatFriendCode } from '@shared/friendCode'
 
@@ -59,7 +59,7 @@ function OwnCard({ settings }: { settings: AppSettings }): JSX.Element {
               : { background: 'var(--accent-strong)', boxShadow: '0 0 8px rgba(var(--accent-rgb),0.6)' }
           }
         />
-        <span className="font-semibold text-white">You — {status?.username ?? '…'}</span>
+        <span className="font-semibold text-white">You - {status?.username ?? '…'}</span>
         <span className="ml-auto text-xs" style={{ color: idle ? '#f59e0b' : 'var(--accent)' }}>
           {idle ? 'Idle' : 'Online'}
         </span>
@@ -111,7 +111,7 @@ function OwnCard({ settings }: { settings: AppSettings }): JSX.Element {
             {copied ? '✓ Copied' : 'Copy'}
           </button>
         </div>
-        <p className="text-[10px] text-muted mt-1.5">Share this code — friends enter it when they add you</p>
+        <p className="text-[10px] text-muted mt-1.5">Share this code - friends enter it when they add you</p>
       </div>
     </div>
   )
@@ -245,7 +245,7 @@ function FriendCard({
 
       {online && !presence?.playing && (
         <div className="mt-3 pt-3 text-xs text-muted" style={{ borderTop: '1px solid var(--border-soft)' }}>
-          {idle ? 'Idle — in launcher' : 'In the launcher'}
+          {idle ? 'Idle - in launcher' : 'In the launcher'}
         </div>
       )}
     </div>
@@ -289,7 +289,7 @@ function AddModal({ onAdd }: { onAdd: (f: Friend[]) => void; onClose: () => void
     >
       <div className="w-[400px] rounded-2xl p-6 shadow-2xl" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
         <h2 className="font-bold text-base text-white mb-1">Add friend</h2>
-        <p className="text-xs text-muted mb-4">Enter their friend code — they can find it in their Friends tab.</p>
+        <p className="text-xs text-muted mb-4">Enter their friend code - they can find it in their Friends tab.</p>
 
         <label className="block text-xs text-muted mb-1">Display name</label>
         <input
@@ -327,7 +327,7 @@ function AddModal({ onAdd }: { onAdd: (f: Friend[]) => void; onClose: () => void
         />
         {rawCode.length > 0 && (
           <p className="text-xs mt-1.5" style={{ color: codeValid ? 'var(--accent)' : 'var(--danger-soft)' }}>
-            {codeValid ? '✓ Valid code' : '✕ Invalid — should be 10 letters/numbers'}
+            {codeValid ? '✓ Valid code' : '✕ Invalid - should be 10 letters/numbers'}
           </p>
         )}
 
@@ -402,7 +402,7 @@ export default function Friends(): JSX.Element {
       >
         <div>
           <h1 className="font-semibold text-white">Friends</h1>
-          <p className="text-xs text-muted mt-0.5">Share your code — friends add you by code, not IP</p>
+          <p className="text-xs text-muted mt-0.5">Share your code - friends add you by code, not IP</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
@@ -433,7 +433,7 @@ export default function Friends(): JSX.Element {
           <>
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-semibold text-muted uppercase tracking-wide">
-                Friends — {friends.length}
+                Friends - {friends.length}
               </span>
             </div>
             <div className="space-y-3">
