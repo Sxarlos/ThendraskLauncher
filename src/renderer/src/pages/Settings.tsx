@@ -631,6 +631,20 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
           ender-client.xyz
         </button>
       </div>
+
+      <div className="flex items-center gap-3 py-1">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>Report a Bug</div>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Found something wrong? Open an issue on GitHub.</div>
+        </div>
+        <button
+          onClick={() => window.api.shell.openExternal('https://github.com/Sxarlos/EnderClient/issues/new')}
+          className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+          style={{ background: 'rgba(var(--danger-rgb),0.10)', color: 'var(--danger-soft)', border: '1px solid rgba(var(--danger-rgb),0.25)' }}
+        >
+          Open issue
+        </button>
+      </div>
     </div>
   )
 }
