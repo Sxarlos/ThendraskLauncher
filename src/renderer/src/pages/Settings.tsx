@@ -645,6 +645,18 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
           Open issue
         </button>
       </div>
+
+      <div
+        className="mt-4 flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-opacity hover:opacity-80"
+        style={{ background: 'rgba(255,180,0,0.07)', border: '1px solid rgba(255,180,0,0.18)' }}
+        onClick={() => window.api.shell.openExternal('https://buymeacoffee.com/sxarlos')}
+      >
+        <span style={{ fontSize: 18 }}>☕</span>
+        <div className="min-w-0">
+          <div className="text-xs font-semibold" style={{ color: '#f5c842' }}>Enjoying Ender Client?</div>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>If you'd like to support development, buying me a coffee goes a long way.</div>
+        </div>
+      </div>
     </div>
   )
 }
