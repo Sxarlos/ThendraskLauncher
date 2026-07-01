@@ -1,7 +1,7 @@
 {
   "name": "thendrask-launcher",
   "productName": "Thendrask Launcher",
-  "version": "0.3.23",
+  "version": "0.3.24",
   "description": "Thendrask Launcher",
   "main": "./out/main/index.js",
   "author": "",
