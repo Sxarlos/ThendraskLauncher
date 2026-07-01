@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   release:
@@ -37,29 +36,10 @@ jobs:
       - name: Build
         run: npx electron-vite build
 
-      - name: Package (unsigned)
+      - name: Package
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --publish never
-
-      - name: Upload unsigned artifact for signing
-        id: upload-unsigned
-        uses: actions/upload-artifact@v4
-        with:
-          name: unsigned-installer
-          path: dist/*.exe
-
-      - name: Submit to SignPath for signing
-        uses: signpath/github-action-submit-signing-request@v1
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ender-client
-          signing-policy-slug: release-signing
-          artifact-configuration-slug: initial
-          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
-          wait-for-completion: true
-          output-artifact-directory: dist-signed
 
       - name: Read version from package.json
         id: pkg
@@ -73,7 +53,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "Thendrask Launcher ${{ steps.pkg.outputs.version }}"
-          files: dist-signed/*.exe
+          files: dist/*.exe
           generate_release_notes: true
 
       - name: Verify release asset
