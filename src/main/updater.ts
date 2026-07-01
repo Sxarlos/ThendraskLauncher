@@ -36,7 +36,7 @@ async function fetchManifest(): Promise<UpdateInfo | null> {
     const res = await net.fetch(RELEASES_API, {
       headers: {
         'Accept': 'application/vnd.github+json',
-        'User-Agent': 'EnderClient-Updater',
+        'User-Agent': 'EnderLauncher-Updater',
         'Cache-Control': 'no-cache'
       }
     })
@@ -105,7 +105,7 @@ async function gdriveFetch(fetchUrl: string): Promise<Response> {
 }
 
 export async function downloadUpdate(url: string): Promise<string> {
-  const dest = join(tmpdir(), 'EnderClientSetup.exe')
+  const dest = join(tmpdir(), 'EnderLauncherSetup.exe')
   const resolvedUrl = resolveDownloadUrl(url)
 
   let res = await gdriveFetch(resolvedUrl)

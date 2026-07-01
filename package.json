@@ -1,8 +1,8 @@
 {
-  "name": "ender-client",
-  "productName": "Ender Client",
+  "name": "ender-launcher",
+  "productName": "Ender Launcher",
   "version": "0.3.22",
-  "description": "Ender Client",
+  "description": "Ender Launcher",
   "main": "./out/main/index.js",
   "author": "",
   "license": "MIT",
@@ -17,8 +17,8 @@
     "package": "electron-vite build && electron-builder"
   },
   "build": {
-    "appId": "com.enderclient.launcher",
-    "productName": "Ender Client",
+    "appId": "com.enderlauncher.app",
+    "productName": "Ender Launcher",
     "directories": {
       "output": "dist"
     },
@@ -48,7 +48,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ender Client"
+      "shortcutName": "Ender Launcher"
     }
   },
   "dependencies": {

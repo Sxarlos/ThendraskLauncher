@@ -74,7 +74,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0f1115',
-    title: 'Ender Client',
+    title: 'Ender Launcher',
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

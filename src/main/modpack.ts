@@ -12,7 +12,7 @@ import { getSettings } from './settings'
 
 const MR_BASE = 'https://api.modrinth.com/v2'
 const CF_BASE = 'https://api.curseforge.com/v1'
-const UA = 'ender-client/0.1.5 (ender-client)'
+const UA = 'ender-launcher/0.1.5 (ender-launcher)'
 
 // ── Marker file ───────────────────────────────────────────────────────────────
 // Written after a successful install so we don't re-download on every launch.

@@ -27,7 +27,7 @@ async function mrGet(path: string, params: Record<string, string>): Promise<any>
     if (v !== '' && v !== undefined) url.searchParams.set(k, v)
   }
   const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': 'ender-client/0.1.5 (github.com/ender-client)' }
+    headers: { 'User-Agent': 'ender-launcher/0.1.5 (github.com/ender-launcher)' }
   })
   if (!res.ok) throw new Error(`Modrinth ${res.status}: ${res.statusText}`)
   return res.json()
@@ -53,7 +53,7 @@ async function cfGet(path: string, params: Record<string, string | number>): Pro
         'CurseForge key rejected (403). Common causes: ' +
         '(1) wrong key — go to console.curseforge.com → API Keys and copy the full key starting with $2a$10$; ' +
         '(2) new keys can take a few minutes to activate after creation; ' +
-        '(3) go to Settings → API Keys in Ender Client and re-paste the key.'
+        '(3) go to Settings → API Keys in Ender Launcher and re-paste the key.'
       )
     }
     throw new Error(`CurseForge ${res.status}: ${res.statusText}`)
@@ -166,7 +166,7 @@ async function cfPost(path: string, body: unknown): Promise<any> {
 
 async function downloadBuffer(url: string): Promise<Buffer> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'ender-client/0.1.5 (github.com/ender-client)' }
+    headers: { 'User-Agent': 'ender-launcher/0.1.5 (github.com/ender-launcher)' }
   })
   if (!res.ok) throw new Error(`Download failed: ${res.status}`)
   return Buffer.from(await res.arrayBuffer())
@@ -552,7 +552,7 @@ const FTB_LOADER_NAMES = new Set(['forge', 'fabric', 'quilt', 'neoforge'])
 
 async function ftbGet(path: string): Promise<any> {
   const res = await fetch(FTB_BASE + path, {
-    headers: { 'User-Agent': 'ender-client/0.1.5 (github.com/ender-client)' }
+    headers: { 'User-Agent': 'ender-launcher/0.1.5 (github.com/ender-launcher)' }
   })
   if (!res.ok) throw new Error(`FTB ${res.status}: ${res.statusText}`)
   return res.json()

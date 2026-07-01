@@ -210,7 +210,7 @@ function UpdateCheckRow(): JSX.Element {
         <div className="min-w-0">
           <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>Check for Updates</div>
           <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Manually check if a new version of Ender Client is available.
+            Manually check if a new version of Ender Launcher is available.
           </div>
         </div>
         <button
@@ -621,7 +621,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
       <div className="flex items-center gap-3 py-1">
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>Website</div>
-          <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Visit the official Ender Client website.</div>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Visit the official Ender Launcher website.</div>
         </div>
         <button
           onClick={() => window.api.shell.openExternal('https://ender-client.xyz')}
@@ -653,7 +653,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
       >
         <span style={{ fontSize: 18 }}>☕</span>
         <div className="min-w-0">
-          <div className="text-xs font-semibold" style={{ color: '#f5c842' }}>Enjoying Ender Client?</div>
+          <div className="text-xs font-semibold" style={{ color: '#f5c842' }}>Enjoying Ender Launcher?</div>
           <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>If you'd like to support development, buying me a coffee goes a long way.</div>
         </div>
       </div>
