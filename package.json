@@ -1,7 +1,7 @@
 {
   "name": "ender-launcher",
   "productName": "Ender Launcher",
-  "version": "0.3.22",
+  "version": "0.3.23",
   "description": "Ender Launcher",
   "main": "./out/main/index.js",
   "author": "",
