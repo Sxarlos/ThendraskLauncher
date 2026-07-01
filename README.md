@@ -1,6 +1,6 @@
 # Ender Client
 
-**[ender-client.xyz](https://ender-client.xyz)** · [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/zzWF8nBhYD)
+**[ender-client.xyz](https://ender-client.xyz)** · [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/zzWF8nBhYD) · [![YouTube](https://img.shields.io/badge/YouTube-Subscribe-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/@EnderClientApp)
 
 A custom Minecraft launcher built with Electron and React. It is **just an interface** — it downloads modpacks and spawns the official game; it does not modify Minecraft itself.
 
