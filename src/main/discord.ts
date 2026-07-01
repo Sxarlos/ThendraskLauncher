@@ -61,7 +61,7 @@ export function setPlaying(instanceName: string, loader?: string, mcVersion?: st
     state: parts.length > 0 ? parts.join(' · ') : 'Playing Minecraft',
     startTimestamp: new Date(),
     largeImageKey: 'logo',
-    largeImageText: 'Ender Launcher',
+    largeImageText: 'Thendrask Launcher',
     instance: false,
     buttons: [{ label: 'ender-client.xyz', url: 'https://ender-client.xyz' }],
   }).catch(() => { /* Discord may have disconnected */ })
@@ -74,7 +74,7 @@ export function setIdle(): void {
     details: 'In Launcher',
     state: 'Browsing instances',
     largeImageKey: 'logo',
-    largeImageText: 'Ender Launcher',
+    largeImageText: 'Thendrask Launcher',
     instance: false,
     buttons: [{ label: 'ender-client.xyz', url: 'https://ender-client.xyz' }],
   }).catch(() => { /* Discord may have disconnected */ })

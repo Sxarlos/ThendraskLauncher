@@ -246,7 +246,7 @@ function ServerCard({ server, status, onRemove, onPing }: CardProps): JSX.Elemen
           </button>
           {server.permanent ? (
             <div
-              title="This server is managed by Ender Launcher and cannot be removed"
+              title="This server is managed by Thendrask Launcher and cannot be removed"
               style={{ padding: '3px 7px', borderRadius: 5, border: '1px solid var(--border-soft)', color: 'var(--text-dim)', fontSize: 11, display: 'flex', alignItems: 'center' }}
             >
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
