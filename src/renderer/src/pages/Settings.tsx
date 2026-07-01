@@ -1,11 +1,11 @@
 ﻿import { useEffect, useState } from 'react'
 import type { AppSettings, DefaultGameSettings, JavaInstall, ThemeId } from '@shared/types'
-import { useApp } from '../store'
+import { normalizeThemeId, useApp } from '../store'
 
 type SettingsTab = 'general' | 'appearance' | 'apikeys'
 
 const THEMES: { id: ThemeId; name: string; desc: string; swatch: string; base: string }[] = [
-  { id: 'ender',    name: 'Ender',    desc: 'Classic dark green',  swatch: '#22c55e', base: '#111318' },
+  { id: 'thendrask', name: 'Thendrask', desc: 'Classic dark green',  swatch: '#22c55e', base: '#111318' },
   { id: 'amethyst', name: 'Amethyst', desc: 'Dark purple',         swatch: '#a855f7', base: '#111318' },
   { id: 'ocean',    name: 'Ocean',    desc: 'Cool sky blue',       swatch: '#0ea5e9', base: '#111318' },
   { id: 'crimson',  name: 'Crimson',  desc: 'Deep red',            swatch: '#f43f5e', base: '#111318' },
@@ -210,7 +210,7 @@ function UpdateCheckRow(): JSX.Element {
         <div className="min-w-0">
           <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>Check for Updates</div>
           <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Manually check if a new version of Ender Launcher is available.
+            Manually check if a new version of Thendrask Launcher is available.
           </div>
         </div>
         <button
@@ -621,7 +621,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
       <div className="flex items-center gap-3 py-1">
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>Website</div>
-          <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Visit the official Ender Launcher website.</div>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Visit the official Thendrask Launcher website.</div>
         </div>
         <button
           onClick={() => window.api.shell.openExternal('https://ender-client.xyz')}
@@ -638,7 +638,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
           <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Found something wrong? Open an issue on GitHub.</div>
         </div>
         <button
-          onClick={() => window.api.shell.openExternal('https://github.com/Sxarlos/EnderClient/issues/new')}
+          onClick={() => window.api.shell.openExternal('https://github.com/Sxarlos/ThendraskLauncher/issues/new')}
           className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
           style={{ background: 'rgba(var(--danger-rgb),0.10)', color: 'var(--danger-soft)', border: '1px solid rgba(var(--danger-rgb),0.25)' }}
         >
@@ -653,7 +653,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
       >
         <span style={{ fontSize: 18 }}>☕</span>
         <div className="min-w-0">
-          <div className="text-xs font-semibold" style={{ color: '#f5c842' }}>Enjoying Ender Launcher?</div>
+          <div className="text-xs font-semibold" style={{ color: '#f5c842' }}>Enjoying Thendrask Launcher?</div>
           <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>If you'd like to support development, buying me a coffee goes a long way.</div>
         </div>
       </div>
@@ -664,7 +664,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
 /* ── Appearance tab ────────────────────────────────────── */
 function AppearanceTab({ settings, onChange }: { settings: AppSettings; onChange: (patch: Partial<AppSettings>) => void }): JSX.Element {
   const setTheme = useApp((s) => s.setTheme)
-  const currentTheme = settings.theme ?? 'ender'
+  const currentTheme = normalizeThemeId(settings.theme)
 
   const applyTheme = (id: ThemeId): void => {
     setTheme(id)
@@ -798,7 +798,7 @@ function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (
             type="url"
             value={relayUrl}
             onChange={(e) => setRelayUrl(e.target.value)}
-            placeholder="https://ender-relay-xxxx.onrender.com"
+            placeholder="https://thendrask-relay-xxxx.onrender.com"
             className="flex-1 px-3 py-2 rounded-xl text-sm outline-none font-mono"
             style={{
               background: 'var(--surface-2)',
