@@ -1,14 +1,12 @@
 # Code Signing Policy
 
-Thendrask Launcher releases are signed via [SignPath Foundation](https://signpath.org/), a nonprofit that provides free code signing for open source projects.
+Thendrask Launcher releases are currently **unsigned**. We applied for free code signing via [SignPath Foundation](https://signpath.org/), a nonprofit that provides free code signing for open source projects, but the application was declined. We may reapply or pursue another signing option in the future.
 
-## How signing works
+## What this means for you
 
-- Only builds triggered by a version tag (`v*.*.*`) pushed to the `main` branch are submitted for signing
-- Signing is performed automatically in CI via GitHub Actions — no developer has access to the private key
-- The private key is stored exclusively on SignPath Foundation's Hardware Security Module (HSM)
-- The unsigned installer is built by electron-builder, uploaded as a GitHub Actions artifact, submitted to SignPath for signing, and the signed artifact is then attached to the GitHub Release
+- Windows SmartScreen will likely show an "Unrecognized publisher" warning when running the installer. This is expected for an unsigned open-source app and does not indicate malware.
+- You can verify you're downloading the genuine installer by only using links from the [Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases).
 
-## Verifying a release
+## If signing is reinstated
 
-Each release on the [Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases) contains a signed `.exe` installer. You can verify the signature in Windows by right-clicking the file → Properties → Digital Signatures.
+Once code signing is available again, this document will be updated to describe the CI signing pipeline (built by electron-builder → signed in CI → attached to the GitHub Release).
