@@ -2,9 +2,9 @@
 
 export type Page = 'home' | 'library' | 'servers' | 'friends' | 'settings'
 
-/** Available UI themes. 'ender' is the default dark green. */
+/** Available UI themes. 'thendrask' is the default dark green. */
 export type ThemeId =
-  | 'ender'
+  | 'thendrask'
   | 'amethyst'
   | 'ocean'
   | 'crimson'
@@ -106,7 +106,7 @@ export interface AppSettings {
   curseforgeApiKey?: string
   friendCode?: string   // this user's own relay code (auto-generated)
   relayUrl?: string     // URL of the hosted presence relay
-  theme?: ThemeId       // UI theme (default 'ender')
+  theme?: ThemeId       // UI theme (default 'thendrask')
   discordRpc?: boolean
   discordClientId?: string
   setupComplete?: boolean

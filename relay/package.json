@@ -1,7 +1,7 @@
 {
-  "name": "ender-presence-relay",
+  "name": "thendrask-presence-relay",
   "version": "1.0.0",
-  "description": "Presence relay for Ender Launcher friend codes",
+  "description": "Presence relay for Thendrask Launcher friend codes",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

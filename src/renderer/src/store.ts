@@ -1,7 +1,16 @@
 import { create } from 'zustand'
 import type { Account, Instance, LaunchProgress, Page, ThemeId, UpdateInfo } from '@shared/types'
 
-export const DEFAULT_THEME: ThemeId = 'ender'
+export const DEFAULT_THEME: ThemeId = 'thendrask'
+
+/** Maps theme ids saved by older versions of the app to their current equivalent. */
+const LEGACY_THEME_IDS: Record<string, ThemeId> = { ender: 'thendrask' }
+
+/** Normalizes a theme id loaded from disk, translating legacy ids (e.g. pre-rebrand 'ender'). */
+export function normalizeThemeId(theme: string | undefined): ThemeId {
+  if (!theme) return DEFAULT_THEME
+  return LEGACY_THEME_IDS[theme] ?? (theme as ThemeId)
+}
 
 /** Apply a theme to the document by setting the data-theme attribute. */
 export function applyTheme(theme: ThemeId): void {
@@ -63,7 +72,7 @@ export const useApp = create<AppState>((set) => ({
   },
   loadTheme: async () => {
     const settings = await window.api.settings.get()
-    const theme = settings.theme ?? DEFAULT_THEME
+    const theme = normalizeThemeId(settings.theme)
     applyTheme(theme)
     set({ theme })
   },

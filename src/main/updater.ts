@@ -15,7 +15,7 @@ import type { UpdateInfo } from '@shared/types'
 //   4. CI builds the installer and creates a GitHub Release. Done.
 //      Users see the update banner within ~5 minutes.
 //
-const RELEASES_API = 'https://api.github.com/repos/Sxarlos/EnderClient/releases/latest'
+const RELEASES_API = 'https://api.github.com/repos/Sxarlos/ThendraskLauncher/releases/latest'
 
 // Re-check every 5 minutes while the app is open
 const RECHECK_INTERVAL_MS = 5 * 60 * 1000

@@ -330,17 +330,17 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     if (shaderMatch) {
       const [, shaderName, version] = shaderMatch
       const shaderpacks = join(instanceGameDir(instanceId), 'shaderpacks')
-      emitLog(`[Ender Launcher] Detected missing shader: ${shaderName} ${version} — downloading automatically…`)
+      emitLog(`[Thendrask Launcher] Detected missing shader: ${shaderName} ${version} — downloading automatically…`)
       autoInstallShader(shaderName, version, shaderpacks)
         .then((dest) => {
           if (dest) {
-            emitLog(`[Ender Launcher] ✓ ${shaderName} ${version} installed. Close and relaunch the game to apply.`)
+            emitLog(`[Thendrask Launcher] ✓ ${shaderName} ${version} installed. Close and relaunch the game to apply.`)
           } else {
-            emitLog(`[Ender Launcher] Could not find ${shaderName} ${version} on Modrinth — download manually from https://www.complementary.dev/`)
+            emitLog(`[Thendrask Launcher] Could not find ${shaderName} ${version} on Modrinth — download manually from https://www.complementary.dev/`)
           }
         })
         .catch((e: Error) => {
-          emitLog(`[Ender Launcher] Shader auto-download failed: ${e.message}`)
+          emitLog(`[Thendrask Launcher] Shader auto-download failed: ${e.message}`)
         })
     }
 

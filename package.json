@@ -1,8 +1,8 @@
 {
-  "name": "ender-launcher",
-  "productName": "Ender Launcher",
+  "name": "thendrask-launcher",
+  "productName": "Thendrask Launcher",
   "version": "0.3.23",
-  "description": "Ender Launcher",
+  "description": "Thendrask Launcher",
   "main": "./out/main/index.js",
   "author": "",
   "license": "MIT",
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "com.enderlauncher.app",
-    "productName": "Ender Launcher",
+    "productName": "Thendrask Launcher",
     "directories": {
       "output": "dist"
     },
@@ -48,7 +48,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ender Launcher"
+      "shortcutName": "Thendrask Launcher"
     }
   },
   "dependencies": {

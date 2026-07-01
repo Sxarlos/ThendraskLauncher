@@ -663,7 +663,7 @@ export default function Home(): JSX.Element {
               className="text-[36px] font-black text-white mb-2 leading-tight"
               style={{ textShadow: '0 4px 32px rgba(0,0,0,0.9)' }}
             >
-              Welcome to Ender Launcher
+              Welcome to Thendrask Launcher
             </div>
             <div className="text-sm mb-7" style={{ color: 'rgba(var(--overlay-rgb),0.35)' }}>
               Your personal Minecraft launcher
