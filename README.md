@@ -1,4 +1,4 @@
-# Ender Client
+# Ender Launcher
 
 **[ender-client.xyz](https://ender-client.xyz)** · [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/zzWF8nBhYD) · [![YouTube](https://img.shields.io/badge/YouTube-Subscribe-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/@EnderClientApp)
 

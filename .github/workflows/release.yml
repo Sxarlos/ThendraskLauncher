@@ -52,7 +52,7 @@ jobs:
         id: release
         uses: softprops/action-gh-release@v2
         with:
-          name: "Ender Client ${{ steps.pkg.outputs.version }}"
+          name: "Ender Launcher ${{ steps.pkg.outputs.version }}"
           files: dist/*.exe
           generate_release_notes: true
 

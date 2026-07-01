@@ -211,7 +211,7 @@ export default function SplashScreen({ appReady }: Props): JSX.Element | null {
             textTransform: 'uppercase',
           }}
         >
-          Ender Client
+          Ender Launcher
         </div>
         <div style={{ fontSize: 11, marginTop: 5, color: 'var(--text-dim)', letterSpacing: '0.1em' }}>
           Loading…

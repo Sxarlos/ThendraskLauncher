@@ -149,7 +149,7 @@ export default function Sidebar(): JSX.Element {
             width={28}
             height={28}
             style={{ display: 'block' }}
-            alt="Ender Client"
+            alt="Ender Launcher"
           />
         </div>
 
@@ -163,7 +163,7 @@ export default function Sidebar(): JSX.Element {
             pointerEvents: collapsed ? 'none' : 'auto',
           }}
         >
-          <div className="font-bold text-sm text-white leading-tight whitespace-nowrap">Ender Client</div>
+          <div className="font-bold text-sm text-white leading-tight whitespace-nowrap">Ender Launcher</div>
           <div className="text-[10px] leading-tight whitespace-nowrap" style={{ color: 'var(--text-faint)' }}>{appVersion ? `v${appVersion}` : ''}</div>
         </div>
       </div>

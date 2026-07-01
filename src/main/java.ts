@@ -80,7 +80,7 @@ export async function detectAllJavas(): Promise<JavaInstall[]> {
     }
   }
 
-  // 3. Managed JREs downloaded by Ender Client
+  // 3. Managed JREs downloaded by Ender Launcher
   try {
     const managedRoot = join(app.getPath('userData'), 'java')
     if (existsSync(managedRoot)) {

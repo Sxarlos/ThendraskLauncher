@@ -1,7 +1,7 @@
 {
   "name": "ender-presence-relay",
   "version": "1.0.0",
-  "description": "Presence relay for Ender Client friend codes",
+  "description": "Presence relay for Ender Launcher friend codes",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

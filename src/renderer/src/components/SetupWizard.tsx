@@ -48,7 +48,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
       </div>
 
       <div>
-        <h1 className="text-2xl font-black text-white mb-2">Welcome to Ender Client</h1>
+        <h1 className="text-2xl font-black text-white mb-2">Welcome to Ender Launcher</h1>
         <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)', maxWidth: 340 }}>
           Let's get you set up in a couple of quick steps - signing in and optionally connecting CurseForge.
         </p>
@@ -468,7 +468,7 @@ function DoneStep({ accounts, onFinish }: { accounts: Account[]; onFinish: () =>
         onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent)')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent-strong)')}
       >
-        Launch Ender Client →
+        Launch Ender Launcher →
       </button>
     </div>
   )
