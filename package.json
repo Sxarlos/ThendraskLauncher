@@ -2,9 +2,9 @@
   "name": "thendrask-launcher",
   "productName": "Thendrask Launcher",
   "version": "0.3.24",
-  "description": "Thendrask Launcher",
+  "description": "A Minecraft launcher with modpack browsing, friends presence, and automatic updates",
   "main": "./out/main/index.js",
-  "author": "",
+  "author": "Sxarlos",
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
@@ -14,6 +14,8 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "lint": "eslint src",
+    "test": "vitest run",
     "package": "electron-vite build && electron-builder"
   },
   "build": {
@@ -64,6 +66,7 @@
     "skinview3d": "^3.4.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
@@ -72,12 +75,16 @@
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "postcss": "^8.4.49",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.62.1",
     "vite": "^5.4.11",
+    "vitest": "^4.1.9",
     "zustand": "^5.0.2"
   }
 }

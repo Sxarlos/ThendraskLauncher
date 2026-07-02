@@ -8,7 +8,6 @@ import { listAccounts, loginInteractive, removeAccount, setActive, getMinecraftP
 import {
   createInstance,
   listInstances,
-  getInstance,
   removeInstance,
   updateInstance,
   instanceGameDir,
@@ -48,7 +47,7 @@ import {
   fetchCurseForgeChangelog,
   fetchFtbChangelog
 } from './browse'
-import { importLocalPack, listLoaderVersions, installTechnicPack } from './modpack'
+import { importLocalPack, listLoaderVersions } from './modpack'
 import { readSavedServers } from './nbtReader'
 import { applyToAllInstances } from './chatmod'
 import { detectAllJavas } from './java'
@@ -78,7 +77,7 @@ function createWindow(): BrowserWindow {
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -98,7 +97,7 @@ function createWindow(): BrowserWindow {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    openExternalSafe(details.url).catch((err) => console.error('[window-open]', err.message))
     return { action: 'deny' }
   })
 
@@ -111,6 +110,15 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
+/** Open a URL in the default browser, refusing anything that isn't http(s). */
+function openExternalSafe(url: string): Promise<void> {
+  const proto = new URL(url).protocol
+  if (proto !== 'https:' && proto !== 'http:') {
+    return Promise.reject(new Error(`Blocked non-http(s) URL: ${url}`))
+  }
+  return shell.openExternal(url)
+}
+
 /** Small helper to register an async IPC handler with consistent error logging. */
 function handle<T>(channel: string, fn: (...args: any[]) => T | Promise<T>): void {
   ipcMain.handle(channel, async (_e, ...args) => {
@@ -119,7 +127,7 @@ function handle<T>(channel: string, fn: (...args: any[]) => T | Promise<T>): voi
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error(`[ipc:${channel}]`, message)
-      throw new Error(message)
+      throw new Error(message, { cause: err })
     }
   })
 }
@@ -148,7 +156,7 @@ async function fetchAndStoreScreenshots(
 
 function registerIpcHandlers(): void {
   handle('app:version', () => app.getVersion())
-  handle('shell:openExternal', (url: string) => shell.openExternal(url))
+  handle('shell:openExternal', (url: string) => openExternalSafe(url))
 
   // Accounts
   handle('accounts:list', () => listAccounts())
@@ -164,7 +172,7 @@ function registerIpcHandlers(): void {
     // Auto-populate packVersionId on first install so update tracking works
     if (input.externalId && input.source && input.source !== 'manual' && !input.packVersionId) {
       try {
-        let versions
+        let versions: Awaited<ReturnType<typeof fetchModrinthVersions>> | undefined
         if (input.source === 'modrinth') {
           versions = await fetchModrinthVersions(input.externalId)
         } else if (input.source === 'curseforge') {
@@ -261,6 +269,10 @@ function registerIpcHandlers(): void {
   })
 
   handle('instance:removeMod', (instanceId: string, fileName: string) => {
+    // Plain file names only — no separators or '..' that could reach outside mods/
+    if (basename(fileName) !== fileName || !fileName.endsWith('.jar')) {
+      throw new Error('Invalid mod file name.')
+    }
     const modPath = join(instanceGameDir(instanceId), 'mods', fileName)
     if (existsSync(modPath)) unlinkSync(modPath)
   })
@@ -384,7 +396,7 @@ function registerIpcHandlers(): void {
 
 app.whenReady().then(() => {
   // Apply custom instances directory before any instance operations
-  let { instancesDir: customDir, friendCode, discordRpc, discordClientId } = getSettings()
+  const { instancesDir: customDir, friendCode, discordRpc, discordClientId } = getSettings()
   if (customDir) setCustomInstancesDir(customDir)
   initDiscord(discordClientId, !!discordRpc)
 
@@ -392,11 +404,7 @@ app.whenReady().then(() => {
   if (!friendCode) setSettings({ friendCode: generateFriendCode() })
 
   // Auto-apply the default relay URL if none is saved yet
-  const DEFAULT_RELAY_URL = 'https://relay.sxarlos.store'
-  if ((DEFAULT_RELAY_URL as string) !== 'PASTE_YOUR_RELAY_URL_HERE') {
-    const { relayUrl } = getSettings()
-    if (!relayUrl) setSettings({ relayUrl: DEFAULT_RELAY_URL })
-  }
+  if (!getSettings().relayUrl) setSettings({ relayUrl: 'https://relay.sxarlos.store' })
 
   startRelayRegistration()
   registerIpcHandlers()

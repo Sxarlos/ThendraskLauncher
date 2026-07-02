@@ -2,6 +2,61 @@ import { useEffect, useRef, useState } from 'react'
 import { activeAccount, useApp } from '../store'
 import ProfileModal from './ProfileModal'
 
+/*
+ * msmc returns UUIDs WITHOUT dashes (32 hex chars).
+ * mc-heads.net and crafatar both need the dashed form.
+ */
+const dashedUuid = (id: string): string =>
+  id.includes('-')
+    ? id
+    : `${id.slice(0,8)}-${id.slice(8,12)}-${id.slice(12,16)}-${id.slice(16,20)}-${id.slice(20)}`
+
+/* mc-heads.net is highly reliable and returns a clean isometric head PNG */
+const headUrl = (id: string): string =>
+  `https://mc-heads.net/head/${dashedUuid(id)}/40`
+
+function Avatar({ id, username, size }: { id: string; username: string; size: number }): JSX.Element {
+  const [src, setSrc] = useState(headUrl(id))
+  const [failed, setFailed] = useState(false)
+
+  const handleError = (): void => {
+    /* Try crafatar as fallback before giving up */
+    if (!src.includes('crafatar')) {
+      setSrc(`https://crafatar.com/renders/head/${dashedUuid(id)}?size=64&overlay`)
+    } else {
+      setFailed(true)
+    }
+  }
+
+  if (failed) {
+    /* Only show letter as absolute last resort */
+    const color = `hsl(${(username.charCodeAt(0) * 37) % 360},55%,40%)`
+    return (
+      <div
+        style={{
+          width: size, height: size, borderRadius: 4, flexShrink: 0,
+          background: color,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: size * 0.45, fontWeight: 700, color: '#fff',
+        }}
+      >
+        {username[0]?.toUpperCase()}
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      width={size}
+      height={size}
+      style={{ borderRadius: 4, flexShrink: 0 }}
+      alt={username}
+      onError={handleError}
+    />
+  )
+}
+
 export default function AccountSwitcher(): JSX.Element {
   const accounts = useApp((s) => s.accounts)
   const refreshAccounts = useApp((s) => s.refreshAccounts)
@@ -44,61 +99,6 @@ export default function AccountSwitcher(): JSX.Element {
   const remove = async (id: string): Promise<void> => {
     await window.api.accounts.remove(id)
     await refreshAccounts()
-  }
-
-  /*
-   * msmc returns UUIDs WITHOUT dashes (32 hex chars).
-   * mc-heads.net and crafatar both need the dashed form.
-   */
-  const dashedUuid = (id: string): string =>
-    id.includes('-')
-      ? id
-      : `${id.slice(0,8)}-${id.slice(8,12)}-${id.slice(12,16)}-${id.slice(16,20)}-${id.slice(20)}`
-
-  /* mc-heads.net is highly reliable and returns a clean isometric head PNG */
-  const headUrl = (id: string): string =>
-    `https://mc-heads.net/head/${dashedUuid(id)}/40`
-
-  function Avatar({ id, username, size }: { id: string; username: string; size: number }): JSX.Element {
-    const [src, setSrc] = useState(headUrl(id))
-    const [failed, setFailed] = useState(false)
-
-    const handleError = (): void => {
-      /* Try crafatar as fallback before giving up */
-      if (!src.includes('crafatar')) {
-        setSrc(`https://crafatar.com/renders/head/${dashedUuid(id)}?size=64&overlay`)
-      } else {
-        setFailed(true)
-      }
-    }
-
-    if (failed) {
-      /* Only show letter as absolute last resort */
-      const color = `hsl(${(username.charCodeAt(0) * 37) % 360},55%,40%)`
-      return (
-        <div
-          style={{
-            width: size, height: size, borderRadius: 4, flexShrink: 0,
-            background: color,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: size * 0.45, fontWeight: 700, color: '#fff',
-          }}
-        >
-          {username[0]?.toUpperCase()}
-        </div>
-      )
-    }
-
-    return (
-      <img
-        src={src}
-        width={size}
-        height={size}
-        style={{ borderRadius: 4, flexShrink: 0 }}
-        alt={username}
-        onError={handleError}
-      />
-    )
   }
 
   return (

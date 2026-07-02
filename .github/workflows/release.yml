@@ -48,12 +48,25 @@ jobs:
           $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      # The launcher's self-updater verifies downloads against this checksum
+      # asset (see src/main/updater.ts). Do not remove it.
+      - name: Generate SHA-256 checksum
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/*.exe | Select-Object -First 1
+          if (-not $exe) { throw "No dist/*.exe found to checksum" }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          [System.IO.File]::WriteAllText("$($exe.FullName).sha256", "$hash  $($exe.Name)")
+          Write-Host "SHA-256: $hash"
+
       - name: Create GitHub Release and upload installer
         id: release
         uses: softprops/action-gh-release@v2
         with:
           name: "Thendrask Launcher ${{ steps.pkg.outputs.version }}"
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/*.exe.sha256
           generate_release_notes: true
 
       - name: Verify release asset

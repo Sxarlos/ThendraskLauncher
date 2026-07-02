@@ -155,7 +155,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
   } catch (err) {
     const msg = (err as Error).message
     setState(instanceId, 'error', msg)
-    throw new Error(msg)
+    throw new Error(msg, { cause: err })
   }
 
   // ── Loader setup ────────────────────────────────────────────────────────────
@@ -229,7 +229,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
           win.webContents.send('launch:log', { instanceId, line: `[Launcher] NeoForge ${neoVer} install failed: ${reason}` })
         }
         setState(instanceId, 'error', `NeoForge ${neoVer} install failed — check the log panel for details.`)
-        throw new Error(`NeoForge ${neoVer} install failed: ${reason}`)
+        throw new Error(`NeoForge ${neoVer} install failed: ${reason}`, { cause: err })
       }
     } else {
       setState(instanceId, 'preparing', 'Could not resolve NeoForge version — launching vanilla')
@@ -255,7 +255,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
       } catch (javaErr) {
         const msg = (javaErr as Error).message
         setState(instanceId, 'error', msg)
-        throw new Error(msg)
+        throw new Error(msg, { cause: javaErr })
       }
     }
   }
