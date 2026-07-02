@@ -127,7 +127,7 @@ export async function loginInteractive(): Promise<Account[]> {
 }
 
 export function removeAccount(id: string): Account[] {
-  let records = load().filter((r) => r.id !== id)
+  const records = load().filter((r) => r.id !== id)
   // If we removed the active account, promote the first remaining one.
   if (records.length && !records.some((r) => r.active)) records[0].active = true
   save(records)
@@ -203,7 +203,7 @@ export async function getActiveMclcUser(): Promise<MclcUser> {
         : typeof err === 'object'
         ? JSON.stringify(err)
         : String(err)
-    throw new Error(`SESSION_EXPIRED:${active.username} — session expired, please sign in again. (${raw})`)
+    throw new Error(`SESSION_EXPIRED:${active.username} — session expired, please sign in again. (${raw})`, { cause: err })
   }
 
   if (mc.profile) {

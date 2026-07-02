@@ -358,8 +358,6 @@ export async function fetchCurseForgeChangelog(modId: string, limit = 5): Promis
         const clData = await cfGet(`/mods/${modId}/files/${f.id}/changelog`, {})
         changelog = stripHtml(clData.data ?? '')
       } catch { /* changelog unavailable */ }
-      const allVers: string[] = f.gameVersions ?? []
-      const mcVer = allVers.find((v: string) => /^\d+\.\d+/.test(v)) ?? ''
       return {
         id: String(f.id),
         versionNumber: f.displayName ?? String(f.id),

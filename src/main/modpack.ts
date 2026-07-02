@@ -4,15 +4,16 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { spawn } from 'child_process'
 import AdmZip from 'adm-zip'
 import { instanceGameDir } from './instances'
 import { getSettings } from './settings'
+import { safeJoin } from './safePath'
 
 const MR_BASE = 'https://api.modrinth.com/v2'
 const CF_BASE = 'https://api.curseforge.com/v1'
-const UA = 'ender-launcher/0.1.5 (ender-launcher)'
+const UA = 'thendrask-launcher (github.com/Sxarlos/ThendraskLauncher)'
 
 // ── Marker file ───────────────────────────────────────────────────────────────
 // Written after a successful install so we don't re-download on every launch.
@@ -480,8 +481,9 @@ export async function installMrpack(
 
   for (let i = 0; i < clientFiles.length; i++) {
     const f = clientFiles[i]
-    const destPath = join(gameDir, ...f.path.split('/'))
-    const destDir = join(destPath, '..')
+    const destPath = safeJoin(gameDir, f.path)
+    if (!destPath) continue
+    const destDir = dirname(destPath)
 
     if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
 
@@ -504,8 +506,9 @@ export async function installMrpack(
     for (const entry of zip.getEntries()) {
       if (!entry.entryName.startsWith(prefix) || entry.isDirectory) continue
       const rel = entry.entryName.slice(prefix.length)
-      const dest = join(gameDir, ...rel.split('/'))
-      const destDir = join(dest, '..')
+      const dest = safeJoin(gameDir, rel)
+      if (!dest) continue
+      const destDir = dirname(dest)
       if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
       writeFileSync(dest, entry.getData())
     }
@@ -562,9 +565,10 @@ export async function installFtbPack(
     const f = files[i]
     if (!f.url) continue
 
-    const pathParts = String(f.path ?? '').split('/').filter(Boolean)
-    const filePath = join(gameDir, ...pathParts, f.name)
-    const fileDir = join(filePath, '..')
+    const relPath = [...String(f.path ?? '').split('/').filter(Boolean), String(f.name)].join('/')
+    const filePath = safeJoin(gameDir, relPath)
+    if (!filePath) continue
+    const fileDir = dirname(filePath)
 
     if (!existsSync(fileDir)) mkdirSync(fileDir, { recursive: true })
     if (!existsSync(filePath)) {
@@ -632,8 +636,9 @@ export async function importLocalPack(
 
     for (let i = 0; i < clientFiles.length; i++) {
       const f = clientFiles[i]
-      const destPath = join(gameDir, ...f.path.split('/'))
-      const destDir = join(destPath, '..')
+      const destPath = safeJoin(gameDir, f.path)
+      if (!destPath) continue
+      const destDir = dirname(destPath)
       if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
       if (!existsSync(destPath)) {
         for (const url of f.downloads) {
@@ -651,8 +656,9 @@ export async function importLocalPack(
       for (const entry of zip.getEntries()) {
         if (!entry.entryName.startsWith(prefix) || entry.isDirectory) continue
         const rel = entry.entryName.slice(prefix.length)
-        const dest = join(gameDir, ...rel.split('/'))
-        const destDir = join(dest, '..')
+        const dest = safeJoin(gameDir, rel)
+        if (!dest) continue
+        const destDir = dirname(dest)
         if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
         writeFileSync(dest, entry.getData())
       }
@@ -708,8 +714,8 @@ export async function importLocalPack(
       for (const file of files) {
         done++
         if (!file.downloadUrl) continue
-        const dest = join(modsDir, file.fileName)
-        if (existsSync(dest)) continue
+        const dest = safeJoin(modsDir, String(file.fileName))
+        if (!dest || existsSync(dest)) continue
         try { await downloadToFile(file.downloadUrl, dest) } catch { /* skip */ }
         onProgress(
           `Downloading mods… (${done}/${modEntries.length})`,
@@ -723,8 +729,9 @@ export async function importLocalPack(
     for (const entry of zip.getEntries()) {
       if (!entry.entryName.startsWith(overridePrefix) || entry.isDirectory) continue
       const rel = entry.entryName.slice(overridePrefix.length)
-      const dest = join(gameDir, ...rel.split('/'))
-      const destDir = join(dest, '..')
+      const dest = safeJoin(gameDir, rel)
+      if (!dest) continue
+      const destDir = dirname(dest)
       if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
       writeFileSync(dest, entry.getData())
     }
@@ -758,7 +765,7 @@ export async function installAtlPack(
     headers: { 'User-Agent': ATL_INST_UA }
   })
   if (!listRes.ok) throw new Error(`ATLauncher pack list fetch failed: ${listRes.status}`)
-  const packs: any[] = await listRes.json()
+  const packs = await listRes.json() as any[]
   const pack = packs.find((p: any) => String(p.id) === packId)
   if (!pack) throw new Error(`ATLauncher pack ${packId} not found in pack list`)
 
@@ -773,7 +780,6 @@ export async function installAtlPack(
   if (!versionRes.ok) throw new Error(`ATLauncher version JSON fetch failed: ${versionRes.status}`)
   const versionData = await versionRes.json() as any
 
-  const mcVersion: string = versionData.minecraft ?? ''
   const loaderRaw: string = (versionData.loader?.type ?? 'vanilla').toLowerCase()
   const loaderType = loaderRaw === 'forge' ? 'forge'
     : loaderRaw === 'fabric' ? 'fabric'
@@ -797,7 +803,8 @@ export async function installAtlPack(
     const mod = mods[i]
     if (!mod.url) continue
     const fileName = mod.file ?? `${(mod.name ?? `mod_${i}`).replace(/[^A-Za-z0-9._-]/g, '_')}.jar`
-    const destPath = join(modsDir, fileName)
+    const destPath = safeJoin(modsDir, String(fileName))
+    if (!destPath) continue
     if (!existsSync(destPath)) {
       try {
         await downloadToFile(mod.url, destPath)
@@ -975,8 +982,8 @@ export async function installCfPack(
     for (const file of files) {
       done++
       if (!file.downloadUrl) continue
-      const dest = join(modsDir, file.fileName)
-      if (existsSync(dest)) continue
+      const dest = safeJoin(modsDir, String(file.fileName))
+      if (!dest || existsSync(dest)) continue
       try {
         await downloadToFile(file.downloadUrl, dest)
       } catch { /* skip mods that fail */ }
@@ -991,8 +998,9 @@ export async function installCfPack(
   for (const entry of zip.getEntries()) {
     if (!entry.entryName.startsWith(overridePrefix) || entry.isDirectory) continue
     const rel = entry.entryName.slice(overridePrefix.length)
-    const dest = join(gameDir, ...rel.split('/'))
-    const destDir = join(dest, '..')
+    const dest = safeJoin(gameDir, rel)
+    if (!dest) continue
+    const destDir = dirname(dest)
     if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
     writeFileSync(dest, entry.getData())
   }
