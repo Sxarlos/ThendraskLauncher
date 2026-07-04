@@ -55,7 +55,7 @@ import { setCustomInstancesDir } from './persist'
 import { startRelayRegistration, getOwnPresence, setIdleState } from './presence'
 import { initDiscord, destroyDiscord } from './discord'
 import { listFriends, addFriend, removeFriend, pollFriend, generateFriendCode } from './friends'
-import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart } from './updater'
+import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart, setBetaUpdates } from './updater'
 import type { Friend } from '@shared/types'
 import type { AppSettings, BrowseParams, ServerEntry } from '@shared/types'
 
@@ -213,6 +213,10 @@ function registerIpcHandlers(): void {
     if ('instancesDir' in patch) setCustomInstancesDir(next.instancesDir ?? null)
     if ('discordRpc' in patch || 'discordClientId' in patch) {
       initDiscord(next.discordClientId, !!next.discordRpc)
+    }
+    if ('betaUpdates' in patch) {
+      setBetaUpdates(!!next.betaUpdates)
+      void checkForUpdate()
     }
     return next
   })
