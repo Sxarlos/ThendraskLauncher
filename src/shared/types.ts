@@ -110,6 +110,7 @@ export interface AppSettings {
   discordRpc?: boolean
   discordClientId?: string
   setupComplete?: boolean
+  betaUpdates?: boolean  // opt in to prerelease (beta) auto-updates
 }
 
 export interface JavaInstall {

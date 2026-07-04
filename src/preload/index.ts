@@ -37,7 +37,9 @@ export interface CreateInstanceInput {
  */
 const api = {
   app: {
-    getVersion: (): Promise<string> => ipcRenderer.invoke('app:version')
+    getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
+    /** The host OS, so the renderer can adapt platform-specific UI (e.g. file pickers). */
+    platform: process.platform as NodeJS.Platform
   },
   accounts: {
     list: (): Promise<Account[]> => ipcRenderer.invoke('accounts:list'),

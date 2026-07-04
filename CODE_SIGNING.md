@@ -6,6 +6,7 @@ Thendrask Launcher releases are currently **unsigned**. We applied for free code
 
 - Windows SmartScreen will likely show an "Unrecognized publisher" warning when running the installer. This is expected for an unsigned open-source app and does not indicate malware.
 - You can verify you're downloading the genuine installer by only using links from the [Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases).
+- **macOS builds are unsigned**, so Gatekeeper will warn on first launch, and in-app auto-update cannot fully apply on macOS until signing/notarization is added (the download still works; you finish by reinstalling). Windows and Linux (AppImage) auto-update work without signing.
 
 ## If signing is reinstated
 

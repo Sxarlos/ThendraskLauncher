@@ -332,7 +332,13 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
   }
 
   const pickJava = async (): Promise<void> => {
-    const file = await window.api.dialog.pickFile([{ name: 'Java Executable', extensions: ['exe'] }])
+    // On Windows the executable is java.exe; on macOS/Linux the binary has no
+    // extension, so don't filter it out.
+    const filters =
+      window.api.app.platform === 'win32'
+        ? [{ name: 'Java Executable', extensions: ['exe'] }]
+        : [{ name: 'Java Executable', extensions: ['*'] }]
+    const file = await window.api.dialog.pickFile(filters)
     if (file) {
       setJavaPath(file)
       onChange({ javaPath: file })
@@ -615,6 +621,13 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
       <SectionHeader>Updates</SectionHeader>
 
       <UpdateCheckRow />
+
+      <Row
+        label="Receive beta updates"
+        desc="Also offer prerelease (beta) builds — including early macOS & Linux releases. May be less stable; please report issues on GitHub."
+      >
+        <Toggle checked={!!settings.betaUpdates} onChange={(v) => onChange({ betaUpdates: v })} />
+      </Row>
 
       <SectionHeader>About</SectionHeader>
 
