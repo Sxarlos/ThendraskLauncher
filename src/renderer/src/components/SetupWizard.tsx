@@ -1,12 +1,12 @@
 ﻿import { useEffect, useState } from 'react'
-import type { Account } from '@shared/types'
+import type { Account, AppSettings } from '@shared/types'
 import { useApp } from '../store'
 
 /* ── Step type ───────────────────────────────────────────── */
 
-type Step = 'welcome' | 'account' | 'curseforge' | 'friends' | 'done'
-const STEP_ORDER: Step[] = ['welcome', 'account', 'curseforge', 'friends', 'done']
-const PROGRESS_STEPS: Step[] = ['account', 'curseforge', 'friends', 'done']
+type Step = 'welcome' | 'account' | 'curseforge' | 'friends' | 'performance' | 'done'
+const STEP_ORDER: Step[] = ['welcome', 'account', 'curseforge', 'friends', 'performance', 'done']
+const PROGRESS_STEPS: Step[] = ['account', 'curseforge', 'friends', 'performance', 'done']
 
 /* ── Step indicator ──────────────────────────────────────── */
 
@@ -432,6 +432,98 @@ function FriendsStep({ onNext }: { onNext: () => void }): JSX.Element {
   )
 }
 
+/* ── Step: Performance ───────────────────────────────────── */
+
+type PerfChoice = 'full' | 'lite'
+
+function PerformanceStep({ onNext }: { onNext: () => void }): JSX.Element {
+  const setLiteMode = useApp((s) => s.setLiteMode)
+  const [choice, setChoice] = useState<PerfChoice>('full')
+  const [saving, setSaving] = useState(false)
+
+  const handleContinue = async (): Promise<void> => {
+    setSaving(true)
+    try {
+      const patch: Partial<AppSettings> = { liteMode: choice === 'lite' }
+      if (choice === 'lite') {
+        // Never clobber render/graphics settings the user already configured.
+        const current = await window.api.settings.get()
+        if (current.defaultGameSettings === undefined) {
+          patch.defaultGameSettings = { renderDistance: 8, graphics: 'fast', particles: 'minimal' }
+        }
+      }
+      await window.api.settings.set(patch)
+      setLiteMode(choice === 'lite')
+    } finally {
+      setSaving(false)
+      onNext()
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <StepDots current="performance" />
+
+      <div className="text-center">
+        <h2 className="text-xl font-black text-white mb-1.5">Optimise for your PC</h2>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          Choose how much visual polish the launcher itself uses. You can change this anytime in Settings.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {([
+          ['full', 'Full experience', 'Smooth animations, blur effects, and the 3D skin viewer.'],
+          ['lite', 'Lite mode - for lower-end PCs', 'Saves RAM by disabling effects and the 3D skin viewer.'],
+        ] as [PerfChoice, string, string][]).map(([id, title, desc]) => {
+          const active = choice === id
+          return (
+            <button
+              key={id}
+              onClick={() => setChoice(id)}
+              className="text-left rounded-xl p-4 transition-all"
+              style={{
+                background: active ? 'rgba(var(--accent-rgb),0.08)' : 'var(--surface-2)',
+                border: `1.5px solid ${active ? 'rgba(var(--accent-rgb),0.4)' : 'var(--border-soft)'}`,
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-semibold text-sm" style={{ color: active ? 'var(--accent)' : 'var(--text-strong)' }}>
+                  {title}
+                </div>
+                {active && (
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: 'var(--accent-strong)' }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{desc}</div>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="flex flex-col gap-2 pt-1">
+        <button
+          onClick={handleContinue}
+          disabled={saving}
+          className="w-full py-3 rounded-xl font-bold text-sm text-black transition-all disabled:opacity-60"
+          style={{ background: 'var(--accent-strong)' }}
+          onMouseEnter={(e) => { if (!saving) e.currentTarget.style.background = 'var(--accent)' }}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent-strong)')}
+        >
+          {saving ? 'Saving…' : 'Continue →'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Step: Done ──────────────────────────────────────────── */
 
 function DoneStep({ accounts, onFinish }: { accounts: Account[]; onFinish: () => void }): JSX.Element {
@@ -516,6 +608,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }):
         {step === 'account'    && <AccountStep onNext={next} />}
         {step === 'curseforge' && <CurseForgeStep onNext={next} />}
         {step === 'friends'    && <FriendsStep onNext={next} />}
+        {step === 'performance' && <PerformanceStep onNext={next} />}
         {step === 'done'       && <DoneStep accounts={accounts} onFinish={finish} />}
       </div>
     </div>
