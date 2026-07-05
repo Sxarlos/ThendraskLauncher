@@ -11,11 +11,34 @@ permissions:
   contents: write
 
 jobs:
+  # Determines which OSes the release job's matrix builds on. Platform policy:
+  # stable tags (no "-") ship Windows-only — Windows is the stable update
+  # channel. Prerelease tags (containing "-") ship on all three OSes — the
+  # macOS/Linux public beta only ever arrives via prerelease tags. The
+  # `matrix` context isn't available in job-level `if`, so this is computed
+  # here as a job output and consumed via `fromJson()` in the release job's
+  # matrix instead.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      oses: ${{ steps.set-oses.outputs.oses }}
+    steps:
+      - name: Determine target OSes
+        id: set-oses
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            echo 'oses=["windows-latest","macos-latest","ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'oses=["windows-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: ${{ fromJson(needs.plan.outputs.oses) }}
 
     runs-on: ${{ matrix.os }}
 
@@ -40,11 +63,14 @@ jobs:
       # self-updater (src/main/updater.ts) consumes that metadata.
       #
       # A tag WITHOUT a prerelease suffix (e.g. v0.4.0) publishes a normal, full
-      # release. A tag WITH one (e.g. v0.4.0-beta.1, v0.4.0-rc.2 — anything
-      # containing "-") publishes a GitHub *prerelease*: GitHub's "latest release"
-      # API and electron-updater's stable channel both ignore it, so existing
-      # users are never auto-pushed a beta — only people who deliberately grab it
-      # from the Releases page get the Mac/Linux/Windows beta builds.
+      # release and, per the `plan` job above, only ever runs on windows-latest
+      # — Windows is the stable update channel. A tag WITH one (e.g.
+      # v0.4.0-beta.1, v0.4.0-rc.2 — anything containing "-") publishes a
+      # GitHub *prerelease* and runs on all three OSes: GitHub's "latest
+      # release" API and electron-updater's stable channel both ignore it, so
+      # existing users are never auto-pushed a beta — only people who
+      # deliberately grab it from the Releases page get the Mac/Linux/Windows
+      # public beta builds.
 
       - name: Package and publish (stable)
         if: ${{ !contains(github.ref_name, '-') }}
