@@ -1,6 +1,7 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import type { AppSettings, DefaultGameSettings, JavaInstall, ThemeId } from '@shared/types'
 import { normalizeThemeId, useApp } from '../store'
+import { CURATED_ACTIONS, codeToMcKey, friendlyKeyName, mouseButtonToMcKey } from '../lib/mcControls'
 
 type SettingsTab = 'general' | 'appearance' | 'apikeys'
 
@@ -167,6 +168,167 @@ function NoChatRow({
         </div>
       )}
     </div>
+  )
+}
+
+/* ── Controls section ─────────────────────────────────── */
+function ControlsSection({
+  settings,
+  onChange,
+}: {
+  settings: AppSettings
+  onChange: (patch: Partial<AppSettings>) => void
+}): JSX.Element {
+  const controls = settings.defaultControls
+  const enabled = controls !== undefined
+  const controlsRef = useRef(controls)
+  useEffect(() => {
+    controlsRef.current = controls
+  }, [controls])
+
+  const [capturing, setCapturing] = useState<string | null>(null)
+  const [applying, setApplying] = useState(false)
+  const [applyResult, setApplyResult] = useState<number | null>(null)
+
+  const setBinding = (action: string, mcKey: string | null): void => {
+    const next = { ...(controlsRef.current ?? {}) }
+    if (mcKey === null) delete next[action]
+    else next[action] = mcKey
+    onChange({ defaultControls: next })
+  }
+
+  useEffect(() => {
+    if (!capturing) return
+
+    const onKeyDown = (e: KeyboardEvent): void => {
+      e.preventDefault()
+      if (e.key === 'Escape') {
+        setCapturing(null)
+        return
+      }
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        setBinding(capturing, null)
+        setCapturing(null)
+        return
+      }
+      const mcKey = codeToMcKey(e.code)
+      if (mcKey) {
+        setBinding(capturing, mcKey)
+        setCapturing(null)
+      }
+      // Unmapped codes are ignored - stay in capture mode.
+    }
+
+    const onMouseDown = (e: MouseEvent): void => {
+      e.preventDefault()
+      const mcKey = mouseButtonToMcKey(e.button)
+      if (mcKey) {
+        setBinding(capturing, mcKey)
+        setCapturing(null)
+      }
+    }
+
+    const onBlur = (): void => setCapturing(null)
+
+    window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('mousedown', onMouseDown, true)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('mousedown', onMouseDown, true)
+      window.removeEventListener('blur', onBlur)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capturing])
+
+  const applyNow = async (): Promise<void> => {
+    setApplying(true)
+    setApplyResult(null)
+    try {
+      const n = await window.api.settings.applyControlsToAll()
+      setApplyResult(n)
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  return (
+    <>
+      <Row
+        label="Set default controls"
+        desc="Applied to every instance when it launches. Only the actions you bind here are changed - everything else keeps its in-game setting."
+      >
+        <Toggle
+          checked={enabled}
+          onChange={(v) => onChange({ defaultControls: v ? {} : undefined })}
+        />
+      </Row>
+
+      {enabled && (
+        <>
+          <div className="py-2">
+            {CURATED_ACTIONS.map(({ label, action }) => {
+              const bound = controls?.[action]
+              const isCapturing = capturing === action
+              return (
+                <div
+                  key={action}
+                  className="flex items-center justify-between gap-4 py-2"
+                  style={{ borderBottom: '1px solid var(--border-soft)' }}
+                >
+                  <span className="text-sm" style={{ color: 'var(--text-soft)' }}>{label}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCapturing(action)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-center transition-all"
+                      style={{
+                        minWidth: 110,
+                        ...(isCapturing
+                          ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.4)' }
+                          : { background: 'var(--surface)', color: bound ? 'var(--text-bright)' : 'var(--text-faint)', border: '1px solid var(--border-soft)' }),
+                      }}
+                    >
+                      {isCapturing ? 'Press a key…' : friendlyKeyName(bound)}
+                    </button>
+                    {bound && !isCapturing && (
+                      <button
+                        onClick={() => setBinding(action, null)}
+                        title="Clear binding"
+                        className="w-6 h-6 rounded-lg flex items-center justify-center text-xs shrink-0"
+                        style={{ background: 'var(--surface)', color: 'var(--text-faint)', border: '1px solid var(--border-soft)' }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex items-center gap-3 py-3 flex-wrap">
+            <button
+              onClick={applyNow}
+              disabled={applying}
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-all disabled:opacity-50"
+              style={{ background: 'var(--accent-strong)', color: '#000' }}
+            >
+              {applying ? 'Applying…' : 'Apply to all instances now'}
+            </button>
+            {applyResult !== null && !applying && (
+              <span className="text-xs" style={{ color: 'var(--accent)' }}>
+                Applied to {applyResult} instance{applyResult !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs pb-4 leading-relaxed" style={{ color: 'var(--text-faint)' }}>
+            Controls are written into options.txt at every launch, so rebinding one of these actions
+            in-game will be reverted next launch - that's the point. Only takes effect on Minecraft 1.13+.
+          </p>
+        </>
+      )}
+    </>
   )
 }
 
@@ -618,6 +780,10 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
         </>
       )}
 
+      <SectionHeader>Controls</SectionHeader>
+
+      <ControlsSection settings={settings} onChange={onChange} />
+
       <SectionHeader>Updates</SectionHeader>
 
       <UpdateCheckRow />
@@ -677,6 +843,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
 /* ── Appearance tab ────────────────────────────────────── */
 function AppearanceTab({ settings, onChange }: { settings: AppSettings; onChange: (patch: Partial<AppSettings>) => void }): JSX.Element {
   const setTheme = useApp((s) => s.setTheme)
+  const setLiteMode = useApp((s) => s.setLiteMode)
   const currentTheme = normalizeThemeId(settings.theme)
 
   const applyTheme = (id: ThemeId): void => {
@@ -740,6 +907,31 @@ function AppearanceTab({ settings, onChange }: { settings: AppSettings; onChange
           )
         })}
       </div>
+
+      <SectionHeader>Performance</SectionHeader>
+
+      <Row
+        label="Lite mode"
+        desc="Strips visual effects (blur, shadows, animations, 3D skin viewer) for a snappier, lower-memory launcher. Also disables GPU hardware acceleration — that part takes effect after restarting the launcher. Good for lower-end PCs."
+      >
+        <Toggle
+          checked={!!settings.liteMode}
+          onChange={(v) => {
+            setLiteMode(v)
+            onChange({ liteMode: v })
+          }}
+        />
+      </Row>
+
+      <Row
+        label="Free memory while playing"
+        desc="Closes the launcher window to the system tray while a game is running, cutting launcher RAM to a minimum. It reopens when the game exits or from the tray icon."
+      >
+        <Toggle
+          checked={!!settings.trayWhilePlaying}
+          onChange={(v) => onChange({ trayWhilePlaying: v })}
+        />
+      </Row>
     </div>
   )
 }

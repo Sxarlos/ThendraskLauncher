@@ -34,10 +34,23 @@ function HeroSlideshow({ urls }: { urls: string[] }): JSX.Element {
     setCurrent((c) => (c + 1) % urls.length)
   }, [current, urls.length])
 
+  // Advance every 7s, pausing while the window is idle (minimised) to save CPU.
   useEffect(() => {
     if (urls.length <= 1) return
-    timerRef.current = setInterval(advance, 7000)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+    const start = (): void => {
+      if (timerRef.current) clearInterval(timerRef.current)
+      timerRef.current = setInterval(advance, 7000)
+    }
+    const stop = (): void => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+    start()
+    const unsubIdle = window.api.window.onIdle(stop)
+    const unsubActive = window.api.window.onActive(start)
+    return () => { stop(); unsubIdle(); unsubActive() }
   }, [advance, urls.length])
 
   const baseStyle: React.CSSProperties = {

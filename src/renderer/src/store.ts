@@ -17,6 +17,11 @@ export function applyTheme(theme: ThemeId): void {
   document.documentElement.setAttribute('data-theme', theme)
 }
 
+/** Toggle the `lite` class on the document root — see index.css for what it strips. */
+export function applyLiteMode(liteMode: boolean): void {
+  document.documentElement.classList.toggle('lite', liteMode)
+}
+
 interface AppState {
   page: Page
   setPage: (page: Page) => void
@@ -24,6 +29,10 @@ interface AppState {
   theme: ThemeId
   setTheme: (theme: ThemeId) => void
   loadTheme: () => Promise<void>
+
+  liteMode: boolean
+  setLiteMode: (liteMode: boolean) => void
+  loadLiteMode: () => Promise<void>
 
   accounts: Account[]
   refreshAccounts: () => Promise<void>
@@ -75,6 +84,18 @@ export const useApp = create<AppState>((set) => ({
     const theme = normalizeThemeId(settings.theme)
     applyTheme(theme)
     set({ theme })
+  },
+
+  liteMode: false,
+  setLiteMode: (liteMode) => {
+    applyLiteMode(liteMode)
+    set({ liteMode })
+  },
+  loadLiteMode: async () => {
+    const settings = await window.api.settings.get()
+    const liteMode = !!settings.liteMode
+    applyLiteMode(liteMode)
+    set({ liteMode })
   },
 
   accounts: [],
