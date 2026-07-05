@@ -1,5 +1,6 @@
 import { join } from 'path'
 import { spawn } from 'child_process'
+import { EventEmitter } from 'events'
 import { BrowserWindow } from 'electron'
 import { Client } from 'minecraft-launcher-core'
 import type { ChildProcess } from 'child_process'
@@ -9,7 +10,7 @@ import { getInstance, instanceGameDir, markPlayed, addPlayTime, updateInstance }
 import { getSettings } from './settings'
 import { ensureJava, requiredJavaMajor, detectNeoforgeJavaMajor } from './java'
 import { ensureChatMod } from './chatmod'
-import { writeDefaultOptions } from './gameoptions'
+import { writeDefaultOptions, applyControls } from './gameoptions'
 import { getVersions } from './mojang'
 import { setPlaying, setIdle } from './discord'
 import {
@@ -33,6 +34,22 @@ import { autoInstallShader } from './shaders'
 
 /** Instances currently running, keyed by instance id. */
 const running = new Map<string, ChildProcess>()
+
+// Notifies main/index.ts of the two lifecycle edges it needs for the tray
+// policy: a game reaching its 'running' state, and its process exiting
+// (running.delete). Kept as a tiny EventEmitter rather than importing index.ts
+// here, which would create a circular dependency.
+const runningStateEmitter = new EventEmitter()
+
+/** Subscribe to running-state transitions (game reached 'running', or exited). Returns an unsubscribe fn. */
+export function onRunningChanged(cb: () => void): () => void {
+  runningStateEmitter.on('change', cb)
+  return () => { runningStateEmitter.off('change', cb) }
+}
+
+function notifyRunningChanged(): void {
+  runningStateEmitter.emit('change')
+}
 
 function emit(progress: LaunchProgress): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -271,6 +288,12 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     writeDefaultOptions(instanceGameDir(instanceId), instance.mcVersion, settings.defaultGameSettings)
   }
 
+  // Apply curated default controls on every launch (1.13+ only) — runs after
+  // writeDefaultOptions so the merge sees the freshly created options.txt.
+  if (settings.defaultControls && Object.keys(settings.defaultControls).length > 0) {
+    applyControls(instanceGameDir(instanceId), instance.mcVersion, settings.defaultControls)
+  }
+
   const versions = await getVersions().catch(() => [])
   const versionType = versions.find((v) => v.id === instance.mcVersion)?.type ?? 'release'
 
@@ -350,6 +373,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
       markPlayed(instanceId)
       setState(instanceId, 'running', 'Minecraft is running.')
       setPlaying(instance.name, instance.loader, instance.mcVersion)
+      notifyRunningChanged()
     }
   })
 
@@ -364,6 +388,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
       setState(instanceId, 'closed', `Game exited (code ${code}).`)
     }
     setIdle()
+    notifyRunningChanged()
   })
 
   setState(instanceId, 'launching', 'Starting Minecraft…')

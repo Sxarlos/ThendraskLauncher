@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
 import electronUpdater from 'electron-updater'
 import { getSettings } from './settings'
+import { runningInstanceIds } from './launcher'
 import type { UpdateInfo } from '@shared/types'
 
 // ── AUTO-UPDATE (electron-updater) ──────────────────────────────────────────
@@ -148,6 +149,10 @@ export function startUpdateChecker(): void {
   autoUpdater.allowPrerelease = !!getSettings().betaUpdates
   setTimeout(() => {
     void checkForUpdate()
-    setInterval(() => void checkForUpdate(), RECHECK_INTERVAL_MS)
+    // Skip periodic re-checks while a game is running — no point spending
+    // network/CPU on a background check the user can't act on right now.
+    setInterval(() => {
+      if (runningInstanceIds().length === 0) void checkForUpdate()
+    }, RECHECK_INTERVAL_MS)
   }, 5000)
 }

@@ -36,6 +36,7 @@ export default function App(): JSX.Element {
   const addLog = useApp((s) => s.addLog)
   const clearLogs = useApp((s) => s.clearLogs)
   const loadTheme = useApp((s) => s.loadTheme)
+  const loadLiteMode = useApp((s) => s.loadLiteMode)
   const setUpdateInfo = useApp((s) => s.setUpdateInfo)
   const setUpdateDownload = useApp((s) => s.setUpdateDownload)
   const clearAllLogs = useApp((s) => s.clearAllLogs)
@@ -45,7 +46,7 @@ export default function App(): JSX.Element {
   const [showWizard, setShowWizard] = useState(false)
 
   useEffect(() => {
-    Promise.all([loadTheme(), refreshAccounts(), refreshInstances()])
+    Promise.all([loadTheme(), loadLiteMode(), refreshAccounts(), refreshInstances()])
       .then(async () => {
         const settings = await window.api.settings.get()
         if (!settings.setupComplete) setShowWizard(true)
@@ -64,7 +65,7 @@ export default function App(): JSX.Element {
     )
 
     return () => { unsubProgress(); unsubLog(); unsubUpdate(); unsubDownload() }
-  }, [loadTheme, refreshAccounts, refreshInstances, setProgress, addLog, clearLogs, setUpdateInfo])
+  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setProgress, addLog, clearLogs, setUpdateInfo])
 
   useEffect(() => {
     const unsubIdle = window.api.window.onIdle(() => {
