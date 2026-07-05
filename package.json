@@ -58,7 +58,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Thendrask Launcher"
+      "shortcutName": "Thendrask Launcher",
+      "artifactName": "Thendrask-Launcher-Setup-${version}.${ext}"
     },
     "mac": {
       "target": [
@@ -79,10 +80,10 @@
       ],
       "icon": "resources/icon.png",
       "category": "public.app-category.games",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "Thendrask-Launcher-${version}-${arch}.${ext}"
     },
     "dmg": {
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "Thendrask-Launcher-${version}-${arch}.${ext}"
     },
     "linux": {
       "target": [

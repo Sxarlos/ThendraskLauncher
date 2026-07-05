@@ -29,7 +29,7 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 | Platform | Status | Install |
 |---|---|---|
 | **Windows** | ✅ Stable | Download the `.exe` from the [Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases). |
-| **macOS** (Apple Silicon & Intel) | 🧪 **Public beta** | Grab the `.dmg` from a **[prerelease](https://github.com/Sxarlos/ThendraskLauncher/releases)**. It's unsigned, so on first launch right-click the app → **Open** to get past Gatekeeper. |
+| **macOS** (Apple Silicon & Intel) | 🧪 **Public beta** | Grab the `.dmg` from a **[prerelease](https://github.com/Sxarlos/ThendraskLauncher/releases)**. It's unsigned: try to open it, then go to **System Settings → Privacy & Security → Open Anyway** to get past Gatekeeper (on macOS 14 and earlier, right-click the app → **Open** still works too). |
 | **Linux** | 🧪 **Public beta** | Grab the `.AppImage` (or `.deb`) from a **[prerelease](https://github.com/Sxarlos/ThendraskLauncher/releases)**. `chmod +x` the AppImage, then run it. |
 
 The macOS and Linux clients are feature-complete but haven't been battle-tested on real hardware yet — that's what the beta is for. **Please report anything that breaks** by opening an issue at [github.com/Sxarlos/ThendraskLauncher/issues](https://github.com/Sxarlos/ThendraskLauncher/issues) with:
