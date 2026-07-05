@@ -60,3 +60,26 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           EP_PRE_RELEASE: 'true'
         run: npx electron-builder --publish always
+
+      # Legacy launcher versions (<= 0.3.25) ship a hand-rolled updater that,
+      # when applying an update, looks for a release asset named exactly
+      # "<exe-asset-name>.sha256" and verifies the downloaded installer's
+      # SHA-256 against its first whitespace-delimited token. If the asset is
+      # missing they silently skip verification (console warning only), so
+      # this file must keep being published even though electron-updater
+      # itself doesn't need it. Do not remove it.
+      - name: Publish legacy .sha256 checksum (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $exe = Get-ChildItem -Path dist -Filter *.exe | Select-Object -First 1
+          $hash = (Get-FileHash -Path $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          # electron-builder's GitHub publisher replaces spaces in asset names
+          # with dashes when uploading, so the checksum file (and the name
+          # inside it) must match that sanitized form.
+          $assetName = $exe.Name -replace ' ', '-'
+          $checksumFile = Join-Path dist "$assetName.sha256"
+          "$hash  $assetName" | Out-File -FilePath $checksumFile -Encoding ascii -NoNewline
+          gh release upload "$env:GITHUB_REF_NAME" $checksumFile --clobber
