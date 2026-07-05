@@ -245,3 +245,21 @@ select option {
   background: var(--surface-2);
   color: var(--text);
 }
+
+/* ════════════════════════════════════════════════════════════
+   LITE MODE
+   Pure CSS overlay applied when the user enables "Lite mode" in
+   Settings (`html.lite`, toggled from src/renderer/src/store.ts).
+   Strips transitions/animations, blur, and shadows for lower-end
+   machines. Components are not restructured — this only disables
+   effects on top of the existing markup.
+═══════════════════════════════════════════════════════════════ */
+html.lite *,
+html.lite *::before,
+html.lite *::after {
+  transition: none !important;
+  animation: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}

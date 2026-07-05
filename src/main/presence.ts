@@ -4,8 +4,24 @@ import { getInstance } from './instances'
 import { listAccounts } from './accounts'
 import { getSettings } from './settings'
 
-let registrationTimer: ReturnType<typeof setInterval> | null = null
+let registrationTimer: ReturnType<typeof setTimeout> | null = null
 let _idle = false
+let _registered = false
+
+// Push every 30s while active; back off to 60s while idle — still comfortably
+// under the relay's 90s offline TTL, but roughly halves idle background traffic.
+const ACTIVE_INTERVAL_MS = 30_000
+const IDLE_INTERVAL_MS = 60_000
+
+/** (Re)arms the self-rescheduling push timer at the cadence matching the current idle state. */
+function armTimer(): void {
+  if (registrationTimer) clearTimeout(registrationTimer)
+  if (!_registered) return
+  registrationTimer = setTimeout(() => {
+    void pushPresence()
+    armTimer()
+  }, _idle ? IDLE_INTERVAL_MS : ACTIVE_INTERVAL_MS)
+}
 
 function ownStatus(): object {
   const active = listAccounts().find((a) => a.active)
@@ -26,6 +42,7 @@ function ownStatus(): object {
 export function setIdleState(idle: boolean): void {
   _idle = idle
   void pushPresence()
+  armTimer() // re-arm at the new cadence, restarting the countdown from now
 }
 
 async function pushPresence(): Promise<void> {
@@ -44,14 +61,16 @@ async function pushPresence(): Promise<void> {
 }
 
 export function startRelayRegistration(): void {
-  if (registrationTimer) return
+  if (_registered) return
+  _registered = true
   void pushPresence()
-  registrationTimer = setInterval(() => void pushPresence(), 30_000)
+  armTimer()
 }
 
 export function stopRelayRegistration(): void {
+  _registered = false
   if (registrationTimer) {
-    clearInterval(registrationTimer)
+    clearTimeout(registrationTimer)
     registrationTimer = null
   }
 }

@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { homedir } from 'os'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import AdmZip from 'adm-zip'
@@ -8,16 +9,36 @@ import type { JavaInstall } from '@shared/types'
 
 const execFileAsync = promisify(execFile)
 
-const SCAN_ROOTS = [
-  join('C:', 'Program Files', 'Java'),
-  join('C:', 'Program Files', 'Eclipse Adoptium'),
-  join('C:', 'Program Files', 'Microsoft'),
-  join('C:', 'Program Files', 'Zulu'),
-  join('C:', 'Program Files', 'BellSoft'),
-  join('C:', 'Program Files', 'Amazon Corretto'),
-  join('C:', 'Program Files', 'Semeru'),
-  join('C:', 'Program Files (x86)', 'Java'),
-]
+/** Common directories where system JDK/JRE installs live, per platform. */
+function scanRoots(): string[] {
+  if (process.platform === 'win32') {
+    return [
+      join('C:', 'Program Files', 'Java'),
+      join('C:', 'Program Files', 'Eclipse Adoptium'),
+      join('C:', 'Program Files', 'Microsoft'),
+      join('C:', 'Program Files', 'Zulu'),
+      join('C:', 'Program Files', 'BellSoft'),
+      join('C:', 'Program Files', 'Amazon Corretto'),
+      join('C:', 'Program Files', 'Semeru'),
+      join('C:', 'Program Files (x86)', 'Java'),
+    ]
+  }
+  if (process.platform === 'darwin') {
+    return [
+      '/Library/Java/JavaVirtualMachines',
+      '/System/Library/Java/JavaVirtualMachines',
+      '/opt/homebrew/opt', // Apple-silicon Homebrew openjdk kegs
+      '/usr/local/opt',    // Intel Homebrew openjdk kegs
+    ]
+  }
+  // Linux
+  return [
+    '/usr/lib/jvm',
+    '/usr/java',
+    '/opt/java',
+    join(homedir(), '.sdkman', 'candidates', 'java'),
+  ]
+}
 
 function parseVendor(stderr: string): string | undefined {
   const l = stderr.toLowerCase()
@@ -67,13 +88,13 @@ export async function detectAllJavas(): Promise<JavaInstall[]> {
   await add('java')
 
   // 2. Common install directories
-  for (const root of SCAN_ROOTS) {
+  for (const root of scanRoots()) {
     if (!existsSync(root)) continue
     try {
       const subdirs = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory())
       for (const sub of subdirs) {
-        const exe = join(root, sub.name, 'bin', 'java.exe')
-        if (existsSync(exe)) await add(exe)
+        const exe = findJavaExeInDir(join(root, sub.name))
+        if (exe) await add(exe)
       }
     } catch {
       // Unreadable directory — skip
@@ -127,15 +148,26 @@ function findJavaExeInDir(dir: string): string | undefined {
   if (!existsSync(dir)) return undefined
   const exe = process.platform === 'win32' ? 'java.exe' : 'java'
 
-  const direct = join(dir, 'bin', exe)
-  if (existsSync(direct)) return direct
+  // Candidate `bin/java` locations relative to a JRE/JDK root:
+  //   <base>/bin/java                — Windows / Linux, and archives extracted flat
+  //   <base>/Contents/Home/bin/java  — macOS .jdk bundle layout
+  const candidates = (base: string): string[] => [
+    join(base, 'bin', exe),
+    join(base, 'Contents', 'Home', 'bin', exe),
+  ]
 
-  // Zip extracts to a subdirectory like "jdk-21.0.5+11-jre"
+  for (const cand of candidates(dir)) {
+    if (existsSync(cand)) return cand
+  }
+
+  // Archives (and system dirs) extract to a subdirectory like
+  // "jdk-21.0.5+11-jre" or a macOS "temurin-21.jdk" bundle.
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue
-      const nested = join(dir, entry.name, 'bin', exe)
-      if (existsSync(nested)) return nested
+      for (const cand of candidates(join(dir, entry.name))) {
+        if (existsSync(cand)) return cand
+      }
     }
   } catch { /* non-fatal */ }
 
