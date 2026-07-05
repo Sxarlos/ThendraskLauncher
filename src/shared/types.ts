@@ -103,6 +103,9 @@ export interface AppSettings {
   noChatRestrictions?: boolean
   usePackRam?: boolean
   defaultGameSettings?: DefaultGameSettings
+  /** Curated Minecraft control bindings applied to every instance at launch.
+   *  Keys are action ids (e.g. "key.forward"), values are MC key names (e.g. "key.keyboard.w"). */
+  defaultControls?: Record<string, string>
   curseforgeApiKey?: string
   friendCode?: string   // this user's own relay code (auto-generated)
   relayUrl?: string     // URL of the hosted presence relay
@@ -111,6 +114,10 @@ export interface AppSettings {
   discordClientId?: string
   setupComplete?: boolean
   betaUpdates?: boolean  // opt in to prerelease (beta) auto-updates
+  /** Strips animations/blur/shadows and the 3D skin viewer for lower-end PCs. */
+  liteMode?: boolean
+  /** While a game is running, close the launcher window and park it in the system tray to free RAM. */
+  trayWhilePlaying?: boolean
 }
 
 export interface JavaInstall {

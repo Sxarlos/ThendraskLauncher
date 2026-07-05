@@ -82,7 +82,8 @@ const api = {
     detectJava: (): Promise<{ path: string; version?: string; ok: boolean }> =>
       ipcRenderer.invoke('settings:detectJava'),
     applyNoChatMod: (enable: boolean): Promise<{ applied: number; skipped: number }> =>
-      ipcRenderer.invoke('settings:applyNoChatMod', enable)
+      ipcRenderer.invoke('settings:applyNoChatMod', enable),
+    applyControlsToAll: (): Promise<number> => ipcRenderer.invoke('settings:applyControlsAll')
   },
   java: {
     list: (): Promise<JavaInstall[]> => ipcRenderer.invoke('java:list')
