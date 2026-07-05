@@ -21,6 +21,9 @@
   "build": {
     "appId": "com.enderlauncher.app",
     "productName": "Thendrask Launcher",
+    "extraMetadata": {
+      "description": "Thendrask Launcher"
+    },
     "directories": {
       "output": "dist"
     },
