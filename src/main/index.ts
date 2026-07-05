@@ -1,7 +1,7 @@
 // Allow explicit GC calls (global.gc) used in idle mode
 app.commandLine.appendSwitch('js-flags', '--expose-gc')
 
-import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog, Tray, Menu } from 'electron'
 import { join, basename } from 'path'
 import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { listAccounts, loginInteractive, removeAccount, setActive, getMinecraftProfile, setActiveCape } from './accounts'
@@ -13,8 +13,9 @@ import {
   instanceGameDir,
   type CreateInstanceInput
 } from './instances'
-import { isRunning, launchInstance, runningInstanceIds } from './launcher'
+import { isRunning, launchInstance, runningInstanceIds, onRunningChanged } from './launcher'
 import { detectJava, getSettings, setSettings } from './settings'
+import { applyControls } from './gameoptions'
 import { getVersions } from './mojang'
 import { listServers, addServer, removeServer, pingServer } from './servers'
 import {
@@ -55,17 +56,36 @@ import { setCustomInstancesDir } from './persist'
 import { startRelayRegistration, getOwnPresence, setIdleState } from './presence'
 import { initDiscord, destroyDiscord } from './discord'
 import { listFriends, addFriend, removeFriend, pollFriend, generateFriendCode } from './friends'
-import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart } from './updater'
+import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart, setBetaUpdates } from './updater'
 import type { Friend } from '@shared/types'
 import type { AppSettings, BrowseParams, ServerEntry } from '@shared/types'
 
-function createWindow(): BrowserWindow {
+// Lite mode also strips GPU-accelerated rendering to remove the GPU process
+// entirely (~60-150 MB). This only takes effect if applied before the app is
+// ready, so it must run here at module load. getSettings() is synchronous and
+// only touches app.getPath('userData') + fs, which work fine pre-ready.
+if (getSettings().liteMode) {
+  app.disableHardwareAcceleration()
+}
+
+/** The single launcher window, or null while parked in the tray. */
+let mainWindow: BrowserWindow | null = null
+/** The tray icon, present only while the window has been destroyed by the tray-while-playing policy. */
+let tray: Tray | null = null
+/** True exactly when the window was intentionally destroyed by the "Free memory while playing" policy. */
+let trayModeActive = false
+
+function loadAppIcon(): Electron.NativeImage {
   const iconPath = app.isPackaged
     ? join(process.resourcesPath, 'icon.png')
     : join(__dirname, '../../resources/icon.png')
-  const icon = nativeImage.createFromPath(iconPath)
+  return nativeImage.createFromPath(iconPath)
+}
 
-  const mainWindow = new BrowserWindow({
+function createWindow(): BrowserWindow {
+  const icon = loadAppIcon()
+
+  const win = new BrowserWindow({
     width: 1180,
     height: 760,
     minWidth: 940,
@@ -83,31 +103,95 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow = win
 
-  mainWindow.on('minimize', () => {
+  win.on('ready-to-show', () => win.show())
+
+  win.on('minimize', () => {
     if (typeof global.gc === 'function') global.gc()
     setIdleState(true)
-    mainWindow.webContents.send('app:idle')
+    win.webContents.send('app:idle')
   })
 
-  mainWindow.on('restore', () => {
+  win.on('restore', () => {
     setIdleState(false)
-    mainWindow.webContents.send('app:active')
+    win.webContents.send('app:active')
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
+  })
+
+  win.webContents.setWindowOpenHandler((details) => {
     openExternalSafe(details.url).catch((err) => console.error('[window-open]', err.message))
     return { action: 'deny' }
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  return mainWindow
+  return win
+}
+
+/** Recreate/show the window and drop the tray icon. Used by the tray menu, tray click, and the auto-restore policy. */
+function showFromTray(): void {
+  trayModeActive = false
+  destroyTray()
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
+}
+
+/** Destroy the launcher window and park it in the system tray — frees the whole renderer process. */
+function enterTrayMode(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  trayModeActive = true
+  mainWindow.destroy()
+  mainWindow = null
+  createTray()
+}
+
+function createTray(): void {
+  if (tray) return
+  tray = new Tray(loadAppIcon())
+  tray.setToolTip('Thendrask Launcher')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Show Launcher', click: () => showFromTray() },
+      { type: 'separator' },
+      { label: 'Quit', click: () => app.quit() }
+    ])
+  )
+  tray.on('click', () => showFromTray())
+}
+
+function destroyTray(): void {
+  if (!tray) return
+  tray.destroy()
+  tray = null
+}
+
+/**
+ * Applies the "Free memory while playing" policy. Runs on every running-state
+ * transition reported by launcher.ts (a game reaching 'running', or exiting):
+ * on the first game to reach running state, hide the window to the tray (if
+ * the setting is on); once the last running game exits, restore it — but only
+ * if this policy is the one that hid it in the first place.
+ */
+function applyTrayPolicy(): void {
+  const aGameIsRunning = runningInstanceIds().length > 0
+  if (aGameIsRunning && getSettings().trayWhilePlaying && mainWindow && !mainWindow.isDestroyed() && !trayModeActive) {
+    enterTrayMode()
+  } else if (!aGameIsRunning && trayModeActive) {
+    showFromTray()
+  }
 }
 
 /** Open a URL in the default browser, refusing anything that isn't http(s). */
@@ -214,10 +298,22 @@ function registerIpcHandlers(): void {
     if ('discordRpc' in patch || 'discordClientId' in patch) {
       initDiscord(next.discordClientId, !!next.discordRpc)
     }
+    if ('betaUpdates' in patch) {
+      setBetaUpdates(!!next.betaUpdates)
+      void checkForUpdate()
+    }
     return next
   })
   handle('settings:detectJava', () => detectJava())
   handle('settings:applyNoChatMod', (enable: boolean) => applyToAllInstances(enable))
+  handle('settings:applyControlsAll', () => {
+    const controls = getSettings().defaultControls ?? {}
+    const all = listInstances()
+    for (const inst of all) {
+      applyControls(instanceGameDir(inst.id), inst.mcVersion, controls)
+    }
+    return all.length
+  })
 
   // Java detection
   handle('java:list', () => detectAllJavas())
@@ -411,7 +507,15 @@ app.whenReady().then(() => {
   createWindow()
   startUpdateChecker()
 
+  // "Free memory while playing": hide the window to the tray when a game
+  // reaches its running state, restore it once the last one exits.
+  onRunningChanged(applyTrayPolicy)
+
   app.on('activate', () => {
+    if (trayModeActive) {
+      showFromTray()
+      return
+    }
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
@@ -420,6 +524,15 @@ app.on('will-quit', () => {
   destroyDiscord()
 })
 
+app.on('before-quit', () => {
+  destroyTray()
+})
+
 app.on('window-all-closed', () => {
+  // The tray-while-playing policy destroys the window on purpose while a game
+  // keeps running (detached: false — quitting here would kill the game too).
+  // Only fall through to the normal quit-on-close-all behavior when that
+  // policy isn't the reason the window count hit zero.
+  if (trayModeActive) return
   if (process.platform !== 'darwin') app.quit()
 })

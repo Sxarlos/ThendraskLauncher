@@ -37,7 +37,9 @@ export interface CreateInstanceInput {
  */
 const api = {
   app: {
-    getVersion: (): Promise<string> => ipcRenderer.invoke('app:version')
+    getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
+    /** The host OS, so the renderer can adapt platform-specific UI (e.g. file pickers). */
+    platform: process.platform as NodeJS.Platform
   },
   accounts: {
     list: (): Promise<Account[]> => ipcRenderer.invoke('accounts:list'),
@@ -80,7 +82,8 @@ const api = {
     detectJava: (): Promise<{ path: string; version?: string; ok: boolean }> =>
       ipcRenderer.invoke('settings:detectJava'),
     applyNoChatMod: (enable: boolean): Promise<{ applied: number; skipped: number }> =>
-      ipcRenderer.invoke('settings:applyNoChatMod', enable)
+      ipcRenderer.invoke('settings:applyNoChatMod', enable),
+    applyControlsToAll: (): Promise<number> => ipcRenderer.invoke('settings:applyControlsAll')
   },
   java: {
     list: (): Promise<JavaInstall[]> => ipcRenderer.invoke('java:list')

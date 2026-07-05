@@ -6,6 +6,8 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 
 > Not affiliated with Mojang or Microsoft.
 
+> **Windows** builds are stable. **macOS and Linux** builds are now available as **public betas** — see [Platform support](#platform-support) below.
+
 ## Features
 
 - **Microsoft account login** — secure OAuth via `msmc`. Only the refresh token is stored, encrypted with the OS keychain (`safeStorage`). Your password is never seen or stored.
@@ -15,16 +17,33 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 - **Server monitor** — add servers to watch; the launcher pings them and shows live player counts and status.
 - **Friends list** — add friends by code and see if they're online and what they're playing. Requires a [self-hosted relay](relay/README.md).
 - **Discord Rich Presence** — shows what instance you're playing in Discord, with a button linking to ender-client.xyz.
-- **In-app updates** — the launcher checks a Gist manifest and can download and install new versions without leaving the app.
+- **In-app updates** — the launcher self-updates via `electron-updater`, checking GitHub Releases and downloading new versions without leaving the app (Windows & Linux apply automatically; macOS pending code-signing).
 - **No Chat Restrictions** — optionally injects the No Chat Restrictions mod into all modded instances (required in some regions for unsigned-chat servers).
 - **Shader auto-install** — detects missing EuphoriaPatcher shaders from game output and downloads them automatically via Modrinth.
 - **New instance defaults** — optionally write default video settings (render distance, graphics, particles, FOV) into fresh instances before first launch.
 - **Themes** — Thendrask (default), Amethyst, Ocean, Crimson, Gold, Midnight, Daylight.
 - **Play time tracking** — records time played per instance.
 
+## Platform support
+
+| Platform | Status | Install |
+|---|---|---|
+| **Windows** | ✅ Stable | Download the `.exe` from the [Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases). |
+| **macOS** (Apple Silicon & Intel) | 🧪 **Public beta** | Grab the `.dmg` from a **[prerelease](https://github.com/Sxarlos/ThendraskLauncher/releases)**. It's unsigned: try to open it, then go to **System Settings → Privacy & Security → Open Anyway** to get past Gatekeeper (on macOS 14 and earlier, right-click the app → **Open** still works too). |
+| **Linux** | 🧪 **Public beta** | Grab the `.AppImage` (or `.deb`) from a **[prerelease](https://github.com/Sxarlos/ThendraskLauncher/releases)**. `chmod +x` the AppImage, then run it. |
+
+The macOS and Linux clients are feature-complete but haven't been battle-tested on real hardware yet — that's what the beta is for. **Please report anything that breaks** by opening an issue at [github.com/Sxarlos/ThendraskLauncher/issues](https://github.com/Sxarlos/ThendraskLauncher/issues) with:
+
+- your OS and version (e.g. macOS 14.5, Ubuntu 24.04)
+- the launcher version (shown in Settings)
+- what you did, what went wrong, and any error text or logs
+
+> **Auto-update note:** Windows and Linux (AppImage) update themselves in-app. On macOS the update banner and download work, but the update can only *apply itself* once the app is code-signed — until then, update by downloading the newer `.dmg`. See [CODE_SIGNING.md](CODE_SIGNING.md).
+
 ## Requirements
 
 - **Node.js 18+** (for development)
+- **Windows, macOS, or Linux** — the launcher builds and runs on all three
 - **Java** for launching the game — Java 21 for Minecraft 1.20.5+, Java 17 for 1.17–1.20.4, Java 8 for older versions
 
 ## Develop
@@ -43,12 +62,14 @@ The friends feature requires a small relay server that you self-host. See [`rela
 
 ## In-app Updates
 
-The updater checks the GitHub Releases API directly — no token or extra secrets needed. To release a new version:
+The launcher self-updates via [electron-updater](https://www.electron.build/auto-update), checking the GitHub Releases API directly — no token or extra secrets needed. To release a new version:
 
 1. Bump `version` in `package.json`
 2. Commit and push to `main`
 3. `git tag vX.Y.Z && git push origin vX.Y.Z`
-4. CI builds the installer and creates a GitHub Release with the `.exe` attached. Users see the update banner within ~5 minutes.
+4. CI builds on Windows, macOS, and Linux and publishes a GitHub Release with the per-platform installers (`.exe`, `.dmg`, `.AppImage`, `.deb`) plus the electron-updater metadata (`latest.yml` / `latest-mac.yml` / `latest-linux.yml`) attached. Users see the update banner within ~5 minutes.
+
+> **macOS note:** because the macOS build is currently unsigned, the update banner and download work, but Squirrel.Mac only *applies* the update once the app is code-signed. See [CODE_SIGNING.md](CODE_SIGNING.md).
 
 ## Acknowledgements
 

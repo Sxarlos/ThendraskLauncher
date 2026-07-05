@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useState } from 'react'
 import type { MinecraftCape, MinecraftProfile } from '@shared/types'
 import SkinViewer3D from './SkinViewer3D'
+import { useApp } from '../store'
 
 interface Props {
   uuid: string
@@ -173,6 +174,7 @@ function NoCapeTitle({
 /* ── Main modal ─────────────────────────────────────────────── */
 
 export default function ProfileModal({ uuid, username, onClose, onReauth }: Props): JSX.Element {
+  const liteMode = useApp((s) => s.liteMode)
   const [profile, setProfile]         = useState<MinecraftProfile | null>(null)
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState<string | null>(null)
@@ -315,12 +317,47 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
               padding: 16,
             }}
           >
-            <SkinViewer3D
-              uuid={uuid}
-              capeUrl={activeCape?.url ?? null}
-              width={220}
-              height={340}
-            />
+            {liteMode ? (
+              /* Lite mode: skip mounting the 3D viewer entirely so three.js
+                 never loads into memory. Static placeholder matches the
+                 same footprint as the real viewer. */
+              <div
+                style={{
+                  width: 220,
+                  height: 340,
+                  borderRadius: 8,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border-soft)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: 96,
+                    height: 96,
+                    borderRadius: '50%',
+                    background: `hsl(${(username.charCodeAt(0) * 37) % 360},55%,40%)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 40,
+                    fontWeight: 700,
+                    color: '#fff',
+                  }}
+                >
+                  {username[0]?.toUpperCase()}
+                </div>
+              </div>
+            ) : (
+              <SkinViewer3D
+                uuid={uuid}
+                capeUrl={activeCape?.url ?? null}
+                width={220}
+                height={340}
+              />
+            )}
           </div>
 
           {/* Right - cape selector + info */}

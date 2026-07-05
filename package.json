@@ -1,7 +1,7 @@
 {
   "name": "thendrask-launcher",
   "productName": "Thendrask Launcher",
-  "version": "0.3.25",
+  "version": "0.4.0-beta.1",
   "description": "A Minecraft launcher with modpack browsing, friends presence, and automatic updates",
   "main": "./out/main/index.js",
   "author": "Sxarlos",
@@ -34,6 +34,14 @@
         "to": "icon.png"
       }
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Sxarlos",
+        "repo": "ThendraskLauncher",
+        "releaseType": "release"
+      }
+    ],
     "win": {
       "target": [
         {
@@ -50,7 +58,52 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Thendrask Launcher"
+      "shortcutName": "Thendrask Launcher",
+      "artifactName": "Thendrask-Launcher-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png",
+      "category": "public.app-category.games",
+      "artifactName": "Thendrask-Launcher-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "Thendrask-Launcher-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png",
+      "category": "Game",
+      "maintainer": "Sxarlos",
+      "synopsis": "A Minecraft launcher with modpack browsing, friends presence, and automatic updates"
     }
   },
   "dependencies": {
@@ -58,6 +111,7 @@
     "adm-zip": "^0.5.17",
     "discord-rpc": "^4.0.1",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.9",
     "minecraft-launcher-core": "^3.18.1",
     "minecraft-server-util": "^5.4.4",
     "mqtt": "^5.15.1",
