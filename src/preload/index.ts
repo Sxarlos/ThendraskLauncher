@@ -177,6 +177,16 @@ const api = {
   },
   update: {
     check: (): Promise<UpdateInfo | null> => ipcRenderer.invoke('update:check'),
+    onChecking: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('update:checking', listener)
+      return () => ipcRenderer.removeListener('update:checking', listener)
+    },
+    onUpToDate: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('update:up-to-date', listener)
+      return () => ipcRenderer.removeListener('update:up-to-date', listener)
+    },
     onAvailable: (cb: (info: UpdateInfo) => void): (() => void) => {
       const listener = (_e: unknown, info: UpdateInfo): void => cb(info)
       ipcRenderer.on('update:available', listener)
@@ -186,6 +196,16 @@ const api = {
       const listener = (_e: unknown, percent: number): void => cb(percent)
       ipcRenderer.on('update:download-progress', listener)
       return () => ipcRenderer.removeListener('update:download-progress', listener)
+    },
+    onReady: (cb: (info: UpdateInfo) => void): (() => void) => {
+      const listener = (_e: unknown, info: UpdateInfo): void => cb(info)
+      ipcRenderer.on('update:ready', listener)
+      return () => ipcRenderer.removeListener('update:ready', listener)
+    },
+    onError: (cb: (message: string) => void): (() => void) => {
+      const listener = (_e: unknown, message: string): void => cb(message)
+      ipcRenderer.on('update:error', listener)
+      return () => ipcRenderer.removeListener('update:error', listener)
     },
     openDownload: (url: string): Promise<void> => ipcRenderer.invoke('update:openDownload', url),
     download: (url: string): Promise<string> => ipcRenderer.invoke('update:download', url),

@@ -351,19 +351,20 @@ function UpdateCheckRow(): JSX.Element {
     }
   }
 
+  // Manual download (auto-download opted out in Settings) or retry after a
+  // failure. Success arrives via the 'update:ready' event.
   const startDownload = async (): Promise<void> => {
     if (!updateInfo) return
-    setUpdateDownload({ state: 'downloading', progress: 0, path: null })
+    setUpdateDownload({ state: 'downloading', progress: 0 })
     try {
-      const path = await window.api.update.download(updateInfo.downloadUrl)
-      setUpdateDownload({ state: 'ready', progress: 100, path })
+      await window.api.update.download(updateInfo.downloadUrl)
     } catch {
-      setUpdateDownload({ state: 'error', progress: 0, path: null })
+      setUpdateDownload({ state: 'error', progress: 0 })
     }
   }
 
   const installUpdate = (): void => {
-    if (updateDownload.path) window.api.update.install(updateDownload.path)
+    if (updateDownload.state === 'ready') window.api.update.install('')
   }
 
   return (
@@ -372,7 +373,7 @@ function UpdateCheckRow(): JSX.Element {
         <div className="min-w-0">
           <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>Check for Updates</div>
           <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Manually check if a new version of Thendrask Launcher is available.
+            Updates are checked automatically in the background — this checks right now.
           </div>
         </div>
         <button
@@ -422,7 +423,7 @@ function UpdateCheckRow(): JSX.Element {
                 className="shrink-0 px-3 py-1 rounded-lg font-semibold transition-opacity hover:opacity-80"
                 style={{ background: 'var(--accent)', color: '#000', fontSize: 11 }}
               >
-                Install & Restart
+                Restart to update
               </button>
             ) : null}
           </div>
@@ -449,7 +450,7 @@ function UpdateCheckRow(): JSX.Element {
 
           {updateDownload.state === 'ready' && (
             <p className="mt-1.5 text-xs" style={{ color: 'var(--accent)' }}>
-              ✓ Downloaded - click Install &amp; Restart to apply the update.
+              ✓ Downloaded in the background - restart to apply, or it installs automatically when you quit.
             </p>
           )}
         </div>
@@ -787,6 +788,16 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
       <SectionHeader>Updates</SectionHeader>
 
       <UpdateCheckRow />
+
+      <Row
+        label="Download updates automatically"
+        desc="Fetch new versions silently in the background and only ask when it's time to restart. Turn off to review and start downloads yourself — useful on metered connections."
+      >
+        <Toggle
+          checked={settings.autoDownloadUpdates !== false}
+          onChange={(v) => onChange({ autoDownloadUpdates: v })}
+        />
+      </Row>
 
       <Row
         label="Receive beta updates"
