@@ -57,8 +57,13 @@ interface AppState {
   updateInfo: UpdateInfo | null
   setUpdateInfo: (info: UpdateInfo | null) => void
 
-  updateDownload: { state: 'idle' | 'downloading' | 'ready' | 'error'; progress: number; path: string | null }
+  /** Mirrors the main process — downloads start automatically when a check finds an update. */
+  updateDownload: { state: 'idle' | 'downloading' | 'ready' | 'error'; progress: number }
   setUpdateDownload: (patch: Partial<AppState['updateDownload']>) => void
+
+  /** Transient status driving the "Checking for updates…" toast. */
+  updateCheckStatus: 'idle' | 'checking' | 'up-to-date' | 'found'
+  setUpdateCheckStatus: (status: AppState['updateCheckStatus']) => void
 
   /** Set before navigating to Library so the panel auto-opens for that instance. */
   pendingLibraryInstanceId: string | null
@@ -131,9 +136,12 @@ export const useApp = create<AppState>((set) => ({
   updateInfo: null,
   setUpdateInfo: (updateInfo) => set({ updateInfo }),
 
-  updateDownload: { state: 'idle', progress: 0, path: null },
+  updateDownload: { state: 'idle', progress: 0 },
   setUpdateDownload: (patch) =>
     set((s) => ({ updateDownload: { ...s.updateDownload, ...patch } })),
+
+  updateCheckStatus: 'idle',
+  setUpdateCheckStatus: (updateCheckStatus) => set({ updateCheckStatus }),
 
   pendingLibraryInstanceId: null,
   setPendingLibraryInstanceId: (pendingLibraryInstanceId) => set({ pendingLibraryInstanceId }),
