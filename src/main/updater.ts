@@ -34,7 +34,10 @@ const REPO = 'Sxarlos/ThendraskLauncher'
 // Re-check every 5 minutes while the app is open
 const RECHECK_INTERVAL_MS = 5 * 60 * 1000
 
-// We let the user drive download/install from the banner, matching the old UX.
+// Downloads are silent and automatic (Discord/VS Code style): when a check
+// finds an update we immediately fetch it in the background, and the renderer
+// only has to surface "restart to update" once it's ready. autoDownload stays
+// false so all downloads funnel through the guarded startBackgroundDownload().
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
 
@@ -44,6 +47,10 @@ let latest: UpdateInfo | null = null
 // electron-updater's own verdict from the last check — more reliable than a
 // hand-rolled semver compare, and it correctly orders prerelease (beta) tags.
 let updateIsAvailable = false
+// Versions we are downloading / have finished downloading, so periodic
+// re-checks (update-available fires on every one) don't restart the download.
+let downloadingVersion: string | null = null
+let readyVersion: string | null = null
 
 function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -82,6 +89,16 @@ function toAppInfo(info: { version: string; releaseNotes?: string | RawReleaseNo
 autoUpdater.on('update-available', (info) => {
   updateIsAvailable = true
   latest = toAppInfo(info)
+  if (readyVersion === info.version) {
+    // Already downloaded on an earlier check this session — just remind the
+    // renderer it can restart, don't kick off another download.
+    broadcast('update:ready', latest)
+    return
+  }
+  // Silent download unless the user opted out in Settings. Started before the
+  // 'update:available' broadcast so the renderer is already in 'downloading'
+  // when it learns about the update and never flashes the manual Download UI.
+  if (getSettings().autoDownloadUpdates !== false) void startBackgroundDownload()
   broadcast('update:available', latest)
 })
 
@@ -93,22 +110,62 @@ autoUpdater.on('download-progress', (p) => {
   broadcast('update:download-progress', Math.round(p.percent))
 })
 
-autoUpdater.on('update-downloaded', () => {
-  broadcast('update:download-progress', 100)
+autoUpdater.on('update-downloaded', (info) => {
+  downloadingVersion = null
+  readyVersion = info.version
+  broadcast('update:ready', toAppInfo(info))
 })
 
 autoUpdater.on('error', (err) => {
   console.warn('[updater]', err instanceof Error ? err.message : err)
+  broadcast('update:error', err instanceof Error ? err.message : String(err))
 })
 
-export async function checkForUpdate(): Promise<UpdateInfo | null> {
+/**
+ * Fetch the update silently in the background. Guarded so the automatic path
+ * (every successful check re-fires 'update-available') and the renderer's
+ * Retry button can't start overlapping downloads. Never throws — failures are
+ * broadcast as 'update:error' by the autoUpdater error handler above.
+ */
+async function startBackgroundDownload(): Promise<void> {
+  if (!latest) return
+  if (downloadingVersion === latest.version || readyVersion === latest.version) return
+  downloadingVersion = latest.version
+  // Synchronous with the caller — flips the renderer into 'downloading' state.
+  broadcast('update:download-progress', 0)
+  try {
+    await autoUpdater.downloadUpdate()
+  } catch {
+    // Reported via the 'error' event; clear the guard so a retry can start.
+    downloadingVersion = null
+  }
+}
+
+/**
+ * Kick off the silent download for an update we already know about — used when
+ * the user re-enables auto-download in Settings. No-op if nothing is pending
+ * or the download already ran.
+ */
+export function downloadPendingUpdate(): void {
+  if (updateIsAvailable) void startBackgroundDownload()
+}
+
+/**
+ * @param notify Broadcast 'update:checking' / 'update:up-to-date' so the
+ * renderer can show a transient "Checking for updates…" toast. Only the
+ * startup check notifies — the 5-minute re-checks and the Settings-page manual
+ * check (which renders its own inline status) stay silent.
+ */
+export async function checkForUpdate(notify = false): Promise<UpdateInfo | null> {
   // electron-updater cannot meaningfully check in an unpackaged dev build.
   if (!app.isPackaged) return null
+  if (notify) broadcast('update:checking', null)
   try {
     await autoUpdater.checkForUpdates()
     // Resolved by the 'update-available' / 'update-not-available' handlers that
     // fire during the check — this respects the beta/stable channel and orders
     // prerelease tags correctly.
+    if (notify && !updateIsAvailable) broadcast('update:up-to-date', null)
     return updateIsAvailable ? latest : null
   } catch (err) {
     console.warn('[updater] check failed:', err instanceof Error ? err.message : err)
@@ -121,11 +178,14 @@ export function openDownloadUrl(url: string): void {
   shell.openExternal(url)
 }
 
+/**
+ * Renderer-initiated download — now only the Retry path, since downloads start
+ * automatically when an update is found. Completion/failure reach the renderer
+ * via the 'update:ready' / 'update:error' broadcasts, not this return value.
+ */
 export async function downloadUpdate(_url: string): Promise<string> {
   if (!latest) throw new Error('No published update is available to download.')
-  await autoUpdater.downloadUpdate()
-  broadcast('update:download-progress', 100)
-  // The renderer only needs a truthy handle to enable the "Install" button.
+  await startBackgroundDownload()
   return latest.version
 }
 
@@ -148,7 +208,8 @@ export function startUpdateChecker(): void {
   if (!app.isPackaged) return
   autoUpdater.allowPrerelease = !!getSettings().betaUpdates
   setTimeout(() => {
-    void checkForUpdate()
+    // Only the startup check shows the "Checking for updates…" toast.
+    void checkForUpdate(true)
     // Skip periodic re-checks while a game is running — no point spending
     // network/CPU on a background check the user can't act on right now.
     setInterval(() => {

@@ -277,19 +277,20 @@ export default function Home(): JSX.Element {
     !dismissedNews.has(n.id) && (appVersion === '' || semverGte(n.id, appVersion))
   )
 
+  // Manual download (auto-download opted out in Settings) or retry after a
+  // failure. Success arrives via the 'update:ready' event.
   const startDownload = async (): Promise<void> => {
     if (!updateInfo) return
-    setUpdateDownload({ state: 'downloading', progress: 0, path: null })
+    setUpdateDownload({ state: 'downloading', progress: 0 })
     try {
-      const path = await window.api.update.download(updateInfo.downloadUrl)
-      setUpdateDownload({ state: 'ready', progress: 100, path })
+      await window.api.update.download(updateInfo.downloadUrl)
     } catch {
-      setUpdateDownload({ state: 'error', progress: 0, path: null })
+      setUpdateDownload({ state: 'error', progress: 0 })
     }
   }
 
   const installUpdate = (): void => {
-    if (updateDownload.path) (window.api as any).update.install(updateDownload.path)
+    if (updateDownload.state === 'ready') window.api.update.install('')
   }
 
   const openInstance = (id: string): void => {
@@ -356,7 +357,10 @@ export default function Home(): JSX.Element {
     <div className="h-full flex flex-col overflow-hidden" style={{ animation: 'heroFadeIn 0.4s ease-out' }}>
 
       {/* ─── UPDATE BANNER ───────────────────────────────────────── */}
-      {updateInfo && !updateDismissed && (
+      {/* Hidden while a silent background download runs (Discord/VS Code
+          style); shows a Download button in 'idle' when the user opted out
+          of auto-download, and Restart/Retry once ready or failed. */}
+      {updateInfo && !updateDismissed && updateDownload.state !== 'downloading' && (
         <div
           className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5"
           style={{
@@ -372,30 +376,22 @@ export default function Home(): JSX.Element {
             </svg>
             <span className="text-xs min-w-0">
               <span style={{ color: 'var(--accent)', fontWeight: 700 }}>v{updateInfo.version}</span>
-              <span style={{ color: 'var(--text-bright)' }}> is available</span>
+              <span style={{ color: 'var(--text-bright)' }}>
+                {updateDownload.state === 'ready' ? ' is ready to install' : ' is available'}
+              </span>
               {updateInfo.notes && (
                 <span style={{ color: 'var(--text-muted)' }}> - {updateInfo.notes}</span>
               )}
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {updateDownload.state === 'downloading' ? (
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(var(--accent-rgb),0.2)' }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{ width: `${updateDownload.progress}%`, background: 'var(--accent)' }}
-                  />
-                </div>
-                <span className="text-xs tabular-nums" style={{ color: 'var(--accent)' }}>{updateDownload.progress}%</span>
-              </div>
-            ) : updateDownload.state === 'ready' ? (
+            {updateDownload.state === 'ready' ? (
               <button
                 onClick={installUpdate}
                 className="px-3 py-1 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80"
                 style={{ background: 'var(--accent)', color: '#000' }}
               >
-                Install & Restart
+                Restart to update
               </button>
             ) : updateDownload.state === 'error' ? (
               <button
@@ -403,7 +399,7 @@ export default function Home(): JSX.Element {
                 className="px-3 py-1 rounded-lg text-xs font-semibold"
                 style={{ background: 'rgba(var(--danger-rgb),0.15)', color: 'var(--danger-soft)' }}
               >
-                Retry
+                Retry download
               </button>
             ) : (
               <button
@@ -414,18 +410,16 @@ export default function Home(): JSX.Element {
                 Download
               </button>
             )}
-            {updateDownload.state !== 'downloading' && (
-              <button
-                onClick={() => setUpdateDismissed(true)}
-                className="w-5 h-5 flex items-center justify-center rounded-md transition-colors hover:bg-white/10"
-                style={{ color: 'var(--text-faint)' }}
-                title="Dismiss"
-              >
-                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
-                </svg>
-              </button>
-            )}
+            <button
+              onClick={() => setUpdateDismissed(true)}
+              className="w-5 h-5 flex items-center justify-center rounded-md transition-colors hover:bg-white/10"
+              style={{ color: 'var(--text-faint)' }}
+              title="Dismiss"
+            >
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
+              </svg>
+            </button>
           </div>
         </div>
       )}

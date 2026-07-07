@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import AccountSwitcher from './components/AccountSwitcher'
 import SplashScreen from './components/SplashScreen'
 import SetupWizard from './components/SetupWizard'
+import UpdateToast from './components/UpdateToast'
 import Home from './pages/Home'
 import Library from './pages/Library'
 import Servers from './pages/Servers'
@@ -39,6 +40,7 @@ export default function App(): JSX.Element {
   const loadLiteMode = useApp((s) => s.loadLiteMode)
   const setUpdateInfo = useApp((s) => s.setUpdateInfo)
   const setUpdateDownload = useApp((s) => s.setUpdateDownload)
+  const setUpdateCheckStatus = useApp((s) => s.setUpdateCheckStatus)
   const clearAllLogs = useApp((s) => s.clearAllLogs)
   const Current = PAGES[page]
 
@@ -59,13 +61,39 @@ export default function App(): JSX.Element {
       setProgress(p)
     })
     const unsubLog = window.api.launch.onLog((e) => addLog(e.instanceId, e.line))
-    const unsubUpdate = window.api.update.onAvailable((info) => setUpdateInfo(info))
+    const unsubChecking = window.api.update.onChecking(() => setUpdateCheckStatus('checking'))
+    const unsubUpToDate = window.api.update.onUpToDate(() => setUpdateCheckStatus('up-to-date'))
+    const unsubUpdate = window.api.update.onAvailable((info) => {
+      // Whether a silent download starts is main's call (auto-download
+      // setting) — it flips us to 'downloading' via a progress event.
+      // Re-checks re-fire this every 5 minutes while an update is pending,
+      // so only toast the first sighting of a version.
+      if (useApp.getState().updateInfo?.version !== info.version) {
+        setUpdateCheckStatus('found')
+      }
+      setUpdateInfo(info)
+    })
     const unsubDownload = window.api.update.onDownloadProgress((percent) =>
-      setUpdateDownload({ progress: percent })
+      setUpdateDownload({ state: 'downloading', progress: percent })
     )
+    const unsubReady = window.api.update.onReady((info) => {
+      setUpdateInfo(info)
+      setUpdateDownload({ state: 'ready', progress: 100 })
+      setUpdateCheckStatus('idle')
+    })
+    const unsubUpdateError = window.api.update.onError(() => {
+      // Check failures just hide the toast; a failed download surfaces Retry.
+      setUpdateCheckStatus('idle')
+      if (useApp.getState().updateDownload.state === 'downloading') {
+        setUpdateDownload({ state: 'error' })
+      }
+    })
 
-    return () => { unsubProgress(); unsubLog(); unsubUpdate(); unsubDownload() }
-  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setProgress, addLog, clearLogs, setUpdateInfo])
+    return () => {
+      unsubProgress(); unsubLog(); unsubChecking(); unsubUpToDate()
+      unsubUpdate(); unsubDownload(); unsubReady(); unsubUpdateError()
+    }
+  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setProgress, addLog, clearLogs, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus])
 
   useEffect(() => {
     const unsubIdle = window.api.window.onIdle(() => {
@@ -103,6 +131,7 @@ export default function App(): JSX.Element {
       {appReady && showWizard && (
         <SetupWizard onComplete={() => setShowWizard(false)} />
       )}
+      <UpdateToast />
     </div>
   )
 }

@@ -114,6 +114,8 @@ export interface AppSettings {
   discordClientId?: string
   setupComplete?: boolean
   betaUpdates?: boolean  // opt in to prerelease (beta) auto-updates
+  /** Silent background update downloads. Default true (undefined = on); false shows a Download button instead. */
+  autoDownloadUpdates?: boolean
   /** Strips animations/blur/shadows and the 3D skin viewer for lower-end PCs. */
   liteMode?: boolean
   /** While a game is running, close the launcher window and park it in the system tray to free RAM. */

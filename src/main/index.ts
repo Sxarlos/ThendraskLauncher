@@ -56,7 +56,7 @@ import { setCustomInstancesDir } from './persist'
 import { startRelayRegistration, getOwnPresence, setIdleState } from './presence'
 import { initDiscord, destroyDiscord } from './discord'
 import { listFriends, addFriend, removeFriend, pollFriend, generateFriendCode } from './friends'
-import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart, setBetaUpdates } from './updater'
+import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart, setBetaUpdates, downloadPendingUpdate } from './updater'
 import type { Friend } from '@shared/types'
 import type { AppSettings, BrowseParams, ServerEntry } from '@shared/types'
 
@@ -301,6 +301,10 @@ function registerIpcHandlers(): void {
     if ('betaUpdates' in patch) {
       setBetaUpdates(!!next.betaUpdates)
       void checkForUpdate()
+    }
+    if ('autoDownloadUpdates' in patch && next.autoDownloadUpdates !== false) {
+      // Re-enabled mid-session — fetch any update we already know about.
+      downloadPendingUpdate()
     }
     return next
   })

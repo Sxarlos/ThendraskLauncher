@@ -96,19 +96,20 @@ export default function Sidebar(): JSX.Element {
     window.api.app.getVersion().then(setAppVersion).catch(() => {})
   }, [])
 
+  // Manual download (auto-download opted out in Settings) or retry after a
+  // failure. Success arrives via the 'update:ready' event.
   const startDownload = async (): Promise<void> => {
     if (!updateInfo) return
-    setUpdateDownload({ state: 'downloading', progress: 0, path: null })
+    setUpdateDownload({ state: 'downloading', progress: 0 })
     try {
-      const path = await window.api.update.download(updateInfo.downloadUrl)
-      setUpdateDownload({ state: 'ready', progress: 100, path })
+      await window.api.update.download(updateInfo.downloadUrl)
     } catch {
-      setUpdateDownload({ state: 'error', progress: 0, path: null })
+      setUpdateDownload({ state: 'error', progress: 0 })
     }
   }
 
   const installUpdate = (): void => {
-    if (updateDownload.path) (window.api as any).update.install(updateDownload.path)
+    if (updateDownload.state === 'ready') window.api.update.install('')
   }
 
   const W = collapsed ? 52 : 224
@@ -278,25 +279,13 @@ export default function Sidebar(): JSX.Element {
                   </p>
                 )}
 
-                {updateDownload.state === 'downloading' ? (
-                  <div className="mt-2 w-full">
-                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(var(--accent-rgb),0.2)' }}>
-                      <div
-                        className="h-full rounded-full transition-all duration-300"
-                        style={{ width: `${updateDownload.progress}%`, background: 'var(--accent)' }}
-                      />
-                    </div>
-                    <p className="text-[10px] mt-1 text-center tabular-nums" style={{ color: 'var(--accent)' }}>
-                      {updateDownload.progress}%
-                    </p>
-                  </div>
-                ) : updateDownload.state === 'ready' ? (
+                {updateDownload.state === 'ready' ? (
                   <button
                     onClick={installUpdate}
                     className="mt-2 w-full text-xs font-semibold rounded-md py-1 transition-opacity hover:opacity-80"
                     style={{ background: 'var(--accent)', color: '#000' }}
                   >
-                    Install &amp; Restart
+                    Restart to update
                   </button>
                 ) : updateDownload.state === 'error' ? (
                   <button
@@ -306,7 +295,21 @@ export default function Sidebar(): JSX.Element {
                   >
                     Retry
                   </button>
+                ) : updateDownload.state === 'downloading' ? (
+                  // Silent background download — just passive progress.
+                  <div className="mt-2 w-full">
+                    <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(var(--accent-rgb),0.2)' }}>
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{ width: `${updateDownload.progress}%`, background: 'var(--accent)' }}
+                      />
+                    </div>
+                    <p className="text-[10px] mt-1 text-center tabular-nums" style={{ color: 'var(--accent)' }}>
+                      Downloading… {updateDownload.progress}%
+                    </p>
+                  </div>
                 ) : (
+                  // 'idle' — the user opted out of auto-download in Settings.
                   <button
                     onClick={startDownload}
                     className="mt-2 w-full text-xs font-semibold rounded-md py-1 transition-opacity hover:opacity-80"
