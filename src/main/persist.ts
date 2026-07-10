@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 /** Root directory for all app data (per-user, OS-appropriate). */
@@ -26,15 +26,27 @@ export function instancesDir(): string {
 /** Read a JSON file under the data dir, returning `fallback` if missing/corrupt. */
 export function readJson<T>(name: string, fallback: T): T {
   const file = join(dataDir(), name)
-  try {
-    if (!existsSync(file)) return fallback
-    return JSON.parse(readFileSync(file, 'utf-8')) as T
-  } catch {
-    return fallback
+  const backup = `${file}.bak`
+  for (const candidate of [file, backup]) {
+    try {
+      if (existsSync(candidate)) return JSON.parse(readFileSync(candidate, 'utf-8')) as T
+    } catch {
+      // Try the backup before falling back to an empty/default value.
+    }
   }
+  return fallback
 }
 
-/** Write a JSON file under the data dir (pretty-printed). */
+/** Atomically write JSON and retain the previous valid file as a recovery backup. */
 export function writeJson(name: string, data: unknown): void {
-  writeFileSync(join(dataDir(), name), JSON.stringify(data, null, 2), 'utf-8')
+  const file = join(dataDir(), name)
+  const temp = `${file}.${process.pid}.tmp`
+  const backup = `${file}.bak`
+  try {
+    writeFileSync(temp, JSON.stringify(data, null, 2), { encoding: 'utf-8', flush: true })
+    if (existsSync(file)) copyFileSync(file, backup)
+    renameSync(temp, file)
+  } finally {
+    if (existsSync(temp)) rmSync(temp, { force: true })
+  }
 }

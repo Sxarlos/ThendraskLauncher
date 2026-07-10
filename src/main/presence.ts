@@ -7,6 +7,8 @@ import { getSettings } from './settings'
 let registrationTimer: ReturnType<typeof setTimeout> | null = null
 let _idle = false
 let _registered = false
+let _playingInstanceId: string | null = null
+let _playingSince: number | null = null
 
 // Push every 30s while active; back off to 60s while idle — still comfortably
 // under the relay's 90s offline TTL, but roughly halves idle background traffic.
@@ -27,6 +29,10 @@ function ownStatus(): object {
   const active = listAccounts().find((a) => a.active)
   const runningId = runningInstanceIds()[0]
   const inst = runningId ? getInstance(runningId) : null
+  if ((runningId ?? null) !== _playingInstanceId) {
+    _playingInstanceId = runningId ?? null
+    _playingSince = runningId ? Date.now() : null
+  }
 
   return {
     username: active?.username ?? 'Unknown',
@@ -34,7 +40,7 @@ function ownStatus(): object {
     playing: inst?.name ?? null,
     mcVersion: inst?.mcVersion ?? null,
     loader: inst?.loader ?? null,
-    since: inst ? Date.now() : null,
+    since: inst ? _playingSince : null,
     appVersion: app.getVersion(),
   }
 }
@@ -46,15 +52,19 @@ export function setIdleState(idle: boolean): void {
 }
 
 async function pushPresence(): Promise<void> {
-  const { relayUrl, friendCode } = getSettings()
-  if (!relayUrl || !friendCode) return
+  const { relayUrl, friendCode, presenceSecret } = getSettings()
+  if (!relayUrl || !friendCode || !presenceSecret) return
   const code = friendCode.replace(/-/g, '')
   try {
-    await net.fetch(`${relayUrl}/presence/${code}`, {
+    const response = await net.fetch(`${relayUrl}/presence/${code}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${presenceSecret}`
+      },
       body: JSON.stringify(ownStatus()),
     })
+    if (!response.ok) throw new Error(`Presence relay returned HTTP ${response.status}`)
   } catch (err) {
     console.error('[relay]', (err as Error).message)
   }

@@ -37,6 +37,9 @@ export interface Instance {
   timePlayed?: number         // total milliseconds played across all sessions
   recommendedRamMb?: number
   jvmArgs?: string           // Extra JVM flags for this instance (space/newline separated)
+  favorite?: boolean
+  group?: string
+  tags?: string[]
 }
 
 /** A specific version of a modpack from Modrinth or CurseForge. */
@@ -108,6 +111,7 @@ export interface AppSettings {
   defaultControls?: Record<string, string>
   curseforgeApiKey?: string
   friendCode?: string   // this user's own relay code (auto-generated)
+  presenceSecret?: string // private write credential for this user's relay presence
   relayUrl?: string     // URL of the hosted presence relay
   theme?: ThemeId       // UI theme (default 'thendrask')
   discordRpc?: boolean
@@ -212,6 +216,54 @@ export interface UpdateInfo {
   version: string       // e.g. "1.2.0"
   notes?: string        // short release notes shown in the banner
   downloadUrl: string   // URL opened when the user clicks Download
+}
+
+export interface ModSearchResult {
+  source: 'modrinth' | 'curseforge'
+  projectId: string
+  title: string
+  description: string
+  iconUrl?: string
+  author?: string
+  downloads: number
+}
+
+export interface LocalMod {
+  name: string
+  size: number
+  enabled: boolean
+  projectId?: string
+  source?: 'modrinth' | 'curseforge'
+  versionId?: string
+  displayName?: string
+  iconUrl?: string
+}
+
+export interface ModInstallResult {
+  installed: LocalMod[]
+  addedCount: number
+}
+
+export interface InstanceSnapshot {
+  id: string
+  instanceId: string
+  createdAt: number
+  reason: 'manual' | 'pre-update'
+  label: string
+  sizeBytes: number
+}
+
+export interface InstanceStorageInfo {
+  totalBytes: number
+  modsBytes: number
+  savesBytes: number
+  snapshotsBytes: number
+}
+
+export interface InstanceRepairResult {
+  removedBrokenFiles: number
+  reinstallScheduled: boolean
+  snapshotId: string
 }
 
 export type LaunchState = 'idle' | 'preparing' | 'downloading' | 'launching' | 'running' | 'closed' | 'error'

@@ -10,8 +10,9 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 
 ## Features
 
-- **Microsoft account login** — secure OAuth via `msmc`. Only the refresh token is stored, encrypted with the OS keychain (`safeStorage`). Your password is never seen or stored.
+- **Microsoft account login** — secure OAuth via `msmc`. Only the refresh token is stored, encrypted with the OS keychain (`safeStorage`). If secure storage is unavailable, the launcher refuses to persist the token rather than falling back to plaintext. Your password is never seen or stored.
 - **Modpack browser** — search and install modpacks from Modrinth, CurseForge, FTB, FTB Legacy, ATLauncher, and Technic Launcher. Modrinth and CurseForge support sort (Popular / Updated / Newest) and category filters.
+- **Custom modpack builder** — create a Fabric, Forge, NeoForge, or Quilt instance, search compatible client mods on Modrinth or CurseForge, install required dependencies automatically, and enable, disable, remove, or update mods in-app.
 - **Instance management** — create vanilla or modded instances for any Minecraft version. Each instance has its own isolated `.minecraft` folder.
 - **Launch** — downloads the game version and assets on first run via `minecraft-launcher-core`. Progress and live game logs stream onto the instance card.
 - **Server monitor** — add servers to watch; the launcher pings them and shows live player counts and status.
@@ -23,6 +24,10 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 - **New instance defaults** — optionally write default video settings (render distance, graphics, particles, FOV) into fresh instances before first launch.
 - **Themes** — Thendrask (default), Amethyst, Ocean, Crimson, Gold, Midnight, Daylight.
 - **Play time tracking** — records time played per instance.
+- **Safe modpack updates** — verifies required downloads, snapshots the working pack, and automatically rolls back if an update fails.
+- **Backups and repair** — create or restore snapshots, export/import portable instance backups, verify broken files, and force a clean modpack reinstall.
+- **Diagnostics and storage tools** — inspect per-instance disk usage and export a sanitized diagnostic ZIP with environment details and the latest game log.
+- **Library organisation** — favourites, groups, tags, and instant instance search.
 
 ## Platform support
 
@@ -58,7 +63,7 @@ npm run package   # build + package installer
 
 ## Friends / Presence Relay
 
-The friends feature requires a small relay server that you self-host. See [`relay/README.md`](relay/README.md) for setup instructions. Once deployed, paste the URL into **Settings → API Keys → Presence Relay URL**.
+The friends feature requires a small relay server that you self-host. Presence writes use a private per-install credential, and the relay applies body limits, field validation, capacity limits, and rate limiting. See [`relay/README.md`](relay/README.md) for setup instructions. Once deployed, paste the URL into **Settings → API Keys → Presence Relay URL**.
 
 ## In-app Updates
 

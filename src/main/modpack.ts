@@ -6,6 +6,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { spawn } from 'child_process'
+import { createHash } from 'crypto'
 import AdmZip from 'adm-zip'
 import { instanceGameDir } from './instances'
 import { getSettings } from './settings'
@@ -14,6 +15,17 @@ import { safeJoin } from './safePath'
 const MR_BASE = 'https://api.modrinth.com/v2'
 const CF_BASE = 'https://api.curseforge.com/v1'
 const UA = 'thendrask-launcher (github.com/Sxarlos/ThendraskLauncher)'
+
+function verifyPackFile(path: string, hashes?: Record<string, string>): void {
+  const expected = hashes?.sha512 ?? hashes?.sha1
+  const algorithm = hashes?.sha512 ? 'sha512' : hashes?.sha1 ? 'sha1' : null
+  if (!expected || !algorithm) return
+  const actual = createHash(algorithm).update(readFileSync(path)).digest('hex')
+  if (actual.toLowerCase() !== expected.toLowerCase()) {
+    rmSync(path, { force: true })
+    throw new Error(`Checksum verification failed for ${path}`)
+  }
+}
 
 // ── Marker file ───────────────────────────────────────────────────────────────
 // Written after a successful install so we don't re-download on every launch.
@@ -39,6 +51,10 @@ export function readMarker(instanceId: string): PackMarker | null {
 
 function writeMarker(instanceId: string, m: PackMarker): void {
   writeFileSync(markerPath(instanceId), JSON.stringify(m, null, 2))
+}
+
+export function invalidateMarker(instanceId: string): void {
+  rmSync(markerPath(instanceId), { force: true })
 }
 
 // ── Loader version resolution ─────────────────────────────────────────────────
@@ -468,6 +484,7 @@ export async function installMrpack(
   const allFiles: Array<{
     path: string
     downloads: string[]
+    hashes?: Record<string, string>
     env?: { client?: string; server?: string }
   }> = index.files ?? []
   const clientFiles = allFiles.filter((f) => f.env?.client !== 'unsupported')
@@ -482,7 +499,7 @@ export async function installMrpack(
   for (let i = 0; i < clientFiles.length; i++) {
     const f = clientFiles[i]
     const destPath = safeJoin(gameDir, f.path)
-    if (!destPath) continue
+    if (!destPath) throw new Error(`Pack contains an unsafe path: ${f.path}`)
     const destDir = dirname(destPath)
 
     if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
@@ -494,7 +511,9 @@ export async function installMrpack(
           break
         } catch { /* try next mirror */ }
       }
+      if (!existsSync(destPath)) throw new Error(`Failed to download required file: ${f.path}`)
     }
+    verifyPackFile(destPath, f.hashes)
 
     const pct = Math.round(((i + 1) / clientFiles.length) * 85)
     onProgress(`Downloading files… (${i + 1}/${clientFiles.length})`, pct)
@@ -572,9 +591,7 @@ export async function installFtbPack(
 
     if (!existsSync(fileDir)) mkdirSync(fileDir, { recursive: true })
     if (!existsSync(filePath)) {
-      try {
-        await downloadToFile(f.url, filePath)
-      } catch { /* skip files that fail */ }
+      await downloadToFile(f.url, filePath)
     }
 
     const pct = Math.round(((i + 1) / files.length) * 90)
@@ -630,6 +647,7 @@ export async function importLocalPack(
     const allFiles: Array<{
       path: string
       downloads: string[]
+      hashes?: Record<string, string>
       env?: { client?: string; server?: string }
     }> = index.files ?? []
     const clientFiles = allFiles.filter((f) => f.env?.client !== 'unsupported')
@@ -637,14 +655,16 @@ export async function importLocalPack(
     for (let i = 0; i < clientFiles.length; i++) {
       const f = clientFiles[i]
       const destPath = safeJoin(gameDir, f.path)
-      if (!destPath) continue
+      if (!destPath) throw new Error(`Pack contains an unsafe path: ${f.path}`)
       const destDir = dirname(destPath)
       if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
       if (!existsSync(destPath)) {
         for (const url of f.downloads) {
           try { await downloadToFile(url, destPath); break } catch { /* try next mirror */ }
         }
+        if (!existsSync(destPath)) throw new Error(`Failed to download required file: ${f.path}`)
       }
+      verifyPackFile(destPath, f.hashes)
       onProgress(
         `Downloading files… (${i + 1}/${clientFiles.length})`,
         Math.round(((i + 1) / clientFiles.length) * 85)
@@ -713,10 +733,10 @@ export async function importLocalPack(
       const files = ((await res.json() as any).data as any[]) ?? []
       for (const file of files) {
         done++
-        if (!file.downloadUrl) continue
+        if (!file.downloadUrl) throw new Error(`No download URL for required CurseForge file ${file.id}`)
         const dest = safeJoin(modsDir, String(file.fileName))
-        if (!dest || existsSync(dest)) continue
-        try { await downloadToFile(file.downloadUrl, dest) } catch { /* skip */ }
+        if (!dest) throw new Error(`Unsafe CurseForge file name: ${file.fileName}`)
+        if (!existsSync(dest)) await downloadToFile(file.downloadUrl, dest)
         onProgress(
           `Downloading mods… (${done}/${modEntries.length})`,
           Math.round((done / modEntries.length) * 85)
@@ -801,14 +821,12 @@ export async function installAtlPack(
 
   for (let i = 0; i < mods.length; i++) {
     const mod = mods[i]
-    if (!mod.url) continue
+    if (!mod.url) throw new Error(`ATLauncher mod ${mod.name ?? i + 1} has no download URL`)
     const fileName = mod.file ?? `${(mod.name ?? `mod_${i}`).replace(/[^A-Za-z0-9._-]/g, '_')}.jar`
     const destPath = safeJoin(modsDir, String(fileName))
-    if (!destPath) continue
+    if (!destPath) throw new Error(`Unsafe ATLauncher file name: ${fileName}`)
     if (!existsSync(destPath)) {
-      try {
-        await downloadToFile(mod.url, destPath)
-      } catch { /* skip mods that fail */ }
+      await downloadToFile(mod.url, destPath)
     }
     onProgress(`Downloading mods… (${i + 1}/${mods.length})`, Math.round(((i + 1) / mods.length) * 80))
   }
@@ -873,15 +891,13 @@ export async function installTechnicPack(
     const mods: any[] = build.mods ?? []
     for (let i = 0; i < mods.length; i++) {
       const mod = mods[i]
-      if (!mod.url) continue
+      if (!mod.url) throw new Error(`Technic mod ${mod.name ?? i + 1} has no download URL`)
       onProgress(`Downloading ${mod.name ?? `mod ${i + 1}`}…`, Math.round((i / mods.length) * 90))
-      try {
-        const modRes = await fetch(mod.url)
-        if (!modRes.ok) continue
-        const buf = Buffer.from(await modRes.arrayBuffer())
-        const zip = new AdmZip(buf)
-        zip.extractAllTo(gameDir, true)
-      } catch { /* skip */ }
+      const modRes = await fetch(mod.url)
+      if (!modRes.ok) throw new Error(`Technic mod download failed: ${modRes.status}`)
+      const buf = Buffer.from(await modRes.arrayBuffer())
+      const zip = new AdmZip(buf)
+      zip.extractAllTo(gameDir, true)
     }
   } else {
     onProgress('Downloading modpack archive…')
@@ -977,16 +993,16 @@ export async function installCfPack(
       headers: { ...cfH, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fileIds: batch.map((m) => m.fileID) })
     })
+    if (!res.ok) throw new Error(`CurseForge ${res.status}`)
     const files = (await res.json() as any).data as any[] ?? []
+    if (files.length !== batch.length) throw new Error('CurseForge did not return every required mod file.')
 
     for (const file of files) {
       done++
-      if (!file.downloadUrl) continue
+      if (!file.downloadUrl) throw new Error(`No download URL for required CurseForge file ${file.id}`)
       const dest = safeJoin(modsDir, String(file.fileName))
-      if (!dest || existsSync(dest)) continue
-      try {
-        await downloadToFile(file.downloadUrl, dest)
-      } catch { /* skip mods that fail */ }
+      if (!dest) throw new Error(`Unsafe CurseForge file name: ${file.fileName}`)
+      if (!existsSync(dest)) await downloadToFile(file.downloadUrl, dest)
       const pct = Math.round((done / modEntries.length) * 85)
       onProgress(`Downloading mods… (${done}/${modEntries.length})`, pct)
     }

@@ -1,7 +1,8 @@
 import { app } from 'electron'
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { createHash } from 'crypto'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import AdmZip from 'adm-zip'
@@ -174,7 +175,7 @@ function findJavaExeInDir(dir: string): string | undefined {
   return undefined
 }
 
-async function fetchAdoptiumPackage(major: number): Promise<{ url: string; filename: string; isZip: boolean }> {
+async function fetchAdoptiumPackage(major: number): Promise<{ url: string; filename: string; isZip: boolean; checksum: string }> {
   const os = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'mac' : 'linux'
   const arch = process.arch === 'arm64' ? 'aarch64' : 'x64'
   const apiUrl = `https://api.adoptium.net/v3/assets/latest/${major}/hotspot?architecture=${arch}&image_type=jre&jvm_impl=hotspot&os=${os}&page=0&page_size=1&project=jre&vendor=eclipse`
@@ -184,12 +185,13 @@ async function fetchAdoptiumPackage(major: number): Promise<{ url: string; filen
 
   const data = (await res.json()) as any[]
   const pkg = data[0]?.binary?.package
-  if (!pkg?.link) throw new Error(`No JRE package found for Java ${major} (${os}/${arch})`)
+  if (!pkg?.link || !pkg?.checksum) throw new Error(`No verified JRE package found for Java ${major} (${os}/${arch})`)
 
   return {
     url: pkg.link as string,
     filename: pkg.name as string,
-    isZip: (pkg.name as string).endsWith('.zip')
+    isZip: (pkg.name as string).endsWith('.zip'),
+    checksum: pkg.checksum as string
   }
 }
 
@@ -269,6 +271,12 @@ export async function ensureJava(
     }
 
     writeFileSync(archivePath, Buffer.concat(chunks.map((c) => Buffer.from(c))))
+  }
+
+  const actualChecksum = createHash('sha256').update(readFileSync(archivePath)).digest('hex')
+  if (actualChecksum.toLowerCase() !== pkg.checksum.toLowerCase()) {
+    rmSync(archivePath, { force: true })
+    throw new Error('Java download checksum verification failed. Please try again.')
   }
 
   // Extract

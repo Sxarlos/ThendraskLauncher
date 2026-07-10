@@ -12,3 +12,7 @@ export function safeJoin(baseDir: string, relPath: string): string | null {
   if (dest === base || !dest.startsWith(base + sep)) return null
   return dest
 }
+
+export function isValidInstanceId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}

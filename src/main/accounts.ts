@@ -29,13 +29,15 @@ function encrypt(token: string): string {
   if (safeStorage.isEncryptionAvailable()) {
     return safeStorage.encryptString(token).toString('base64')
   }
-  // Fallback (e.g. no keychain): store reversibly but clearly marked.
-  return 'plain:' + Buffer.from(token, 'utf-8').toString('base64')
+  throw new Error(
+    'Secure credential storage is unavailable. Configure your OS keychain/credential store, then sign in again.'
+  )
 }
 
 function decrypt(enc: string): string {
+  // Refuse legacy insecure records instead of continuing to expose the token.
   if (enc.startsWith('plain:')) {
-    return Buffer.from(enc.slice('plain:'.length), 'base64').toString('utf-8')
+    throw new Error('This saved session used insecure storage. Remove the account and sign in again.')
   }
   return safeStorage.decryptString(Buffer.from(enc, 'base64'))
 }
