@@ -14,6 +14,10 @@ export function generateFriendCode(): string {
   return `${code.slice(0, 5)}-${code.slice(5)}`
 }
 
+export function generatePresenceSecret(): string {
+  return randomBytes(32).toString('hex')
+}
+
 export function listFriends(): Friend[] {
   // Filter out any stale entries from the old host/port format
   return readJson<Friend[]>(FILE, []).filter((f) => typeof f.code === 'string')

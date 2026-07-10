@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync } from 'fs'
-import { join } from 'path'
+import { existsSync, mkdirSync, rmSync } from 'fs'
 import { randomUUID } from 'crypto'
 import type { Instance, LoaderType } from '@shared/types'
 import { instancesDir, readJson, writeJson } from './persist'
+import { isValidInstanceId, safeJoin } from './safePath'
 
 const FILE = 'instances.json'
 
@@ -24,8 +24,21 @@ export function getInstance(id: string): Instance | undefined {
 
 /** The .minecraft (game) directory for an instance. */
 export function instanceGameDir(id: string): string {
-  const dir = join(instancesDir(), id, 'minecraft')
+  const root = instanceRootDir(id)
+  const dir = safeJoin(root, 'minecraft')
+  if (!dir) throw new Error('Invalid instance game directory.')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+/** Resolve an instance root while refusing traversal and non-existent IDs. */
+export function instanceRootDir(id: string): string {
+  if (!isValidInstanceId(id)) {
+    throw new Error('Invalid instance ID.')
+  }
+  if (!getInstance(id)) throw new Error('Instance not found.')
+  const dir = safeJoin(instancesDir(), id)
+  if (!dir) throw new Error('Invalid instance directory.')
   return dir
 }
 
@@ -63,6 +76,7 @@ export function updateInstance(id: string, patch: Partial<Instance>): Instance |
   const list = load()
   const inst = list.find((i) => i.id === id)
   if (!inst) return undefined
+  if (Object.prototype.hasOwnProperty.call(patch, 'id')) throw new Error('Instance ID cannot be changed.')
   Object.assign(inst, patch)
   save(list)
   return inst
@@ -78,7 +92,9 @@ export function addPlayTime(id: string, ms: number): void {
   updateInstance(id, { timePlayed: (inst.timePlayed ?? 0) + ms })
 }
 
-export function removeInstance(id: string): Instance[] {
+export function removeInstance(id: string, deleteFiles = false): Instance[] {
+  const root = instanceRootDir(id)
   save(load().filter((i) => i.id !== id))
+  if (deleteFiles && existsSync(root)) rmSync(root, { recursive: true, force: true })
   return listInstances()
 }

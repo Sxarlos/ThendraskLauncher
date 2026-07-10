@@ -80,6 +80,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
         mcVersion,
         loader,
         loaderVersion: loaderVersion || undefined,
+        source: 'manual'
       })
       await refreshInstances()
       onClose()
@@ -164,6 +165,9 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
                 </option>
               ))}
             </select>
+            <div className="mt-3 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.2)', color: 'var(--text-muted)' }}>
+              This creates a custom modpack. After creation, open the instance’s <strong style={{ color: 'var(--accent)' }}>Mods</strong> tab to search compatible Modrinth mods or add local JARs.
+            </div>
           </div>
         )}
 
@@ -178,7 +182,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
             disabled={creating || !mcVersion}
             className="px-4 py-2 rounded-lg bg-accent2 hover:bg-accent text-black text-sm font-medium disabled:opacity-60"
           >
-            {creating ? 'Creating…' : 'Create'}
+            {creating ? 'Creating…' : loader === 'vanilla' ? 'Create instance' : 'Create custom modpack'}
           </button>
         </div>
       </div>

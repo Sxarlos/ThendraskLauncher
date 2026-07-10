@@ -6,9 +6,15 @@ import type {
   Friend,
   FriendPresence,
   Instance,
+  InstanceRepairResult,
+  InstanceSnapshot,
+  InstanceStorageInfo,
   JavaInstall,
   LaunchProgress,
+  LocalMod,
   MinecraftProfile,
+  ModInstallResult,
+  ModSearchResult,
   ModpackResult,
   MojangVersion,
   PackMod,
@@ -53,7 +59,8 @@ const api = {
       ipcRenderer.invoke('instances:create', input),
     update: (id: string, patch: Partial<Instance>): Promise<Instance | undefined> =>
       ipcRenderer.invoke('instances:update', id, patch),
-    remove: (id: string): Promise<Instance[]> => ipcRenderer.invoke('instances:remove', id),
+    remove: (id: string, deleteFiles = false): Promise<Instance[]> =>
+      ipcRenderer.invoke('instances:remove', id, deleteFiles),
     running: (): Promise<string[]> => ipcRenderer.invoke('instances:running'),
     fetchScreenshots: (id: string): Promise<string[] | null> =>
       ipcRenderer.invoke('instances:fetchScreenshots', id)
@@ -142,10 +149,44 @@ const api = {
       ipcRenderer.invoke('instance:openDir', instanceId),
     addMod: (instanceId: string, sourcePath: string): Promise<string> =>
       ipcRenderer.invoke('instance:addMod', instanceId, sourcePath),
-    listLocalMods: (instanceId: string): Promise<{ name: string; size: number }[]> =>
+    listLocalMods: (instanceId: string): Promise<LocalMod[]> =>
       ipcRenderer.invoke('instance:listLocalMods', instanceId),
     removeMod: (instanceId: string, fileName: string): Promise<void> =>
-      ipcRenderer.invoke('instance:removeMod', instanceId, fileName)
+      ipcRenderer.invoke('instance:removeMod', instanceId, fileName),
+    toggleLocalMod: (instanceId: string, fileName: string, enabled: boolean): Promise<LocalMod> =>
+      ipcRenderer.invoke('instance:toggleLocalMod', instanceId, fileName, enabled),
+    snapshots: (instanceId: string): Promise<InstanceSnapshot[]> =>
+      ipcRenderer.invoke('instance:snapshots', instanceId),
+    createSnapshot: (instanceId: string): Promise<InstanceSnapshot> =>
+      ipcRenderer.invoke('instance:createSnapshot', instanceId),
+    restoreSnapshot: (instanceId: string, snapshotId: string): Promise<InstanceSnapshot[]> =>
+      ipcRenderer.invoke('instance:restoreSnapshot', instanceId, snapshotId),
+    deleteSnapshot: (instanceId: string, snapshotId: string): Promise<InstanceSnapshot[]> =>
+      ipcRenderer.invoke('instance:deleteSnapshot', instanceId, snapshotId),
+    storage: (instanceId: string): Promise<InstanceStorageInfo> =>
+      ipcRenderer.invoke('instance:storage', instanceId),
+    repair: (instanceId: string): Promise<InstanceRepairResult> =>
+      ipcRenderer.invoke('instance:repair', instanceId),
+    diagnostics: (instanceId: string): Promise<string> =>
+      ipcRenderer.invoke('instance:diagnostics', instanceId),
+    exportBackup: (instanceId: string): Promise<string> =>
+      ipcRenderer.invoke('instance:exportBackup', instanceId),
+    importBackup: (path: string): Promise<Instance> =>
+      ipcRenderer.invoke('instance:importBackup', path)
+  },
+  customMods: {
+    search: (instanceId: string, query: string, source: 'modrinth' | 'curseforge'): Promise<ModSearchResult[]> =>
+      ipcRenderer.invoke('customMods:search', instanceId, query, source),
+    list: (instanceId: string): Promise<LocalMod[]> =>
+      ipcRenderer.invoke('customMods:list', instanceId),
+    install: (instanceId: string, projectId: string, source: 'modrinth' | 'curseforge'): Promise<ModInstallResult> =>
+      ipcRenderer.invoke('customMods:install', instanceId, projectId, source),
+    toggle: (instanceId: string, source: 'modrinth' | 'curseforge', projectId: string, enabled: boolean): Promise<LocalMod[]> =>
+      ipcRenderer.invoke('customMods:toggle', instanceId, source, projectId, enabled),
+    remove: (instanceId: string, source: 'modrinth' | 'curseforge', projectId: string): Promise<LocalMod[]> =>
+      ipcRenderer.invoke('customMods:remove', instanceId, source, projectId),
+    updateAll: (instanceId: string): Promise<ModInstallResult> =>
+      ipcRenderer.invoke('customMods:update', instanceId)
   },
   profile: {
     get: (): Promise<MinecraftProfile> => ipcRenderer.invoke('profile:get'),

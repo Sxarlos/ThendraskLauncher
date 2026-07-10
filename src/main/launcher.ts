@@ -13,6 +13,7 @@ import { ensureChatMod } from './chatmod'
 import { writeDefaultOptions, applyControls } from './gameoptions'
 import { getVersions } from './mojang'
 import { setPlaying, setIdle } from './discord'
+import { createSnapshot, restoreSnapshot } from './snapshots'
 import {
   readMarker,
   installMrpack,
@@ -105,6 +106,9 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     let effectiveMarker = marker
 
     if (needsInstall) {
+      const snapshot = marker
+        ? createSnapshot(instanceId, 'pre-update', `Before updating ${instance.name}`)
+        : null
       try {
         if (instance.source === 'modrinth') {
           effectiveMarker = await installMrpack(
@@ -144,8 +148,16 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
         }
       } catch (err) {
         console.error('[Launcher] Modpack install failed:', err)
-        setState(instanceId, 'preparing', `Modpack install failed — launching anyway`)
-        await new Promise((r) => setTimeout(r, 1500))
+        if (snapshot) {
+          try {
+            restoreSnapshot(instanceId, snapshot.id)
+          } catch (restoreError) {
+            console.error('[Launcher] Snapshot restore failed:', restoreError)
+          }
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        setState(instanceId, 'error', `Modpack install failed: ${message}`)
+        throw new Error(`Modpack install failed: ${message}`, { cause: err })
       }
     }
 

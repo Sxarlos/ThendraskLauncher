@@ -1,6 +1,6 @@
 ﻿import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
-import type { BrowseParams, Instance, ModpackResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
+import type { BrowseParams, Instance, InstanceSnapshot, InstanceStorageInfo, LocalMod, ModSearchResult, ModpackResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
 import { activeAccount, useApp } from '../store'
 import NewInstanceModal from '../components/NewInstanceModal'
 import { ipcError } from '../lib/ipcError'
@@ -113,8 +113,25 @@ function InstanceCard({
   }
 
   const remove = async (): Promise<void> => {
-    await window.api.instances.remove(instance.id)
-    await refreshInstances()
+    const confirmed = window.confirm(
+      `Delete “${instance.name}” and all of its local files? This cannot be undone.`
+    )
+    if (!confirmed) return
+    try {
+      await window.api.instances.remove(instance.id, true)
+      await refreshInstances()
+    } catch (e) {
+      setError(ipcError(e))
+    }
+  }
+
+  const toggleFavorite = async (): Promise<void> => {
+    try {
+      await window.api.instances.update(instance.id, { favorite: !instance.favorite })
+      await refreshInstances()
+    } catch (e) {
+      setError(ipcError(e))
+    }
   }
 
   const [hovered, setHovered] = useState(false)
@@ -213,12 +230,21 @@ function InstanceCard({
           ⚙
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); void remove() }}
+          onClick={(e) => { e.stopPropagation(); void toggleFavorite() }}
           className="px-3 py-2 rounded-xl text-sm transition-colors"
+          style={{ background: 'var(--surface-2)', color: instance.favorite ? 'var(--warning)' : 'var(--text-muted)', border: '1px solid var(--border-soft)' }}
+          title={instance.favorite ? 'Remove from favourites' : 'Add to favourites'}
+        >
+          {instance.favorite ? '★' : '☆'}
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); void remove() }}
+          disabled={running || busy}
+          className="px-3 py-2 rounded-xl text-sm transition-colors disabled:opacity-40"
           style={{ background: 'var(--surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--danger-rgb),0.12)'; e.currentTarget.style.color = 'var(--danger-soft)'; e.currentTarget.style.borderColor = 'rgba(var(--danger-rgb),0.2)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border-soft)' }}
-          title="Delete instance"
+          title={running || busy ? 'Stop the instance before deleting it' : 'Delete instance'}
         >
           🗑
         </button>
@@ -1628,7 +1654,28 @@ function InstanceSettingsTab({
   const [ramSaved, setRamSaved] = useState(false)
   const [jvmArgs, setJvmArgs] = useState(instance.jvmArgs ?? '')
   const [jvmSaved, setJvmSaved] = useState(false)
+  const [group, setGroup] = useState(instance.group ?? '')
+  const [tags, setTags] = useState((instance.tags ?? []).join(', '))
+  const [snapshots, setSnapshots] = useState<InstanceSnapshot[]>([])
+  const [storage, setStorage] = useState<InstanceStorageInfo | null>(null)
+  const [maintenanceBusy, setMaintenanceBusy] = useState(false)
+  const [maintenanceMessage, setMaintenanceMessage] = useState('')
   const setError = useApp((s) => s.setError)
+
+  const loadMaintenance = useCallback(async (): Promise<void> => {
+    const [nextSnapshots, nextStorage] = await Promise.all([
+      window.api.instance.snapshots(instance.id),
+      window.api.instance.storage(instance.id)
+    ])
+    setSnapshots(nextSnapshots)
+    setStorage(nextStorage)
+  }, [instance.id])
+
+  useEffect(() => {
+    // Async IPC hydration for this instance's maintenance panel.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadMaintenance().catch((e) => setError(ipcError(e)))
+  }, [loadMaintenance, setError])
 
   const saveName = async (): Promise<void> => {
     const trimmed = name.trim()
@@ -1666,8 +1713,65 @@ function InstanceSettingsTab({
     }
   }
 
+  const saveOrganisation = async (): Promise<void> => {
+    try {
+      await window.api.instances.update(instance.id, {
+        group: group.trim() || undefined,
+        tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 20)
+      })
+      await onUpdated()
+      setMaintenanceMessage('Organisation saved.')
+    } catch (e) {
+      setError(ipcError(e))
+    }
+  }
+
   const openDir = (): void => {
     ;(window.api as any).instance?.openDir?.(instance.id)
+  }
+
+  const runMaintenance = async (action: () => Promise<void>): Promise<void> => {
+    setMaintenanceBusy(true)
+    setMaintenanceMessage('')
+    try {
+      await action()
+      await loadMaintenance()
+    } catch (e) {
+      setError(ipcError(e))
+    } finally {
+      setMaintenanceBusy(false)
+    }
+  }
+
+  const makeSnapshot = (): void => {
+    void runMaintenance(async () => {
+      await window.api.instance.createSnapshot(instance.id)
+      setMaintenanceMessage('Snapshot created.')
+    })
+  }
+
+  const repair = (): void => {
+    if (!window.confirm('Create a safety snapshot and prepare this instance for repair on its next launch?')) return
+    void runMaintenance(async () => {
+      const result = await window.api.instance.repair(instance.id)
+      setMaintenanceMessage(
+        `${result.removedBrokenFiles} broken file(s) removed.${result.reinstallScheduled ? ' The modpack will be reinstalled on next launch.' : ''}`
+      )
+    })
+  }
+
+  const diagnostics = (): void => {
+    void runMaintenance(async () => {
+      const path = await window.api.instance.diagnostics(instance.id)
+      setMaintenanceMessage(`Diagnostic bundle created: ${path}`)
+    })
+  }
+
+  const exportBackup = (): void => {
+    void runMaintenance(async () => {
+      const path = await window.api.instance.exportBackup(instance.id)
+      setMaintenanceMessage(`Portable backup created: ${path}`)
+    })
   }
 
   const RAM_OPTIONS = [1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288, 16384]
@@ -1702,6 +1806,15 @@ function InstanceSettingsTab({
             {nameSaved ? 'Saved ✓' : 'Rename'}
           </button>
         </div>
+      </div>
+
+      <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
+        <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-bright)' }}>Group and tags</div>
+        <div className="grid grid-cols-2 gap-2">
+          <input value={group} onChange={(e) => setGroup(e.target.value)} placeholder="Group, e.g. SMP" className="px-3 py-2 rounded-xl text-sm outline-none" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-bright)' }} />
+          <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Tags, comma separated" className="px-3 py-2 rounded-xl text-sm outline-none" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-bright)' }} />
+        </div>
+        <button onClick={saveOrganisation} className="mt-2 px-3 py-1.5 rounded-xl text-xs font-semibold" style={{ background: 'var(--surface-2)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>Save organisation</button>
       </div>
 
       {/* Info row */}
@@ -1839,6 +1952,63 @@ function InstanceSettingsTab({
         </button>
       </div>
 
+      {/* ── Maintenance ──────────────────────────────── */}
+      <div className="text-[10px] font-bold uppercase tracking-[0.18em] pt-5 pb-1" style={{ color: 'var(--text-faint)' }}>Maintenance & backups</div>
+      <div className="py-4 space-y-3" style={{ borderBottom: '1px solid var(--border-soft)' }}>
+        {storage && (
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              ['Total', storage.totalBytes],
+              ['Mods', storage.modsBytes],
+              ['Saves', storage.savesBytes],
+              ['Snapshots', storage.snapshotsBytes]
+            ].map(([label, bytes]) => (
+              <div key={String(label)} className="rounded-xl p-2.5" style={{ background: 'var(--surface-2)' }}>
+                <div className="text-[10px]" style={{ color: 'var(--text-faint)' }}>{label}</div>
+                <div className="text-xs font-semibold mt-0.5" style={{ color: 'var(--text-bright)' }}>{fmtBytes(Number(bytes))}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button disabled={maintenanceBusy} onClick={makeSnapshot} className="px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--accent-strong)', color: '#000' }}>Create snapshot</button>
+          <button disabled={maintenanceBusy} onClick={repair} className="px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}>Verify & repair</button>
+          <button disabled={maintenanceBusy} onClick={diagnostics} className="px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}>Export diagnostics</button>
+          <button disabled={maintenanceBusy} onClick={exportBackup} className="px-3 py-2 rounded-xl text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}>Export portable backup</button>
+        </div>
+        {maintenanceMessage && <p className="text-xs break-all" style={{ color: 'var(--accent)' }}>{maintenanceMessage}</p>}
+        {snapshots.length > 0 && (
+          <div className="space-y-1.5">
+            {snapshots.map((snapshot) => (
+              <div key={snapshot.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: 'var(--surface-2)' }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium truncate" style={{ color: 'var(--text-bright)' }}>{snapshot.label}</div>
+                  <div className="text-[10px]" style={{ color: 'var(--text-faint)' }}>{new Date(snapshot.createdAt).toLocaleString()} · {fmtBytes(snapshot.sizeBytes)}</div>
+                </div>
+                <button
+                  disabled={maintenanceBusy}
+                  onClick={() => {
+                    if (!window.confirm('Restore this snapshot? Current pack files will be replaced.')) return
+                    void runMaintenance(async () => {
+                      await window.api.instance.restoreSnapshot(instance.id, snapshot.id)
+                      setMaintenanceMessage('Snapshot restored.')
+                    })
+                  }}
+                  className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-50"
+                  style={{ color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}
+                >Restore</button>
+                <button
+                  disabled={maintenanceBusy}
+                  onClick={() => void runMaintenance(async () => { await window.api.instance.deleteSnapshot(instance.id, snapshot.id) })}
+                  className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-50"
+                  style={{ color: 'var(--danger-soft)' }}
+                >Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ── Files ────────────────────────────────────── */}
       <div className="text-[10px] font-bold uppercase tracking-[0.18em] pt-5 pb-1" style={{ color: 'var(--text-faint)' }}>Files</div>
 
@@ -1877,7 +2047,9 @@ function InstanceDetailPanel({
   instance: Instance
   onBack: () => void
 }): JSX.Element {
-  const [detailTab, setDetailTab] = useState<'overview' | 'changelog' | 'mods' | 'versions' | 'console' | 'settings'>('overview')
+  const [detailTab, setDetailTab] = useState<'overview' | 'changelog' | 'mods' | 'versions' | 'console' | 'settings'>(
+    instance.externalId && instance.source !== 'manual' ? 'overview' : instance.loader !== 'vanilla' ? 'mods' : 'settings'
+  )
   const [versions, setVersions] = useState<PackVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(true)
   const [versionsError, setVersionsError] = useState<string | null>(null)
@@ -1886,7 +2058,14 @@ function InstanceDetailPanel({
   const [modsLoaded, setModsLoaded] = useState(false)
   const [modsError, setModsError] = useState<string | null>(null)
   const [switching, setSwitching] = useState<string | null>(null)
-  const [localMods, setLocalMods] = useState<{ name: string; size: number }[]>([])
+  const [localMods, setLocalMods] = useState<LocalMod[]>([])
+  const [managedMods, setManagedMods] = useState<LocalMod[]>([])
+  const [modSource, setModSource] = useState<'modrinth' | 'curseforge'>('modrinth')
+  const [modQuery, setModQuery] = useState('')
+  const [modResults, setModResults] = useState<ModSearchResult[]>([])
+  const [modSearching, setModSearching] = useState(false)
+  const [installingProject, setInstallingProject] = useState<string | null>(null)
+  const [updatingCustomMods, setUpdatingCustomMods] = useState(false)
   const [addingMod, setAddingMod] = useState(false)
   const [overview, setOverview] = useState<PackOverview | null>(null)
   const [overviewLoading, setOverviewLoading] = useState(false)
@@ -1957,8 +2136,13 @@ function InstanceDetailPanel({
   // Fetch local mods whenever the Mods tab is active
   useEffect(() => {
     if (detailTab !== 'mods') return
-    ;(window.api as any).instance?.listLocalMods?.(instance.id)
-      .then(setLocalMods)
+    Promise.all([
+      window.api.instance.listLocalMods(instance.id),
+      window.api.customMods.list(instance.id)
+    ]).then(([local, managed]) => {
+      setLocalMods(local)
+      setManagedMods(managed)
+    })
       .catch(() => {})
   }, [detailTab, instance.id])
 
@@ -2032,6 +2216,69 @@ function InstanceDetailPanel({
       setLocalMods((prev) => prev.filter((m) => m.name !== fileName))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to remove mod')
+    }
+  }
+
+  const toggleLocalMod = async (mod: LocalMod): Promise<void> => {
+    try {
+      const updated = await window.api.instance.toggleLocalMod(instance.id, mod.name, !mod.enabled)
+      setLocalMods((current) => current.map((item) => item.name === mod.name ? updated : item))
+    } catch (e) {
+      setError(ipcError(e))
+    }
+  }
+
+  const searchMods = async (): Promise<void> => {
+    setModSearching(true)
+    try {
+      setModResults(await window.api.customMods.search(instance.id, modQuery, modSource))
+    } catch (e) {
+      setError(ipcError(e))
+    } finally {
+      setModSearching(false)
+    }
+  }
+
+  const installMod = async (projectId: string, source: 'modrinth' | 'curseforge'): Promise<void> => {
+    setInstallingProject(projectId)
+    try {
+      const result = await window.api.customMods.install(instance.id, projectId, source)
+      setManagedMods(result.installed)
+      setModResults((current) => current.filter((item) => item.projectId !== projectId))
+    } catch (e) {
+      setError(ipcError(e))
+    } finally {
+      setInstallingProject(null)
+    }
+  }
+
+  const toggleManaged = async (mod: LocalMod): Promise<void> => {
+    if (!mod.projectId) return
+    try {
+      setManagedMods(await window.api.customMods.toggle(instance.id, mod.source ?? 'modrinth', mod.projectId, !mod.enabled))
+    } catch (e) {
+      setError(ipcError(e))
+    }
+  }
+
+  const removeManaged = async (mod: LocalMod): Promise<void> => {
+    if (!mod.projectId || !window.confirm(`Remove ${mod.displayName ?? mod.name}? Required libraries are kept in case another mod uses them.`)) return
+    try {
+      setManagedMods(await window.api.customMods.remove(instance.id, mod.source ?? 'modrinth', mod.projectId))
+    } catch (e) {
+      setError(ipcError(e))
+    }
+  }
+
+  const updateCustomMods = async (): Promise<void> => {
+    setUpdatingCustomMods(true)
+    try {
+      const result = await window.api.customMods.updateAll(instance.id)
+      setManagedMods(result.installed)
+    } catch (e) {
+      setError(ipcError(e))
+    } finally {
+      setUpdatingCustomMods(false)
     }
   }
 
@@ -2186,7 +2433,7 @@ function InstanceDetailPanel({
           </button>
         )}
 
-        {hasModSource && (['mods', 'versions'] as const).map((t) => (
+        {([...(instance.loader !== 'vanilla' ? ['mods'] as const : []), ...(hasModSource ? ['versions'] as const : [])]).map((t) => (
           <button
             key={t}
             onClick={() => setDetailTab(t)}
@@ -2200,10 +2447,10 @@ function InstanceDetailPanel({
               />
             )}
             {t === 'mods' ? 'Mods' : 'Versions'}
-            {t === 'mods' && modsLoaded && mods.length > 0 && (
+            {t === 'mods' && (managedMods.length + localMods.length + mods.length) > 0 && (
               <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
                 style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }}>
-                {mods.length}
+                {managedMods.length + localMods.length + mods.length}
               </span>
             )}
             {t === 'versions' && !versionsLoading && versions.length > 0 && (
@@ -2278,22 +2525,68 @@ function InstanceDetailPanel({
             {/* Mods tab toolbar */}
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
-                {hasModSource ? 'Pack mods' : 'Mods'}
+                {hasModSource ? 'Pack mods and additions' : 'Custom modpack builder'}
               </span>
-              <button
-                onClick={addMods}
-                disabled={addingMod}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-                style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}
-                onMouseEnter={(e) => { if (!addingMod) e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.2)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.12)' }}
-              >
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M6 1v10M1 6h10"/>
-                </svg>
-                {addingMod ? 'Adding…' : 'Add Mod'}
-              </button>
+              <div className="flex gap-2">
+                {managedMods.length > 0 && <button onClick={updateCustomMods} disabled={updatingCustomMods || running} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}>{updatingCustomMods ? 'Updating…' : 'Update all'}</button>}
+                <button onClick={addMods} disabled={addingMod || running} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50" style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 1v10M1 6h10"/></svg>
+                  {addingMod ? 'Adding…' : 'Add local JAR'}
+                </button>
+              </div>
             </div>
+
+            <div className="rounded-2xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
+              <div className="flex gap-1 mb-3">
+                {(['modrinth', 'curseforge'] as const).map((source) => <button
+                  key={source}
+                  onClick={() => { setModSource(source); setModResults([]) }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={modSource === source
+                    ? { background: source === 'modrinth' ? 'rgba(29,209,161,0.16)' : 'rgba(249,115,22,0.16)', color: source === 'modrinth' ? '#1dd1a1' : '#fb923c', border: `1px solid ${source === 'modrinth' ? 'rgba(29,209,161,0.3)' : 'rgba(249,115,22,0.3)'}` }
+                    : { background: 'var(--surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }}
+                >{source === 'modrinth' ? 'Modrinth' : 'CurseForge'}</button>)}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={modQuery}
+                  onChange={(e) => setModQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void searchMods() }}
+                  placeholder={`Search ${modSource === 'modrinth' ? 'Modrinth' : 'CurseForge'} ${instance.loader} mods for Minecraft ${instance.mcVersion}`}
+                  className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
+                  style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-bright)' }}
+                />
+                <button onClick={searchMods} disabled={modSearching || running} className="px-4 py-2 rounded-xl text-sm font-semibold text-black disabled:opacity-50" style={{ background: 'var(--accent-strong)' }}>{modSearching ? 'Searching…' : `Search ${modSource === 'modrinth' ? 'Modrinth' : 'CurseForge'}`}</button>
+              </div>
+              <p className="text-[11px] mt-2" style={{ color: 'var(--text-faint)' }}>Results are filtered to this Minecraft version and loader. Required dependencies are installed automatically.</p>
+            </div>
+
+            {modResults.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {modResults.map((result) => {
+                  const installed = managedMods.some((mod) => (mod.source ?? 'modrinth') === result.source && mod.projectId === result.projectId)
+                  return <div key={result.projectId} className="flex gap-3 p-3 rounded-xl" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
+                    <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--surface-2)' }}>{result.iconUrl ? <img src={result.iconUrl} alt="" className="w-full h-full object-cover" /> : '🔧'}</div>
+                    <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate" style={{ color: 'var(--text-bright)' }}>{result.title}</div><div className="text-[11px] line-clamp-2" style={{ color: 'var(--text-muted)' }}>{result.description}</div></div>
+                    <button onClick={() => void installMod(result.projectId, result.source)} disabled={installed || installingProject !== null || running} className="self-center px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50" style={{ background: installed ? 'var(--surface-2)' : 'var(--accent-strong)', color: installed ? 'var(--text-muted)' : '#000' }}>{installed ? 'Installed' : installingProject === result.projectId ? 'Installing…' : 'Install'}</button>
+                  </div>
+                })}
+              </div>
+            )}
+
+            {managedMods.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Managed mods ({managedMods.length})</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {managedMods.map((mod) => <div key={mod.projectId} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', opacity: mod.enabled ? 1 : 0.6 }}>
+                    <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--surface-2)' }}>{mod.iconUrl ? <img src={mod.iconUrl} alt="" className="w-full h-full object-cover" /> : '🔧'}</div>
+                    <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate" style={{ color: 'var(--text-bright)' }}>{mod.displayName ?? mod.name.replace(/\.jar(?:\.disabled)?$/i, '')}</div><div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{fmtBytes(mod.size)} · {mod.enabled ? 'Enabled' : 'Disabled'} · {(mod.source ?? 'modrinth') === 'modrinth' ? 'Modrinth' : 'CurseForge'}</div></div>
+                    <button onClick={() => void toggleManaged(mod)} disabled={running} className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-50" style={{ color: 'var(--accent)' }}>{mod.enabled ? 'Disable' : 'Enable'}</button>
+                    <button onClick={() => void removeManaged(mod)} disabled={running} className="text-sm disabled:opacity-50" style={{ color: 'var(--danger-soft)' }} title="Remove mod">×</button>
+                  </div>)}
+                </div>
+              </div>
+            )}
 
             {/* Update banner (if update available) */}
             {hasUpdate && latestVersion && (
@@ -2321,13 +2614,13 @@ function InstanceDetailPanel({
             {/* Pack mods list */}
             {hasModSource ? (
               <ModsTabContent mods={mods} loading={modsLoading} loaded={modsLoaded} error={modsError} />
-            ) : (
+            ) : managedMods.length === 0 && localMods.length === 0 && modResults.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center" style={{ color: 'var(--text-dim)' }}>
                 <div className="text-4xl mb-4">🔧</div>
-                <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Manual instance</p>
-                <p className="text-xs mt-1">Use the Add Mod button above to drop in custom JARs.</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Start building your modpack</p>
+                <p className="text-xs mt-1">Search Modrinth above or add a local JAR.</p>
               </div>
-            )}
+            ) : null}
 
             {/* Local / manually added mods */}
             {localMods.length > 0 && (
@@ -2352,10 +2645,11 @@ function InstanceDetailPanel({
                         <div className="text-sm font-medium truncate" style={{ color: 'var(--text-bright)' }}>
                           {mod.name.replace(/\.jar$/i, '')}
                         </div>
-                        <div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                          {fmtBytes(mod.size)}
-                        </div>
+                      <div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
+                          {fmtBytes(mod.size)} · {mod.enabled ? 'Enabled' : 'Disabled'}
                       </div>
+                      </div>
+                      <button onClick={() => void toggleLocalMod(mod)} disabled={running} className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-50" style={{ color: 'var(--accent)' }}>{mod.enabled ? 'Disable' : 'Enable'}</button>
                       <button
                         onClick={() => removeMod(mod.name)}
                         className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg"
@@ -2422,6 +2716,20 @@ export default function Library(): JSX.Element {
       await refreshInstances()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed.')
+    } finally {
+      setImporting(false)
+    }
+  }, [refreshInstances, setError])
+
+  const importBackup = useCallback(async (): Promise<void> => {
+    const filePath = await window.api.dialog.pickFile([{ name: 'Thendrask backup', extensions: ['zip'] }])
+    if (!filePath) return
+    setImporting(true)
+    try {
+      await window.api.instance.importBackup(filePath)
+      await refreshInstances()
+    } catch (e) {
+      setError(ipcError(e))
     } finally {
       setImporting(false)
     }
@@ -2501,6 +2809,15 @@ export default function Library(): JSX.Element {
                 {importing ? 'Importing…' : '↑ Import'}
               </button>
               <button
+                onClick={importBackup}
+                disabled={importing}
+                className="px-3 py-1.5 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+                style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}
+                title="Restore a portable Thendrask backup"
+              >
+                Restore backup
+              </button>
+              <button
                 onClick={() => setShowNew(true)}
                 className="px-4 py-1.5 rounded-xl text-sm font-semibold text-black transition-all"
                 style={{ background: 'var(--accent-strong)' }}
@@ -2552,6 +2869,18 @@ function MyInstancesContent({
   const instances = useApp((s) => s.instances)
   const refreshInstances = useApp((s) => s.refreshInstances)
   const accounts = useApp((s) => s.accounts)
+  const [query, setQuery] = useState('')
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const visibleInstances = instances
+    .filter((instance) => !normalizedQuery || [
+      instance.name,
+      instance.mcVersion,
+      instance.loader,
+      instance.group ?? '',
+      ...(instance.tags ?? [])
+    ].some((value) => value.toLowerCase().includes(normalizedQuery)))
+    .sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite))
 
   useEffect(() => {
     refreshInstances()
@@ -2577,6 +2906,16 @@ function MyInstancesContent({
         </div>
       )}
 
+      {instances.length > 0 && (
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search instances, groups, tags, versions…"
+          className="w-full mb-4 px-4 py-2.5 rounded-xl text-sm outline-none"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text-bright)' }}
+        />
+      )}
+
       {instances.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <span className="text-5xl mb-4">🧱</span>
@@ -2587,7 +2926,7 @@ function MyInstancesContent({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {instances.map((i) => (
+          {visibleInstances.map((i) => (
             <InstanceCard key={i.id} instance={i} onManage={(inst) => onManage(inst.id)} />
           ))}
         </div>
