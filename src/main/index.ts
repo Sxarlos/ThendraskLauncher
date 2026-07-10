@@ -3,7 +3,7 @@ app.commandLine.appendSwitch('js-flags', '--expose-gc')
 
 import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog, Tray, Menu } from 'electron'
 import { join, basename } from 'path'
-import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, copyFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
 import { listAccounts, loginInteractive, removeAccount, setActive, getMinecraftProfile, setActiveCape } from './accounts'
 import {
   createInstance,
@@ -55,8 +55,18 @@ import { detectAllJavas } from './java'
 import { setCustomInstancesDir } from './persist'
 import { startRelayRegistration, getOwnPresence, setIdleState } from './presence'
 import { initDiscord, destroyDiscord } from './discord'
-import { listFriends, addFriend, removeFriend, pollFriend, generateFriendCode } from './friends'
+import { listFriends, addFriend, removeFriend, pollFriend, generateFriendCode, generatePresenceSecret } from './friends'
 import { startUpdateChecker, checkForUpdate, openDownloadUrl, downloadUpdate, installAndRestart, setBetaUpdates, downloadPendingUpdate } from './updater'
+import { createSnapshot, deleteSnapshot, listSnapshots, restoreSnapshot } from './snapshots'
+import { createDiagnosticBundle, exportInstanceBackup, importInstanceBackup, instanceStorage, repairInstance } from './maintenance'
+import {
+  installCompatibleMod,
+  listManagedMods,
+  removeManagedMod,
+  searchCompatibleMods,
+  toggleManagedMod,
+  updateManagedMods
+} from './customMods'
 import type { Friend } from '@shared/types'
 import type { AppSettings, BrowseParams, ServerEntry } from '@shared/types'
 
@@ -205,8 +215,11 @@ function openExternalSafe(url: string): Promise<void> {
 
 /** Small helper to register an async IPC handler with consistent error logging. */
 function handle<T>(channel: string, fn: (...args: any[]) => T | Promise<T>): void {
-  ipcMain.handle(channel, async (_e, ...args) => {
+  ipcMain.handle(channel, async (event, ...args) => {
     try {
+      if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error('Rejected IPC call from an untrusted renderer.')
+      }
       return await fn(...args)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -273,8 +286,35 @@ function registerIpcHandlers(): void {
     }
     return inst
   })
-  handle('instances:remove', (id: string) => removeInstance(id))
-  handle('instances:update', (id: string, patch: Partial<import('@shared/types').Instance>) => updateInstance(id, patch))
+  handle('instances:remove', (id: string, deleteFiles = false) => {
+    if (isRunning(id)) throw new Error('Stop the instance before removing it.')
+    return removeInstance(id, deleteFiles)
+  })
+  handle('instances:update', (id: string, patch: Partial<import('@shared/types').Instance>) => {
+    const allowed: Partial<import('@shared/types').Instance> = {}
+    if ('name' in patch) {
+      if (typeof patch.name !== 'string' || !patch.name.trim() || patch.name.length > 100) throw new Error('Invalid instance name.')
+      allowed.name = patch.name.trim()
+    }
+    if ('recommendedRamMb' in patch) {
+      if (patch.recommendedRamMb !== undefined && (!Number.isInteger(patch.recommendedRamMb) || patch.recommendedRamMb < 512 || patch.recommendedRamMb > 65536)) throw new Error('Invalid RAM value.')
+      allowed.recommendedRamMb = patch.recommendedRamMb
+    }
+    if ('jvmArgs' in patch) {
+      if (patch.jvmArgs !== undefined && (typeof patch.jvmArgs !== 'string' || patch.jvmArgs.length > 4000)) throw new Error('Invalid JVM arguments.')
+      allowed.jvmArgs = patch.jvmArgs
+    }
+    if ('favorite' in patch) allowed.favorite = patch.favorite === true
+    if ('group' in patch) {
+      if (patch.group !== undefined && (typeof patch.group !== 'string' || patch.group.length > 50)) throw new Error('Invalid group.')
+      allowed.group = patch.group?.trim() || undefined
+    }
+    if ('tags' in patch) {
+      if (!Array.isArray(patch.tags) || patch.tags.length > 20 || patch.tags.some((tag) => typeof tag !== 'string' || tag.length > 40)) throw new Error('Invalid tags.')
+      allowed.tags = [...new Set(patch.tags.map((tag) => tag.trim()).filter(Boolean))]
+    }
+    return updateInstance(id, allowed)
+  })
   handle('instances:running', () => runningInstanceIds())
   handle('instances:isRunning', (id: string) => isRunning(id))
   handle('instances:fetchScreenshots', (id: string) => {
@@ -350,6 +390,10 @@ function registerIpcHandlers(): void {
 
   // Local mod management
   handle('instance:addMod', (instanceId: string, sourcePath: string) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before adding mods.')
+    if (!existsSync(sourcePath) || !statSync(sourcePath).isFile() || !sourcePath.toLowerCase().endsWith('.jar')) {
+      throw new Error('Select a valid mod JAR file.')
+    }
     const modsDir = join(instanceGameDir(instanceId), 'mods')
     mkdirSync(modsDir, { recursive: true })
     const dest = join(modsDir, basename(sourcePath))
@@ -360,22 +404,92 @@ function registerIpcHandlers(): void {
   handle('instance:listLocalMods', (instanceId: string) => {
     const modsDir = join(instanceGameDir(instanceId), 'mods')
     if (!existsSync(modsDir)) return []
+    const managedNames = new Set(listManagedMods(instanceId).map((mod) => mod.name))
     return readdirSync(modsDir)
-      .filter((f) => f.endsWith('.jar'))
+      .filter((f) => (f.endsWith('.jar') || f.endsWith('.jar.disabled')) && !managedNames.has(f))
       .map((f) => {
         const size = statSync(join(modsDir, f)).size
-        return { name: f, size }
+        return { name: f, size, enabled: f.endsWith('.jar') }
       })
   })
 
   handle('instance:removeMod', (instanceId: string, fileName: string) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before removing mods.')
     // Plain file names only — no separators or '..' that could reach outside mods/
-    if (basename(fileName) !== fileName || !fileName.endsWith('.jar')) {
+    if (basename(fileName) !== fileName || (!fileName.endsWith('.jar') && !fileName.endsWith('.jar.disabled'))) {
       throw new Error('Invalid mod file name.')
     }
     const modPath = join(instanceGameDir(instanceId), 'mods', fileName)
     if (existsSync(modPath)) unlinkSync(modPath)
   })
+
+  handle('instance:toggleLocalMod', (instanceId: string, fileName: string, enabled: boolean) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before changing mods.')
+    if (typeof enabled !== 'boolean') throw new Error('Invalid mod state.')
+    if (basename(fileName) !== fileName || (!fileName.endsWith('.jar') && !fileName.endsWith('.jar.disabled'))) {
+      throw new Error('Invalid mod file name.')
+    }
+    const modsDir = join(instanceGameDir(instanceId), 'mods')
+    const baseName = fileName.endsWith('.disabled') ? fileName.slice(0, -'.disabled'.length) : fileName
+    const from = join(modsDir, enabled ? `${baseName}.disabled` : baseName)
+    const to = join(modsDir, enabled ? baseName : `${baseName}.disabled`)
+    if (!existsSync(from)) throw new Error('Mod file not found.')
+    renameSync(from, to)
+    return { name: basename(to), size: statSync(to).size, enabled }
+  })
+
+  // Custom modpack builder (Modrinth)
+  handle('customMods:search', (instanceId: string, query: string, source: 'modrinth' | 'curseforge') => searchCompatibleMods(instanceId, query, source))
+  handle('customMods:list', (instanceId: string) => listManagedMods(instanceId))
+  handle('customMods:install', (instanceId: string, projectId: string, source: 'modrinth' | 'curseforge') => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before installing mods.')
+    return installCompatibleMod(instanceId, projectId, source)
+  })
+  handle('customMods:toggle', (instanceId: string, source: 'modrinth' | 'curseforge', projectId: string, enabled: boolean) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before changing mods.')
+    return toggleManagedMod(instanceId, source, projectId, enabled)
+  })
+  handle('customMods:remove', (instanceId: string, source: 'modrinth' | 'curseforge', projectId: string) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before removing mods.')
+    return removeManagedMod(instanceId, source, projectId)
+  })
+  handle('customMods:update', (instanceId: string) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before updating mods.')
+    return updateManagedMods(instanceId)
+  })
+
+  // Backups, repair, storage, and diagnostics
+  handle('instance:snapshots', (instanceId: string) => listSnapshots(instanceId))
+  handle('instance:createSnapshot', (instanceId: string) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before creating a snapshot.')
+    return createSnapshot(instanceId)
+  })
+  handle('instance:restoreSnapshot', (instanceId: string, snapshotId: string) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before restoring a snapshot.')
+    restoreSnapshot(instanceId, snapshotId)
+    return listSnapshots(instanceId)
+  })
+  handle('instance:deleteSnapshot', (instanceId: string, snapshotId: string) => {
+    deleteSnapshot(instanceId, snapshotId)
+    return listSnapshots(instanceId)
+  })
+  handle('instance:storage', (instanceId: string) => instanceStorage(instanceId))
+  handle('instance:repair', (instanceId: string) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before repairing it.')
+    return repairInstance(instanceId)
+  })
+  handle('instance:diagnostics', async (instanceId: string) => {
+    const path = await createDiagnosticBundle(instanceId)
+    shell.showItemInFolder(path)
+    return path
+  })
+  handle('instance:exportBackup', (instanceId: string) => {
+    if (isRunning(instanceId)) throw new Error('Stop the instance before exporting it.')
+    const path = exportInstanceBackup(instanceId)
+    shell.showItemInFolder(path)
+    return path
+  })
+  handle('instance:importBackup', (path: string) => importInstanceBackup(path))
 
   // Friends & presence
   handle('friends:list', () => listFriends())
@@ -476,7 +590,7 @@ function registerIpcHandlers(): void {
         loaderVersion: result.marker.loaderVersion
       })
     } catch (err) {
-      removeInstance(tempInst.id)
+      removeInstance(tempInst.id, true)
       throw err
     }
   })
@@ -496,12 +610,13 @@ function registerIpcHandlers(): void {
 
 app.whenReady().then(() => {
   // Apply custom instances directory before any instance operations
-  const { instancesDir: customDir, friendCode, discordRpc, discordClientId } = getSettings()
+  const { instancesDir: customDir, friendCode, presenceSecret, discordRpc, discordClientId } = getSettings()
   if (customDir) setCustomInstancesDir(customDir)
   initDiscord(discordClientId, !!discordRpc)
 
   // Auto-generate a friend code for this user on first run
   if (!friendCode) setSettings({ friendCode: generateFriendCode() })
+  if (!presenceSecret) setSettings({ presenceSecret: generatePresenceSecret() })
 
   // Auto-apply the default relay URL if none is saved yet
   if (!getSettings().relayUrl) setSettings({ relayUrl: 'https://relay.sxarlos.store' })
