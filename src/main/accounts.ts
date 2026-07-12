@@ -1,8 +1,11 @@
 import { safeStorage } from 'electron'
 import { Auth } from 'msmc'
 import type { Minecraft } from 'msmc'
-import type { Account, MinecraftProfile } from '@shared/types'
-import { readJson, writeJson } from './persist'
+import { basename, extname, join } from 'path'
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'fs'
+import { randomUUID } from 'crypto'
+import type { Account, MinecraftProfile, SavedSkin, SkinPreview } from '@shared/types'
+import { dataDir, readJson, writeJson } from './persist'
 
 /** Launcher-ready user object as produced by msmc's `Minecraft.mclc()`. */
 export type MclcUser = ReturnType<Minecraft['mclc']>
@@ -95,6 +98,17 @@ function friendlyAuthError(err: unknown): Error {
   return new Error(`Sign-in failed: ${raw}`)
 }
 
+function isEmptyMinecraftLoginResponse(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const value = err as Record<string, unknown>
+  const response = value.response as Record<string, unknown> | undefined
+  return value.ts === 'error.auth.minecraft.login' && response?.size === 0
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export async function loginInteractive(): Promise<Account[]> {
   let refreshToken: string
   let profile: { id: string; name: string } | undefined
@@ -157,6 +171,147 @@ export async function getMinecraftProfile(): Promise<MinecraftProfile> {
   return res.json() as Promise<MinecraftProfile>
 }
 
+const MAX_SKIN_BYTES = 2 * 1024 * 1024
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+const SKINS_FILE = 'skins.json'
+
+interface SavedSkinRecord {
+  id: string
+  name: string
+  variant: 'CLASSIC' | 'SLIM'
+  fileName: string
+  createdAt: string
+}
+
+/** Read and validate a user-selected Minecraft skin without trusting its extension. */
+function readSkinPng(filePath: string): { data: Buffer; width: number; height: number } {
+  if (typeof filePath !== 'string' || !filePath || extname(filePath).toLowerCase() !== '.png') {
+    throw new Error('Choose a PNG skin file.')
+  }
+  if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+    throw new Error('The selected skin file no longer exists.')
+  }
+  const size = statSync(filePath).size
+  if (size <= 0 || size > MAX_SKIN_BYTES) {
+    throw new Error('Skin files must be smaller than 2 MB.')
+  }
+
+  const data = readFileSync(filePath)
+  if (data.length < 24 || !data.subarray(0, 8).equals(PNG_SIGNATURE) || data.toString('ascii', 12, 16) !== 'IHDR') {
+    throw new Error('The selected file is not a valid PNG image.')
+  }
+  const width = data.readUInt32BE(16)
+  const height = data.readUInt32BE(20)
+  if (width !== 64 || (height !== 64 && height !== 32)) {
+    throw new Error('Minecraft skins must be 64×64 pixels (or the legacy 64×32 format).')
+  }
+  return { data, width, height }
+}
+
+/** Return a renderer-safe preview after validating the selected file. */
+export function previewSkin(filePath: string): SkinPreview {
+  const { data, width, height } = readSkinPng(filePath)
+  return { dataUrl: `data:image/png;base64,${data.toString('base64')}`, width, height }
+}
+
+function skinLibraryDir(): string {
+  const dir = join(dataDir(), 'skins')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function savedSkinRecords(): SavedSkinRecord[] {
+  return readJson<SavedSkinRecord[]>(SKINS_FILE, [])
+}
+
+function savedSkinPath(record: SavedSkinRecord): string {
+  if (basename(record.fileName) !== record.fileName || !/^[0-9a-f-]+\.png$/i.test(record.fileName)) {
+    throw new Error('Invalid saved skin record.')
+  }
+  return join(skinLibraryDir(), record.fileName)
+}
+
+export function listSavedSkins(): SavedSkin[] {
+  const records = savedSkinRecords()
+  const valid = records.filter((record) => {
+    try { return existsSync(savedSkinPath(record)) } catch { return false }
+  })
+  if (valid.length !== records.length) writeJson(SKINS_FILE, valid)
+  return valid.map((record) => ({
+    id: record.id,
+    name: record.name,
+    variant: record.variant,
+    createdAt: record.createdAt,
+    dataUrl: `data:image/png;base64,${readFileSync(savedSkinPath(record)).toString('base64')}`
+  }))
+}
+
+export function saveSkin(filePath: string, variant: 'CLASSIC' | 'SLIM'): SavedSkin[] {
+  if (variant !== 'CLASSIC' && variant !== 'SLIM') throw new Error('Invalid skin model.')
+  const { data } = readSkinPng(filePath)
+  const id = randomUUID()
+  const fileName = `${id}.png`
+  writeFileSync(join(skinLibraryDir(), fileName), data, { flag: 'wx' })
+  const records = savedSkinRecords()
+  records.push({
+    id,
+    fileName,
+    name: basename(filePath, extname(filePath)).slice(0, 80) || 'Saved skin',
+    variant,
+    createdAt: new Date().toISOString()
+  })
+  writeJson(SKINS_FILE, records)
+  return listSavedSkins()
+}
+
+export function deleteSavedSkin(id: string): SavedSkin[] {
+  const records = savedSkinRecords()
+  const record = records.find((item) => item.id === id)
+  if (!record) return listSavedSkins()
+  const file = savedSkinPath(record)
+  if (existsSync(file)) unlinkSync(file)
+  writeJson(SKINS_FILE, records.filter((item) => item.id !== id))
+  return listSavedSkins()
+}
+
+/** Upload and activate a skin on the signed-in Minecraft account. */
+export async function uploadSkin(
+  filePath: string,
+  variant: 'CLASSIC' | 'SLIM'
+): Promise<MinecraftProfile> {
+  if (variant !== 'CLASSIC' && variant !== 'SLIM') throw new Error('Invalid skin model.')
+  const { data } = readSkinPng(filePath)
+  return uploadSkinData(data, variant)
+}
+
+export async function uploadSavedSkin(id: string, variant: 'CLASSIC' | 'SLIM'): Promise<MinecraftProfile> {
+  const record = savedSkinRecords().find((item) => item.id === id)
+  if (!record) throw new Error('That saved skin no longer exists.')
+  const { data } = readSkinPng(savedSkinPath(record))
+  return uploadSkinData(data, variant)
+}
+
+async function uploadSkinData(data: Buffer, variant: 'CLASSIC' | 'SLIM'): Promise<MinecraftProfile> {
+  if (variant !== 'CLASSIC' && variant !== 'SLIM') throw new Error('Invalid skin model.')
+  const user = await getActiveMclcUser()
+  const token = (user as unknown as Record<string, string>)['access_token']
+  if (!token) throw new Error('No access token available.')
+
+  const form = new FormData()
+  form.append('variant', variant.toLowerCase())
+  form.append('file', new Blob([new Uint8Array(data)], { type: 'image/png' }), 'skin.png')
+  const res = await fetch('https://api.minecraftservices.com/minecraft/profile/skins', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form
+  })
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 300)
+    throw new Error(`Skin upload failed (${res.status})${detail ? `: ${detail}` : '.'}`)
+  }
+  return res.json() as Promise<MinecraftProfile>
+}
+
 /** Equip a cape by ID, or pass null to unequip the current cape. */
 export async function setActiveCape(capeId: string | null): Promise<void> {
   const user = await getActiveMclcUser()
@@ -191,13 +346,10 @@ export async function getActiveMclcUser(): Promise<MclcUser> {
   const active = records.find((r) => r.active) ?? records[0]
   if (!active) throw new Error('No Minecraft account is signed in.')
 
-  let mc
+  let xbox: Awaited<ReturnType<Auth['refresh']>>
   try {
     const auth = new Auth()
-    const xbox = await auth.refresh(decrypt(active.tokenEnc))
-    mc = await xbox.getMinecraft()
-    // Persist the rotated refresh token so the session stays valid.
-    active.tokenEnc = encrypt(xbox.save())
+    xbox = await auth.refresh(decrypt(active.tokenEnc))
   } catch (err) {
     const raw =
       err instanceof Error
@@ -206,6 +358,26 @@ export async function getActiveMclcUser(): Promise<MclcUser> {
         ? JSON.stringify(err)
         : String(err)
     throw new Error(`SESSION_EXPIRED:${active.username} — session expired, please sign in again. (${raw})`, { cause: err })
+  }
+
+  // Persist the rotated refresh token immediately. A later Minecraft-services
+  // outage must not discard a successful Microsoft token refresh.
+  active.tokenEnc = encrypt(xbox.save())
+  save(records)
+
+  let mc
+  try {
+    mc = await xbox.getMinecraft()
+  } catch (firstError) {
+    // msmc occasionally receives an empty response from Minecraft Services.
+    // This is transient and does not mean the Microsoft refresh token expired.
+    if (!isEmptyMinecraftLoginResponse(firstError)) throw friendlyAuthError(firstError)
+    await delay(750)
+    try {
+      mc = await xbox.getMinecraft()
+    } catch (retryError) {
+      throw friendlyAuthError(retryError)
+    }
   }
 
   if (mc.profile) {

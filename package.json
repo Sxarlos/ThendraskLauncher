@@ -1,7 +1,7 @@
 {
   "name": "thendrask-launcher",
   "productName": "Thendrask Launcher",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "A Minecraft launcher with modpack browsing, friends presence, and automatic updates",
   "main": "./out/main/index.js",
   "author": "Sxarlos",

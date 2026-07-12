@@ -4,7 +4,7 @@ app.commandLine.appendSwitch('js-flags', '--expose-gc')
 import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog, Tray, Menu } from 'electron'
 import { join, basename } from 'path'
 import { existsSync, mkdirSync, copyFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
-import { listAccounts, loginInteractive, removeAccount, setActive, getMinecraftProfile, setActiveCape } from './accounts'
+import { listAccounts, loginInteractive, removeAccount, setActive, getMinecraftProfile, setActiveCape, previewSkin, uploadSkin, listSavedSkins, saveSkin, deleteSavedSkin, uploadSavedSkin } from './accounts'
 import {
   createInstance,
   listInstances,
@@ -137,6 +137,15 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  if (!app.isPackaged) {
+    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`)
+    })
+    win.webContents.on('did-fail-load', (_event, code, description, url) => {
+      console.error(`[renderer:load] ${code} ${description} ${url}`)
+    })
+  }
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -262,6 +271,12 @@ function registerIpcHandlers(): void {
   handle('accounts:setActive', (id: string) => setActive(id))
   handle('profile:get', () => getMinecraftProfile())
   handle('profile:setCape', (capeId: string | null) => setActiveCape(capeId))
+  handle('profile:previewSkin', (filePath: string) => previewSkin(filePath))
+  handle('profile:uploadSkin', (filePath: string, variant: 'CLASSIC' | 'SLIM') => uploadSkin(filePath, variant))
+  handle('profile:listSavedSkins', () => listSavedSkins())
+  handle('profile:saveSkin', (filePath: string, variant: 'CLASSIC' | 'SLIM') => saveSkin(filePath, variant))
+  handle('profile:deleteSavedSkin', (id: string) => deleteSavedSkin(id))
+  handle('profile:uploadSavedSkin', (id: string, variant: 'CLASSIC' | 'SLIM') => uploadSavedSkin(id, variant))
 
   // Instances
   handle('instances:list', () => listInstances())
@@ -290,6 +305,7 @@ function registerIpcHandlers(): void {
     if (isRunning(id)) throw new Error('Stop the instance before removing it.')
     return removeInstance(id, deleteFiles)
   })
+
   handle('instances:update', (id: string, patch: Partial<import('@shared/types').Instance>) => {
     const allowed: Partial<import('@shared/types').Instance> = {}
     if ('name' in patch) {
