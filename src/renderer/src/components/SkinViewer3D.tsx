@@ -3,18 +3,21 @@ import { SkinViewer, WalkingAnimation } from 'skinview3d'
 
 interface Props {
   uuid: string
+  skinUrl?: string | null
+  variant?: 'CLASSIC' | 'SLIM'
   capeUrl?: string | null
   width?: number
   height?: number
 }
 
-export default function SkinViewer3D({ uuid, capeUrl, width = 240, height = 380 }: Props): JSX.Element {
+export default function SkinViewer3D({ uuid, skinUrl: suppliedSkinUrl, variant, capeUrl, width = 240, height = 380 }: Props): JSX.Element {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const viewerRef  = useRef<SkinViewer | null>(null)
   const mountedRef = useRef(true)
 
   /* uuid format may be dashes or not - mc-heads accepts both */
-  const skinUrl = `https://mc-heads.net/skin/${uuid}`
+  const skinUrl = (suppliedSkinUrl || `https://mc-heads.net/skin/${uuid}`).replace(/^http:\/\//, 'https://')
+  const safeCapeUrl = capeUrl?.replace(/^http:\/\//, 'https://') ?? null
 
   useEffect(() => {
     mountedRef.current = true
@@ -41,9 +44,8 @@ export default function SkinViewer3D({ uuid, capeUrl, width = 240, height = 380 
     viewer.autoRotate = true
     viewer.autoRotateSpeed = 0.3
 
-    /* Load skin + optional cape */
-    void viewer.loadSkin(skinUrl)
-    if (capeUrl) void viewer.loadCape(capeUrl)
+    /* Load skin; the separate effect below manages the cape. */
+    void viewer.loadSkin(skinUrl, { model: variant === 'SLIM' ? 'slim' : variant === 'CLASSIC' ? 'default' : 'auto-detect' })
 
     viewerRef.current = viewer
 
@@ -53,19 +55,19 @@ export default function SkinViewer3D({ uuid, capeUrl, width = 240, height = 380 
       viewerRef.current = null
     }
   // Only recreate when uuid/dimensions change - cape is handled below
-  }, [uuid, width, height, skinUrl])
+  }, [uuid, width, height, skinUrl, variant])
 
   /* Update cape without tearing down the whole viewer */
   useEffect(() => {
     const v = viewerRef.current
     if (!v) return
-    if (capeUrl) {
-      void v.loadCape(capeUrl)
+    if (safeCapeUrl) {
+      void v.loadCape(safeCapeUrl)
     } else {
       /* skinview3d accepts an empty string to clear the cape */
       void v.loadCape('')
     }
-  }, [capeUrl])
+  }, [safeCapeUrl])
 
   /* Pause WebGL animation loop when the window is minimised */
   useEffect(() => {
