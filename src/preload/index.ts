@@ -13,6 +13,8 @@ import type {
   LaunchProgress,
   LocalMod,
   MinecraftProfile,
+  SkinPreview,
+  SavedSkin,
   ModInstallResult,
   ModSearchResult,
   ModpackResult,
@@ -191,7 +193,18 @@ const api = {
   profile: {
     get: (): Promise<MinecraftProfile> => ipcRenderer.invoke('profile:get'),
     setCape: (capeId: string | null): Promise<void> =>
-      ipcRenderer.invoke('profile:setCape', capeId)
+      ipcRenderer.invoke('profile:setCape', capeId),
+    previewSkin: (filePath: string): Promise<SkinPreview> =>
+      ipcRenderer.invoke('profile:previewSkin', filePath),
+    uploadSkin: (filePath: string, variant: 'CLASSIC' | 'SLIM'): Promise<MinecraftProfile> =>
+      ipcRenderer.invoke('profile:uploadSkin', filePath, variant),
+    listSavedSkins: (): Promise<SavedSkin[]> => ipcRenderer.invoke('profile:listSavedSkins'),
+    saveSkin: (filePath: string, variant: 'CLASSIC' | 'SLIM'): Promise<SavedSkin[]> =>
+      ipcRenderer.invoke('profile:saveSkin', filePath, variant),
+    deleteSavedSkin: (id: string): Promise<SavedSkin[]> =>
+      ipcRenderer.invoke('profile:deleteSavedSkin', id),
+    uploadSavedSkin: (id: string, variant: 'CLASSIC' | 'SLIM'): Promise<MinecraftProfile> =>
+      ipcRenderer.invoke('profile:uploadSavedSkin', id, variant)
   },
   servers: {
     list: (): Promise<ServerEntry[]> => ipcRenderer.invoke('servers:list'),

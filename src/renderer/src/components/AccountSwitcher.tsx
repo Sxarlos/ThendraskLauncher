@@ -6,22 +6,24 @@ import ProfileModal from './ProfileModal'
  * msmc returns UUIDs WITHOUT dashes (32 hex chars).
  * mc-heads.net and crafatar both need the dashed form.
  */
-const dashedUuid = (id: string): string =>
-  id.includes('-')
+const dashedUuid = (id: string | undefined): string => {
+  if (!id) return ''
+  return id.includes('-')
     ? id
     : `${id.slice(0,8)}-${id.slice(8,12)}-${id.slice(12,16)}-${id.slice(16,20)}-${id.slice(20)}`
+}
 
 /* mc-heads.net is highly reliable and returns a clean isometric head PNG */
-const headUrl = (id: string): string =>
-  `https://mc-heads.net/head/${dashedUuid(id)}/40`
+const headUrl = (id: string | undefined, username: string): string =>
+  `https://mc-heads.net/head/${dashedUuid(id) || encodeURIComponent(username)}/40`
 
-function Avatar({ id, username, size }: { id: string; username: string; size: number }): JSX.Element {
-  const [src, setSrc] = useState(headUrl(id))
+function Avatar({ id, username, size }: { id?: string; username: string; size: number }): JSX.Element {
+  const [src, setSrc] = useState(headUrl(id, username))
   const [failed, setFailed] = useState(false)
 
   const handleError = (): void => {
     /* Try crafatar as fallback before giving up */
-    if (!src.includes('crafatar')) {
+    if (id && !src.includes('crafatar')) {
       setSrc(`https://crafatar.com/renders/head/${dashedUuid(id)}?size=64&overlay`)
     } else {
       setFailed(true)

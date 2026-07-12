@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useState } from 'react'
-import type { MinecraftCape, MinecraftProfile } from '@shared/types'
+import type { MinecraftCape, MinecraftProfile, SavedSkin } from '@shared/types'
 import SkinViewer3D from './SkinViewer3D'
 import { useApp } from '../store'
 
@@ -180,16 +180,29 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
   const [error, setError]             = useState<string | null>(null)
   const [sessionExpired, setSessionExpired] = useState(false)
   const [capeLoading, setCapeLoading] = useState(false)
+  const [skinPath, setSkinPath]       = useState<string | null>(null)
+  const [skinPreview, setSkinPreview] = useState<string | null>(null)
+  const [skinVariant, setSkinVariant] = useState<'CLASSIC' | 'SLIM'>('CLASSIC')
+  const [skinLoading, setSkinLoading] = useState(false)
+  const [savedSkins, setSavedSkins]   = useState<SavedSkin[]>([])
+  const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null)
 
   /* Active cape URL for the skin viewer */
   const activeCape = profile?.capes.find((c) => c.state === 'ACTIVE')
+  const activeSkin = profile?.skins.find((s) => s.state === 'ACTIVE')
 
   const loadProfile = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const p = await window.api.profile.get()
+      const savedSkinsApi = window.api.profile.listSavedSkins
+      const [p, saved] = await Promise.all([
+        window.api.profile.get(),
+        typeof savedSkinsApi === 'function' ? savedSkinsApi() : Promise.resolve([])
+      ])
       setProfile(p)
+      setSavedSkins(saved)
+      setSkinVariant(p.skins.find((s) => s.state === 'ACTIVE')?.variant ?? 'CLASSIC')
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load profile.'
       if (msg.includes('SESSION_EXPIRED:')) {
@@ -245,6 +258,77 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
       void selectCape(null)
     } else {
       void selectCape(cape.id)
+    }
+  }
+
+  const chooseSkin = async (): Promise<void> => {
+    setError(null)
+    const filePath = await window.api.dialog.pickFile([{ name: 'Minecraft skin', extensions: ['png'] }])
+    if (!filePath) return
+    try {
+      const preview = await window.api.profile.previewSkin(filePath)
+      setSkinPath(filePath)
+      setSkinPreview(preview.dataUrl)
+      setSelectedSavedId(null)
+    } catch (e) {
+      setSkinPath(null)
+      setSkinPreview(null)
+      setError(e instanceof Error ? e.message : 'Failed to read the selected skin.')
+    }
+  }
+
+  const applySkin = async (): Promise<void> => {
+    if ((!skinPath && !selectedSavedId) || skinLoading) return
+    setSkinLoading(true)
+    setError(null)
+    try {
+      const updated = selectedSavedId
+        ? await window.api.profile.uploadSavedSkin(selectedSavedId, skinVariant)
+        : await window.api.profile.uploadSkin(skinPath!, skinVariant)
+      setProfile(updated)
+      setSkinPath(null)
+      setSkinPreview(null)
+      setSelectedSavedId(null)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to upload skin.'
+      if (msg.includes('SESSION_EXPIRED:')) setSessionExpired(true)
+      else setError(msg)
+    } finally {
+      setSkinLoading(false)
+    }
+  }
+
+  const saveSelectedSkin = async (): Promise<void> => {
+    if (!skinPath || skinLoading) return
+    setSkinLoading(true)
+    setError(null)
+    try {
+      setSavedSkins(await window.api.profile.saveSkin(skinPath, skinVariant))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save skin.')
+    } finally {
+      setSkinLoading(false)
+    }
+  }
+
+  const chooseSavedSkin = (skin: SavedSkin): void => {
+    setSelectedSavedId(skin.id)
+    setSkinPath(null)
+    setSkinPreview(skin.dataUrl)
+    setSkinVariant(skin.variant)
+    setError(null)
+  }
+
+  const removeSavedSkin = async (id: string): Promise<void> => {
+    try {
+      setSavedSkins(await window.api.profile.deleteSavedSkin(id))
+      if (selectedSavedId === id) {
+        setSelectedSavedId(null)
+        setSkinPreview(null)
+        setSkinVariant(activeSkin?.variant ?? 'CLASSIC')
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to remove saved skin.')
     }
   }
 
@@ -353,6 +437,8 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
             ) : (
               <SkinViewer3D
                 uuid={uuid}
+                skinUrl={skinPreview ?? activeSkin?.url ?? null}
+                variant={skinPreview ? skinVariant : activeSkin?.variant}
                 capeUrl={activeCape?.url ?? null}
                 width={220}
                 height={340}
@@ -410,35 +496,101 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
 
             {profile && !loading && (
               <>
-                {/* Skin variant badge */}
-                {profile.skins.length > 0 && (
-                  <div style={{ marginBottom: 24 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
-                      Skin
-                    </div>
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '5px 10px',
-                        borderRadius: 6,
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border-soft)',
-                        fontSize: 12,
-                        color: 'var(--text-soft)',
-                      }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent-strong)" strokeWidth="1.5">
-                        <circle cx="12" cy="8" r="4"/>
-                        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-                      </svg>
-                      {profile.skins.find((s) => s.state === 'ACTIVE')?.variant === 'SLIM'
-                        ? 'Alex model (slim arms)'
-                        : 'Steve model (classic arms)'}
-                    </div>
+                {/* Skin changer */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10, display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Skin</span>
+                    {skinLoading && <span style={{ fontSize: 10, color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none' }}>Uploading…</span>}
                   </div>
-                )}
+
+                  <button
+                    onClick={() => void chooseSkin()}
+                    disabled={skinLoading}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: 8, background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text-soft)', cursor: skinLoading ? 'default' : 'pointer', fontSize: 12, textAlign: 'left' }}
+                  >
+                    {skinPath ? skinPath.split(/[\\/]/).pop() : selectedSavedId ? 'Saved skin selected' : 'Choose a PNG skin…'}
+                  </button>
+
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    {(['CLASSIC', 'SLIM'] as const).map((variant) => {
+                      const selected = skinVariant === variant
+                      return (
+                        <button
+                          key={variant}
+                          onClick={() => setSkinVariant(variant)}
+                          disabled={skinLoading}
+                          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: selected ? '1px solid var(--accent-strong)' : '1px solid var(--border-soft)', background: selected ? 'rgba(var(--accent-rgb),0.1)' : 'transparent', color: selected ? 'var(--accent-strong)' : 'var(--text-muted)', cursor: skinLoading ? 'default' : 'pointer', fontSize: 11, fontWeight: selected ? 600 : 400 }}
+                        >
+                          {variant === 'CLASSIC' ? 'Steve · Classic' : 'Alex · Slim'}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {(skinPath || selectedSavedId) ? (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button
+                        onClick={() => void applySkin()}
+                        disabled={skinLoading}
+                        style={{ flex: 1, padding: '9px 12px', borderRadius: 8, background: 'rgba(var(--accent-rgb),0.14)', border: '1px solid rgba(var(--accent-rgb),0.3)', color: 'var(--accent-strong)', cursor: skinLoading ? 'default' : 'pointer', fontSize: 12, fontWeight: 600 }}
+                      >
+                        {skinLoading ? 'Uploading…' : 'Apply skin'}
+                      </button>
+                      <button
+                        onClick={() => { setSkinPath(null); setSkinPreview(null); setSelectedSavedId(null); setSkinVariant(activeSkin?.variant ?? 'CLASSIC') }}
+                        disabled={skinLoading}
+                        style={{ padding: '9px 12px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-soft)', color: 'var(--text-muted)', cursor: skinLoading ? 'default' : 'pointer', fontSize: 12 }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 10, color: 'var(--text-dim)', margin: '9px 0 0', lineHeight: 1.5 }}>
+                      64×64 PNG recommended. Legacy 64×32 skins are also supported.
+                    </p>
+                  )}
+
+                  {skinPath && (
+                    <button
+                      onClick={() => void saveSelectedSkin()}
+                      disabled={skinLoading || savedSkins.some((skin) => skin.dataUrl === skinPreview)}
+                      style={{ width: '100%', marginTop: 8, padding: '8px 12px', borderRadius: 8, background: 'transparent', border: '1px solid var(--border-soft)', color: 'var(--text-muted)', cursor: skinLoading ? 'default' : 'pointer', fontSize: 11 }}
+                    >
+                      {savedSkins.some((skin) => skin.dataUrl === skinPreview) ? 'Already saved' : 'Save to library'}
+                    </button>
+                  )}
+
+                  <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border-soft)' }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 9 }}>
+                      Saved skins · {savedSkins.length}
+                    </div>
+                    {savedSkins.length === 0 ? (
+                      <div style={{ color: 'var(--text-faint)', fontSize: 11 }}>Choose a skin, then save it here for later.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+                        {savedSkins.map((skin) => (
+                          <div key={skin.id} style={{ position: 'relative' }}>
+                            <button
+                              onClick={() => chooseSavedSkin(skin)}
+                              title={`${skin.name} · ${skin.variant === 'SLIM' ? 'Slim' : 'Classic'}`}
+                              style={{ width: '100%', padding: '7px 5px', borderRadius: 8, border: selectedSavedId === skin.id ? '1px solid var(--accent-strong)' : '1px solid var(--border-soft)', background: selectedSavedId === skin.id ? 'rgba(var(--accent-rgb),0.1)' : 'var(--surface)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                            >
+                              <img src={skin.dataUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', imageRendering: 'pixelated', margin: '0 auto 4px' }} />
+                              <div style={{ fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{skin.name}</div>
+                            </button>
+                            <button
+                              onClick={() => void removeSavedSkin(skin.id)}
+                              title="Remove saved skin"
+                              style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: 5, border: 'none', background: 'rgba(0,0,0,0.7)', color: '#ddd', cursor: 'pointer', fontSize: 11, lineHeight: '18px' }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* Cape selector */}
                 <div>

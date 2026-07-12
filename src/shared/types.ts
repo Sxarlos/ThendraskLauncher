@@ -218,6 +218,20 @@ export interface UpdateInfo {
   downloadUrl: string   // URL opened when the user clicks Download
 }
 
+export interface SkinPreview {
+  dataUrl: string
+  width: number
+  height: number
+}
+
+export interface SavedSkin {
+  id: string
+  name: string
+  variant: 'CLASSIC' | 'SLIM'
+  dataUrl: string
+  createdAt: string
+}
+
 export interface ModSearchResult {
   source: 'modrinth' | 'curseforge'
   projectId: string
