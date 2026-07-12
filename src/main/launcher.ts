@@ -8,7 +8,7 @@ import type { LaunchProgress, LaunchState } from '@shared/types'
 import { getActiveMclcUser } from './accounts'
 import { getInstance, instanceGameDir, markPlayed, addPlayTime, updateInstance } from './instances'
 import { getSettings } from './settings'
-import { ensureJava, requiredJavaMajor, detectNeoforgeJavaMajor } from './java'
+import { ensureJava, resolveRequiredJavaMajor, detectNeoforgeJavaMajor } from './java'
 import { ensureChatMod } from './chatmod'
 import { writeDefaultOptions, applyControls } from './gameoptions'
 import { getVersions } from './mojang'
@@ -173,7 +173,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
 
   // ── Java: auto-detect or auto-download the correct version ─────────────────
   // Must happen before loader setup — NeoForge needs Java to run its installer.
-  let requiredMajor = requiredJavaMajor(instance.mcVersion)
+  let requiredMajor = await resolveRequiredJavaMajor(instance.mcVersion)
   let resolvedJavaPath: string
   try {
     resolvedJavaPath = await ensureJava(

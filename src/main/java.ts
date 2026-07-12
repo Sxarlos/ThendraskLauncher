@@ -6,6 +6,7 @@ import { createHash } from 'crypto'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import AdmZip from 'adm-zip'
+import { fetchRequiredJavaMajor } from './mojang'
 import type { JavaInstall } from '@shared/types'
 
 const execFileAsync = promisify(execFile)
@@ -116,7 +117,12 @@ export async function detectAllJavas(): Promise<JavaInstall[]> {
   return results.sort((a, b) => b.major - a.major)
 }
 
-/** Returns the required Java major version for a given Minecraft version string. */
+/**
+ * Best-effort required Java major from the Minecraft version string alone.
+ * Used as a fallback when Mojang's authoritative value can't be fetched; it
+ * caps at 21 and does not know about newer runtime bumps (Java 25+), so prefer
+ * resolveRequiredJavaMajor() wherever a network call is acceptable.
+ */
 export function requiredJavaMajor(mcVersion: string): number {
   const m = mcVersion.match(/^1\.(\d+)(?:\.(\d+))?$/)
   const minor = parseInt(m?.[1] ?? '8', 10)
@@ -124,6 +130,18 @@ export function requiredJavaMajor(mcVersion: string): number {
   if (minor > 20 || (minor === 20 && patch >= 5)) return 21
   if (minor >= 17) return 17
   return 8
+}
+
+/**
+ * Resolve the required Java major for a Minecraft version, preferring Mojang's
+ * authoritative `javaVersion.majorVersion` (correct for Java 25+ versions) and
+ * falling back to the version-string heuristic when it's unavailable (offline,
+ * or a version Mojang doesn't list, e.g. a custom/modpack profile).
+ */
+export async function resolveRequiredJavaMajor(mcVersion: string): Promise<number> {
+  const heuristic = requiredJavaMajor(mcVersion)
+  const authoritative = await fetchRequiredJavaMajor(mcVersion)
+  return authoritative !== null ? Math.max(authoritative, heuristic) : heuristic
 }
 
 /**
