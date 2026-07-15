@@ -19,6 +19,9 @@ export default function SkinViewer3D({ uuid, skinUrl: suppliedSkinUrl, variant, 
   const skinUrl = (suppliedSkinUrl || `https://mc-heads.net/skin/${uuid}`).replace(/^http:\/\//, 'https://')
   const safeCapeUrl = capeUrl?.replace(/^http:\/\//, 'https://') ?? null
 
+  /* Create the viewer once. Skin and cape are loaded by the effects below so
+     that changing either one updates the same viewer instead of tearing it
+     down — recreating the viewer on every skin change used to drop the cape. */
   useEffect(() => {
     mountedRef.current = true
     if (!canvasRef.current) return
@@ -44,9 +47,6 @@ export default function SkinViewer3D({ uuid, skinUrl: suppliedSkinUrl, variant, 
     viewer.autoRotate = true
     viewer.autoRotateSpeed = 0.3
 
-    /* Load skin; the separate effect below manages the cape. */
-    void viewer.loadSkin(skinUrl, { model: variant === 'SLIM' ? 'slim' : variant === 'CLASSIC' ? 'default' : 'auto-detect' })
-
     viewerRef.current = viewer
 
     return () => {
@@ -54,18 +54,24 @@ export default function SkinViewer3D({ uuid, skinUrl: suppliedSkinUrl, variant, 
       viewer.dispose()
       viewerRef.current = null
     }
-  // Only recreate when uuid/dimensions change - cape is handled below
-  }, [uuid, width, height, skinUrl, variant])
+  }, [width, height])
 
-  /* Update cape without tearing down the whole viewer */
+  /* Load / update the skin on the existing viewer. */
+  useEffect(() => {
+    const v = viewerRef.current
+    if (!v) return
+    void v.loadSkin(skinUrl, { model: variant === 'SLIM' ? 'slim' : variant === 'CLASSIC' ? 'default' : 'auto-detect' })
+  }, [skinUrl, variant])
+
+  /* Load, update, or clear the cape on the existing viewer. Passing null (not
+     an empty string) is how skinview3d removes the cape. */
   useEffect(() => {
     const v = viewerRef.current
     if (!v) return
     if (safeCapeUrl) {
       void v.loadCape(safeCapeUrl)
     } else {
-      /* skinview3d accepts an empty string to clear the cape */
-      void v.loadCape('')
+      v.loadCape(null)
     }
   }, [safeCapeUrl])
 
