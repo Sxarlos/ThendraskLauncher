@@ -4,9 +4,9 @@ import { useApp } from '../store'
 
 /* ── Step type ───────────────────────────────────────────── */
 
-type Step = 'welcome' | 'account' | 'curseforge' | 'friends' | 'performance' | 'done'
-const STEP_ORDER: Step[] = ['welcome', 'account', 'curseforge', 'friends', 'performance', 'done']
-const PROGRESS_STEPS: Step[] = ['account', 'curseforge', 'friends', 'performance', 'done']
+type Step = 'welcome' | 'account' | 'curseforge' | 'friends' | 'performance' | 'features' | 'done'
+const STEP_ORDER: Step[] = ['welcome', 'account', 'curseforge', 'friends', 'performance', 'features', 'done']
+const PROGRESS_STEPS: Step[] = ['account', 'curseforge', 'friends', 'performance', 'features', 'done']
 
 /* ── Step indicator ──────────────────────────────────────── */
 
@@ -524,6 +524,70 @@ function PerformanceStep({ onNext }: { onNext: () => void }): JSX.Element {
   )
 }
 
+/* ── Step: Optional features ────────────────────────────── */
+
+function FeaturesStep({ onNext }: { onNext: () => void }): JSX.Element {
+  const setGregTechHubEnabled = useApp((state) => state.setGregTechHubEnabled)
+  const [enabled, setEnabled] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const handleContinue = async (): Promise<void> => {
+    setSaving(true)
+    try {
+      await window.api.settings.set({ gregTechHubEnabled: enabled })
+      setGregTechHubEnabled(enabled)
+      onNext()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <StepDots current="features" />
+      <div className="text-center">
+        <h2 className="text-xl font-black text-white mb-1.5">Optional community features</h2>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          Choose whether specialist modding tools appear in your launcher. This can be changed later in Settings.
+        </p>
+      </div>
+
+      <button
+        onClick={() => setEnabled(!enabled)}
+        className="text-left rounded-xl p-4 transition-all"
+        style={{
+          background: enabled ? 'rgba(var(--accent-rgb),0.08)' : 'var(--surface-2)',
+          border: `1.5px solid ${enabled ? 'rgba(var(--accent-rgb),0.4)' : 'var(--border-soft)'}`
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: 'rgba(var(--accent-rgb),0.10)', color: 'var(--accent)' }}>⚙</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-semibold text-sm" style={{ color: enabled ? 'var(--accent)' : 'var(--text-strong)' }}>Enable GregTech Hub</div>
+              <div className="w-9 h-5 rounded-full p-0.5 transition-colors" style={{ background: enabled ? 'var(--accent-strong)' : 'var(--surface-3)' }}>
+                <div className="w-4 h-4 rounded-full transition-transform" style={{ background: enabled ? '#000' : 'var(--text-muted)', transform: enabled ? 'translateX(16px)' : 'translateX(0)' }} />
+              </div>
+            </div>
+            <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              Adds a sidebar tab for version-checked GTNH community addons from official GitHub releases. Disabled by default.
+            </p>
+          </div>
+        </div>
+      </button>
+
+      <button
+        onClick={() => void handleContinue()}
+        disabled={saving}
+        className="w-full py-3 rounded-xl font-bold text-sm text-black transition-all disabled:opacity-60"
+        style={{ background: 'var(--accent-strong)' }}
+      >
+        {saving ? 'Saving…' : 'Continue →'}
+      </button>
+    </div>
+  )
+}
+
 /* ── Step: Done ──────────────────────────────────────────── */
 
 function DoneStep({ accounts, onFinish }: { accounts: Account[]; onFinish: () => void }): JSX.Element {
@@ -609,6 +673,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }):
         {step === 'curseforge' && <CurseForgeStep onNext={next} />}
         {step === 'friends'    && <FriendsStep onNext={next} />}
         {step === 'performance' && <PerformanceStep onNext={next} />}
+        {step === 'features'   && <FeaturesStep onNext={next} />}
         {step === 'done'       && <DoneStep accounts={accounts} onFinish={finish} />}
       </div>
     </div>

@@ -2,7 +2,7 @@ import { resolve, sep } from 'path'
 
 /**
  * Resolve a relative path (as found in pack manifests and zip entry names)
- * under a base directory, refusing anything that would escape it — '..'
+ * under a base directory, refusing anything that would escape it, such as '..'
  * segments, absolute paths, drive letters. Returns null when unsafe so
  * callers can skip the entry.
  */

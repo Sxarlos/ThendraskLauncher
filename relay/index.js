@@ -5,7 +5,7 @@ app.set('trust proxy', 1)
 
 app.use(express.json({ limit: '4kb' }))
 
-// CORS — allow the Electron renderer and any future web client
+// CORS: allow the Electron renderer and any future web client
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS')
@@ -15,7 +15,7 @@ app.use((req, res, next) => {
 })
 
 const PORT = process.env.PORT || 3001
-const TTL_MS = 90_000 // 90 s — if a client hasn't updated, it's offline
+const TTL_MS = 90_000 // 90 s; if a client hasn't updated, it's offline
 
 // Map<code, { data: object, updatedAt: number }>
 const store = new Map()
@@ -49,7 +49,7 @@ setInterval(() => {
   }
 }, 60_000)
 
-// PUT /presence/:code  — register or refresh presence
+// PUT /presence/:code: register or refresh presence
 app.put('/presence/:code', (req, res) => {
   const { code } = req.params
   if (!isValidCode(code)) return res.status(400).json({ error: 'invalid_code' })
@@ -65,7 +65,7 @@ app.put('/presence/:code', (req, res) => {
   res.json({ ok: true })
 })
 
-// GET /presence/:code  — query a friend's presence
+// GET /presence/:code: query a friend's presence
 app.get('/presence/:code', (req, res) => {
   const { code } = req.params
   if (!isValidCode(code)) return res.status(400).json({ error: 'invalid_code' })
@@ -76,7 +76,7 @@ app.get('/presence/:code', (req, res) => {
   res.json({ ...entry.data, online: true })
 })
 
-// GET /health  — uptime check
+// GET /health: uptime check
 app.get('/health', (_req, res) => res.json({ ok: true, peers: store.size }))
 
 app.listen(PORT, () => console.log(`[relay] Listening on :${PORT}`))

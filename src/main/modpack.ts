@@ -1,5 +1,5 @@
 /**
- * Modpack installation — downloads mod files and determines the correct loader version.
+ * Modpack installation: downloads mod files and determines the correct loader version.
  * Called from launcher.ts during the 'preparing' phase on first launch (or after a version switch).
  */
 
@@ -11,6 +11,15 @@ import AdmZip from 'adm-zip'
 import { instanceGameDir } from './instances'
 import { getSettings } from './settings'
 import { safeJoin } from './safePath'
+import {
+  PRISM_PROFILE_FILE,
+  findPrismIconDataUrl,
+  findPrismRoot,
+  mergePrismComponents,
+  parseInstanceCfg,
+  type PrismComponent,
+  type PrismComponentRef
+} from './prism'
 
 const MR_BASE = 'https://api.modrinth.com/v2'
 const CF_BASE = 'https://api.curseforge.com/v1'
@@ -232,7 +241,7 @@ export async function listLoaderVersions(loader: string, mcVersion: string): Pro
 
 /**
  * Downloads the Forge installer JAR into the instance's .ender-installers/ cache.
- * Returns the JAR path for MCLC's `forge:` option — ForgeWrapper handles the rest.
+ * Returns the JAR path for MCLC's `forge:` option; ForgeWrapper handles the rest.
  */
 export async function installForgeLoader(
   gameDir: string,
@@ -255,7 +264,7 @@ export async function installForgeLoader(
 
 /**
  * Downloads the NeoForge installer JAR into the instance's .ender-installers/ cache.
- * Returns the JAR path for MCLC's `forge:` option — ForgeWrapper handles the rest.
+ * Returns the JAR path for MCLC's `forge:` option; ForgeWrapper handles the rest.
  */
 export async function installNeoforgeLoader(
   gameDir: string,
@@ -479,7 +488,7 @@ export async function installMrpack(
   const loaderType = rawLoaderType.replace('-loader', '')
   const loaderVersion = loaderKey ? deps[loaderKey] : undefined
 
-  // Download client-side mod files — wipe mods dir first so stale JARs from a
+  // Download client-side mod files; wipe mods dir first so stale JARs from a
   // previous version don't coexist with the new version's mods.
   const allFiles: Array<{
     path: string
@@ -615,6 +624,120 @@ export interface ImportResult {
   marker: PackMarker
   name: string
   mcVersion: string
+  recommendedRamMb?: number
+  jvmArgs?: string
+  iconUrl?: string
+}
+
+async function loadPrismComponent(
+  zip: AdmZip,
+  root: string,
+  ref: PrismComponentRef
+): Promise<PrismComponent> {
+  const local = zip.getEntry(`${root}patches/${ref.uid}.json`)
+  if (local) return JSON.parse(local.getData().toString('utf8')) as PrismComponent
+
+  const version = ref.version ?? ref.cachedVersion
+  if (!version) throw new Error(`Prism component ${ref.uid} has no version.`)
+  const url = `https://meta.prismlauncher.org/v1/${encodeURIComponent(ref.uid)}/${encodeURIComponent(version)}.json`
+  const res = await fetch(url, { headers: { 'User-Agent': UA } })
+  if (!res.ok) throw new Error(`Could not resolve Prism component ${ref.uid} ${version} (${res.status}).`)
+  return await res.json() as PrismComponent
+}
+
+async function importPrismPack(
+  zip: AdmZip,
+  root: string,
+  instanceId: string,
+  onProgress: (msg: string, pct?: number) => void
+): Promise<ImportResult> {
+  const gameDir = instanceGameDir(instanceId)
+  const packEntry = zip.getEntry(`${root}mmc-pack.json`)
+  if (!packEntry) throw new Error('mmc-pack.json missing from Prism pack.')
+
+  const pack = JSON.parse(packEntry.getData().toString('utf8')) as { components?: PrismComponentRef[] }
+  const refs = pack.components ?? []
+  const mcRef = refs.find((ref) => ref.uid === 'net.minecraft')
+  const mcVersion = mcRef?.version ?? mcRef?.cachedVersion ?? ''
+  if (!mcVersion) throw new Error('Prism pack does not specify a Minecraft version.')
+
+  onProgress('Resolving Prism components…', 10)
+  const components: PrismComponent[] = []
+  for (let i = 0; i < refs.length; i++) {
+    components.push(await loadPrismComponent(zip, root, refs[i]))
+    onProgress(
+      `Resolving Prism components… (${i + 1}/${refs.length})`,
+      10 + Math.round(((i + 1) / refs.length) * 20)
+    )
+  }
+
+  const profile = mergePrismComponents(components, mcVersion)
+  const cfgEntry = zip.getEntry(`${root}instance.cfg`)
+  const cfg = cfgEntry ? parseInstanceCfg(cfgEntry.getData().toString('utf8')) : {}
+  const iconUrl = findPrismIconDataUrl(zip, root, cfg)
+  const configuredJavaMajor = parseInt(cfg.JavaVersion?.split('.')[0] ?? '', 10)
+  if (Number.isFinite(configuredJavaMajor)) profile.javaMajor = configuredJavaMajor
+
+  const extractPrefixes = [
+    { source: `${root}.minecraft/`, destination: gameDir },
+    { source: `${root}minecraft/`, destination: gameDir },
+    { source: `${root}libraries/`, destination: join(gameDir, 'libraries') },
+    { source: `${root}natives/`, destination: join(gameDir, 'natives') }
+  ]
+  const files = zip.getEntries().filter((entry) => {
+    const name = entry.entryName.replace(/\\/g, '/')
+    return !entry.isDirectory && extractPrefixes.some(({ source }) => name.startsWith(source))
+  })
+
+  onProgress('Extracting Prism instance…', 35)
+  for (let i = 0; i < files.length; i++) {
+    const entry = files[i]
+    const normalized = entry.entryName.replace(/\\/g, '/')
+    const mapping = extractPrefixes.find(({ source }) => normalized.startsWith(source))!
+    const relative = normalized.slice(mapping.source.length)
+    if (!relative) continue
+    const destination = safeJoin(mapping.destination, relative)
+    if (!destination) throw new Error(`Prism pack contains an unsafe path: ${entry.entryName}`)
+    mkdirSync(dirname(destination), { recursive: true })
+    writeFileSync(destination, entry.getData())
+    if (i % 50 === 0 || i === files.length - 1) {
+      onProgress(
+        `Extracting Prism instance… (${i + 1}/${files.length})`,
+        35 + Math.round(((i + 1) / Math.max(files.length, 1)) * 55)
+      )
+    }
+  }
+
+  const versionDir = join(gameDir, 'versions', profile.versionId)
+  mkdirSync(versionDir, { recursive: true })
+  writeFileSync(join(versionDir, `${profile.versionId}.json`), JSON.stringify(profile.versionJson, null, 2))
+  writeFileSync(join(gameDir, PRISM_PROFILE_FILE), JSON.stringify(profile, null, 2))
+
+  const forgeRef = refs.find((ref) => ref.uid === 'net.minecraftforge')
+  const loaderType = forgeRef ? 'forge'
+    : refs.some((ref) => ref.uid.includes('neoforge')) ? 'neoforge'
+    : refs.some((ref) => ref.uid.includes('fabric')) ? 'fabric'
+    : refs.some((ref) => ref.uid.includes('quilt')) ? 'quilt'
+    : 'vanilla'
+  const loaderRef = forgeRef ?? refs.find((ref) =>
+    ref.uid.includes('neoforge') || ref.uid.includes('fabric') || ref.uid.includes('quilt')
+  )
+  const marker: PackMarker = {
+    loaderType,
+    loaderVersion: loaderRef?.version ?? loaderRef?.cachedVersion
+  }
+  writeMarker(instanceId, marker)
+  injectServersDat(gameDir)
+
+  const recommendedRamMb = parseInt(cfg.MaxMemAlloc ?? '', 10)
+  return {
+    marker,
+    name: cfg.name || 'Imported Prism Instance',
+    mcVersion,
+    recommendedRamMb: Number.isFinite(recommendedRamMb) ? recommendedRamMb : undefined,
+    jvmArgs: cfg.JvmArgs || undefined,
+    iconUrl
+  }
 }
 
 export async function importLocalPack(
@@ -625,11 +748,17 @@ export async function importLocalPack(
   const gameDir = instanceGameDir(instanceId)
 
   onProgress('Reading pack file…')
-  const buf = readFileSync(filePath)
-  const zip = new AdmZip(buf)
+  // Pass the path directly so very large Prism exports do not retain both a
+  // separate readFile buffer and AdmZip's archive buffer in memory.
+  const zip = new AdmZip(filePath)
 
   const mrpackEntry = zip.getEntry('modrinth.index.json')
   const cfEntry = zip.getEntry('manifest.json')
+  const prismRoot = findPrismRoot(zip.getEntries())
+
+  if (prismRoot !== null) {
+    return importPrismPack(zip, prismRoot, instanceId, onProgress)
+  }
 
   if (mrpackEntry) {
     // ── mrpack format ────────────────────────────────────────────────────────
@@ -695,7 +824,7 @@ export async function importLocalPack(
     const cfKey = getSettings().curseforgeApiKey
     if (!cfKey) {
       throw new Error(
-        'A CurseForge API key is required to import this pack — add it in Settings → API Keys'
+        'A CurseForge API key is required to import this pack. Add it in Settings → API Keys.'
       )
     }
 
@@ -763,7 +892,7 @@ export async function importLocalPack(
   }
 
   throw new Error(
-    'Unknown format — file must be a .mrpack or a CurseForge modpack zip containing manifest.json'
+    'Unknown format. The file must be a Modrinth, CurseForge, or Prism/MultiMC modpack zip.'
   )
 }
 
@@ -930,7 +1059,7 @@ export async function installCfPack(
 ): Promise<PackMarker> {
   const gameDir = instanceGameDir(instanceId)
   const cfKey = getSettings().curseforgeApiKey
-  if (!cfKey) throw new Error('A CurseForge API key is required — add it in Settings → API Keys')
+  if (!cfKey) throw new Error('A CurseForge API key is required. Add it in Settings → API Keys.')
 
   const cfH = { 'x-api-key': cfKey, Accept: 'application/json' }
 
@@ -970,7 +1099,7 @@ export async function installCfPack(
     }
   }
 
-  // Download mods — wipe the directory first so stale mods from a previous
+  // Download mods; wipe the directory first so stale mods from a previous
   // version don't end up alongside the new version's mods (duplicate JARs crash NeoForge).
   const modEntries: Array<{ projectID: number; fileID: number; required: boolean }> =
     (manifest.files ?? []).filter((m: any) => m.required)

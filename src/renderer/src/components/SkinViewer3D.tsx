@@ -21,7 +21,7 @@ export default function SkinViewer3D({ uuid, skinUrl: suppliedSkinUrl, variant, 
 
   /* Create the viewer once. Skin and cape are loaded by the effects below so
      that changing either one updates the same viewer instead of tearing it
-     down — recreating the viewer on every skin change used to drop the cape. */
+     down. Recreating the viewer on every skin change used to drop the cape. */
   useEffect(() => {
     mountedRef.current = true
     if (!canvasRef.current) return
