@@ -17,7 +17,7 @@ export function applyTheme(theme: ThemeId): void {
   document.documentElement.setAttribute('data-theme', theme)
 }
 
-/** Toggle the `lite` class on the document root — see index.css for what it strips. */
+/** Toggle the `lite` class on the document root; see index.css for what it strips. */
 export function applyLiteMode(liteMode: boolean): void {
   document.documentElement.classList.toggle('lite', liteMode)
 }
@@ -33,6 +33,9 @@ interface AppState {
   liteMode: boolean
   setLiteMode: (liteMode: boolean) => void
   loadLiteMode: () => Promise<void>
+
+  gregTechHubEnabled: boolean
+  setGregTechHubEnabled: (enabled: boolean) => void
 
   accounts: Account[]
   refreshAccounts: () => Promise<void>
@@ -57,7 +60,7 @@ interface AppState {
   updateInfo: UpdateInfo | null
   setUpdateInfo: (info: UpdateInfo | null) => void
 
-  /** Mirrors the main process — downloads start automatically when a check finds an update. */
+  /** Mirrors the main process; downloads start automatically when a check finds an update. */
   updateDownload: { state: 'idle' | 'downloading' | 'ready' | 'error'; progress: number }
   setUpdateDownload: (patch: Partial<AppState['updateDownload']>) => void
 
@@ -102,6 +105,13 @@ export const useApp = create<AppState>((set) => ({
     applyLiteMode(liteMode)
     set({ liteMode })
   },
+
+  gregTechHubEnabled: false,
+  setGregTechHubEnabled: (gregTechHubEnabled) =>
+    set((state) => ({
+      gregTechHubEnabled,
+      page: !gregTechHubEnabled && state.page === 'gregtech' ? 'settings' : state.page
+    })),
 
   accounts: [],
   refreshAccounts: async () => {

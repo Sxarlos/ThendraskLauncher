@@ -69,7 +69,7 @@ function CapeTile({
     >
       {/* Front-face crop via CSS background - no CORS, no canvas taint.
           Percentages (not pixels) keep the crop correct for any cape texture
-          resolution — 64×32, 128×64, 512×256 — so every cape renders at the
+          resolution (64×32, 128×64, or 512×256) so every cape renders at the
           same scale in the box. */}
       <div
         style={{
@@ -199,7 +199,7 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
   const [skinLoading, setSkinLoading] = useState(false)
   const [savedSkins, setSavedSkins]   = useState<SavedSkin[]>([])
   const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null)
-  /* Preview-only cape visibility in the 3D viewer — does NOT change the cape
+  /* Preview-only cape visibility in the 3D viewer; does NOT change the cape
      equipped on the account, so users can see their skin with/without the cape
      without unequipping and re-equipping it. */
   const [showCape, setShowCape]       = useState(true)
@@ -332,7 +332,7 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
       setProfile(updated)
       // Applying a freshly-chosen file also saves it to the library, so users
       // don't have to save separately. Skipped when the skin came from the
-      // library or is already saved. Non-fatal — the upload already succeeded.
+      // library or is already saved. Non-fatal because the upload already succeeded.
       if (skinPath && !savedSkins.some((s) => s.dataUrl === skinPreview)) {
         try {
           setSavedSkins(await window.api.profile.saveSkin(skinPath, skinVariant))
@@ -501,12 +501,12 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
               />
             )}
 
-            {/* Preview toggle — only meaningful when a cape is in view. Hides
+            {/* Preview toggle is only meaningful when a cape is in view. Hides
                 the cape in the viewer without touching the account. */}
             {!liteMode && previewedCape && (
               <button
                 onClick={() => setShowCape((v) => !v)}
-                title="Toggle the cape in this preview only — your equipped cape stays unchanged"
+                title="Toggle the cape in this preview only. Your equipped cape stays unchanged."
                 style={{
                   display: 'flex', alignItems: 'center', gap: 7,
                   padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 500,
@@ -545,7 +545,7 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
                   }}
                 >
                   Your Microsoft session for <strong>{username}</strong> has expired.
-                  Your saved skins are still available below — sign in again to
+                  Your saved skins are still available below. Sign in again to
                   apply a skin to your account or manage capes.
                 </div>
                 <button
@@ -578,7 +578,7 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
 
             {!loading && (
               <>
-                {/* Skin changer + local library — works without a live session */}
+                {/* Skin changer + local library; works without a live session */}
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10, display: 'flex', justifyContent: 'space-between' }}>
                     <span>Skin</span>
@@ -682,7 +682,7 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
                   </div>
                 </div>
 
-                {/* Cape selector — requires a valid Minecraft session */}
+                {/* Cape selector; requires a valid Minecraft session */}
                 {profile && (
                 <div>
                   <div

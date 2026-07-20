@@ -153,7 +153,7 @@ body {
 
 /* Make Tailwind's `text-white` follow the theme's strong-text token so
    emphasised text stays readable in the light theme. (bg-white is left
-   alone — it's used for the toggle knob.) */
+   alone; it's used for the toggle knob.) */
 .text-white {
   color: var(--text-strong);
 }
@@ -255,7 +255,7 @@ select option {
    Pure CSS overlay applied when the user enables "Lite mode" in
    Settings (`html.lite`, toggled from src/renderer/src/store.ts).
    Strips transitions/animations, blur, and shadows for lower-end
-   machines. Components are not restructured — this only disables
+   machines. Components are not restructured; this only disables
    effects on top of the existing markup.
 ═══════════════════════════════════════════════════════════════ */
 html.lite *,

@@ -34,6 +34,16 @@ function IconFriends(): JSX.Element {
   )
 }
 
+function IconGregTech(): JSX.Element {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 3h8l1 4 3 2v6l-3 2-1 4H8l-1-4-3-2V9l3-2 1-4z"/>
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M12 3v3m0 12v3M4 12h3m10 0h3"/>
+    </svg>
+  )
+}
+
 function IconServers(): JSX.Element {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -75,6 +85,7 @@ function IconChevronRight(): JSX.Element {
 const NAV: { id: Page; label: string; icon: JSX.Element }[] = [
   { id: 'home',     label: 'Home',     icon: <IconHome /> },
   { id: 'library',  label: 'Library',  icon: <IconLibrary /> },
+  { id: 'gregtech', label: 'GregTech', icon: <IconGregTech /> },
   { id: 'servers',  label: 'Servers',  icon: <IconServers /> },
   { id: 'friends',  label: 'Friends',  icon: <IconFriends /> },
   { id: 'settings', label: 'Settings', icon: <IconSettings /> },
@@ -85,6 +96,7 @@ const NAV: { id: Page; label: string; icon: JSX.Element }[] = [
 export default function Sidebar(): JSX.Element {
   const page             = useApp((s) => s.page)
   const setPage          = useApp((s) => s.setPage)
+  const gregTechHubEnabled = useApp((s) => s.gregTechHubEnabled)
   const installingCount  = useApp((s) => s.installingCount)
   const updateInfo       = useApp((s) => s.updateInfo)
   const updateDownload   = useApp((s) => s.updateDownload)
@@ -162,7 +174,7 @@ export default function Sidebar(): JSX.Element {
 
       {/* Nav items */}
       <nav className="flex-1 p-2 space-y-0.5 overflow-hidden">
-        {NAV.map((item) => {
+        {NAV.filter((item) => item.id !== 'gregtech' || gregTechHubEnabled).map((item) => {
           const active = page === item.id
 
           return (
@@ -296,7 +308,7 @@ export default function Sidebar(): JSX.Element {
                     Retry
                   </button>
                 ) : updateDownload.state === 'downloading' ? (
-                  // Silent background download — just passive progress.
+                  // Silent background download; just passive progress.
                   <div className="mt-2 w-full">
                     <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(var(--accent-rgb),0.2)' }}>
                       <div
@@ -309,7 +321,7 @@ export default function Sidebar(): JSX.Element {
                     </p>
                   </div>
                 ) : (
-                  // 'idle' — the user opted out of auto-download in Settings.
+                  // 'idle' means the user opted out of auto-download in Settings.
                   <button
                     onClick={startDownload}
                     className="mt-2 w-full text-xs font-semibold rounded-md py-1 transition-opacity hover:opacity-80"

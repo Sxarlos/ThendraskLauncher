@@ -5,6 +5,10 @@ import type {
   BrowseParams,
   Friend,
   FriendPresence,
+  GregTechCommunityAddon,
+  GTNHSpecialBuild,
+  GTNHUpdateInfo,
+  GTNHUpdateProgress,
   Instance,
   InstanceRepairResult,
   InstanceSnapshot,
@@ -41,7 +45,7 @@ export interface CreateInstanceInput {
 
 /**
  * The typed API exposed to the renderer as `window.api`.
- * Thin forwarding layer over IPC — no logic lives here.
+ * Thin forwarding layer over IPC; no logic lives here.
  */
 const api = {
   app: {
@@ -189,6 +193,25 @@ const api = {
       ipcRenderer.invoke('customMods:remove', instanceId, source, projectId),
     updateAll: (instanceId: string): Promise<ModInstallResult> =>
       ipcRenderer.invoke('customMods:update', instanceId)
+  },
+  gregtech: {
+    addons: (instanceId: string): Promise<GregTechCommunityAddon[]> =>
+      ipcRenderer.invoke('gregtech:addons', instanceId),
+    install: (instanceId: string, addonId: GregTechCommunityAddon['id']): Promise<GregTechCommunityAddon[]> =>
+      ipcRenderer.invoke('gregtech:install', instanceId, addonId),
+    checkPackUpdate: (instanceId: string, channel: 'stable' | 'beta' = 'stable'): Promise<GTNHUpdateInfo> =>
+      ipcRenderer.invoke('gregtech:checkPackUpdate', instanceId, channel),
+    installPackUpdate: (instanceId: string, channel: 'stable' | 'beta' = 'stable'): Promise<Instance> =>
+      ipcRenderer.invoke('gregtech:installPackUpdate', instanceId, channel),
+    specialBuilds: (instanceId: string): Promise<GTNHSpecialBuild[]> =>
+      ipcRenderer.invoke('gregtech:specialBuilds', instanceId),
+    installSpecialBuild: (instanceId: string, specialId: string): Promise<Instance> =>
+      ipcRenderer.invoke('gregtech:installSpecialBuild', instanceId, specialId),
+    onPackUpdateProgress: (cb: (progress: GTNHUpdateProgress) => void): (() => void) => {
+      const listener = (_event: unknown, progress: GTNHUpdateProgress): void => cb(progress)
+      ipcRenderer.on('gregtech:packUpdateProgress', listener)
+      return () => ipcRenderer.removeListener('gregtech:packUpdateProgress', listener)
+    }
   },
   profile: {
     get: (): Promise<MinecraftProfile> => ipcRenderer.invoke('profile:get'),

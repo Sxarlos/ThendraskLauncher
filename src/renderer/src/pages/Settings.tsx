@@ -373,7 +373,7 @@ function UpdateCheckRow(): JSX.Element {
         <div className="min-w-0">
           <div className="text-sm font-medium" style={{ color: 'var(--text-bright)' }}>Check for Updates</div>
           <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Updates are checked automatically in the background — this checks right now.
+            Updates are checked automatically in the background. This checks right now.
           </div>
         </div>
         <button
@@ -655,6 +655,16 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
       <SectionHeader>Game</SectionHeader>
 
       <Row
+        label="GregTech Hub"
+        desc="Show the optional GregTech community addon catalog in the left sidebar"
+      >
+        <Toggle
+          checked={!!settings.gregTechHubEnabled}
+          onChange={(v) => onChange({ gregTechHubEnabled: v })}
+        />
+      </Row>
+
+      <Row
         label="Use pack-recommended RAM"
         desc="When a modpack suggests a RAM amount, use that instead of the setting above"
       >
@@ -791,7 +801,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
 
       <Row
         label="Download updates automatically"
-        desc="Fetch new versions silently in the background and only ask when it's time to restart. Turn off to review and start downloads yourself — useful on metered connections."
+        desc="Fetch new versions silently in the background and only ask when it's time to restart. Turn this off to review and start downloads yourself, which can be useful on metered connections."
       >
         <Toggle
           checked={settings.autoDownloadUpdates !== false}
@@ -801,7 +811,7 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
 
       <Row
         label="Receive beta updates"
-        desc="Also offer prerelease (beta) builds — including early macOS & Linux releases. May be less stable; please report issues on GitHub."
+        desc="Also offer prerelease (beta) builds, including early macOS & Linux releases. These may be less stable; please report issues on GitHub."
       >
         <Toggle checked={!!settings.betaUpdates} onChange={(v) => onChange({ betaUpdates: v })} />
       </Row>
@@ -923,7 +933,7 @@ function AppearanceTab({ settings, onChange }: { settings: AppSettings; onChange
 
       <Row
         label="Lite mode"
-        desc="Strips visual effects (blur, shadows, animations, 3D skin viewer) for a snappier, lower-memory launcher. Also disables GPU hardware acceleration — that part takes effect after restarting the launcher. Good for lower-end PCs."
+        desc="Strips visual effects (blur, shadows, animations, 3D skin viewer) for a snappier, lower-memory launcher. It also disables GPU hardware acceleration after restarting the launcher. Good for lower-end PCs."
       >
         <Toggle
           checked={!!settings.liteMode}
@@ -1042,6 +1052,7 @@ function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (
 
 /* ── Main Settings page ────────────────────────────────── */
 export default function Settings(): JSX.Element {
+  const setGregTechHubEnabled = useApp((state) => state.setGregTechHubEnabled)
   const [tab, setTab] = useState<SettingsTab>('general')
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1056,6 +1067,7 @@ export default function Settings(): JSX.Element {
   const handleChange = async (patch: Partial<AppSettings>): Promise<void> => {
     const next = await window.api.settings.set(patch)
     setSettings(next)
+    if ('gregTechHubEnabled' in patch) setGregTechHubEnabled(!!next.gregTechHubEnabled)
   }
 
   const TABS: { id: SettingsTab; label: string }[] = [
