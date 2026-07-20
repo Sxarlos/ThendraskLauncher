@@ -55,7 +55,7 @@ export function writeDefaultOptions(
  * whatever is already there. No-ops if `controls` is empty or the MC version
  * predates 1.13 (GLFW key names like `key.keyboard.w` only exist from 1.13+).
  *
- * Unlike writeDefaultOptions this DOES overwrite existing matching lines —
+ * Unlike writeDefaultOptions this DOES overwrite existing matching lines;
  * it's meant to be called on every launch so bindings stay in sync.
  */
 export function applyControls(
@@ -71,7 +71,7 @@ export function applyControls(
   for (const [action, value] of entries) {
     managedLines.push(`key_${action}:${value}`)
     // The swap-offhand action id was renamed across MC versions
-    // (key.swapOffhand vs key.swapHands) — write both so the binding sticks
+    // (key.swapOffhand vs key.swapHands); write both so the binding sticks
     // regardless of which one the running version reads. Unknown option
     // keys are silently ignored by Minecraft, so the extra line is harmless.
     if (action === 'key.swapOffhand') {
@@ -93,7 +93,7 @@ export function applyControls(
 
   const raw = readFileSync(optionsFile, 'utf-8')
   const lines = raw.split(/\r?\n/)
-  // A trailing newline in the file produces a trailing empty element — drop
+  // A trailing newline in the file produces a trailing empty element; drop
   // it so we don't introduce a spurious blank line on rewrite.
   if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
 

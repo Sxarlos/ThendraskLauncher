@@ -99,7 +99,7 @@ export async function detectAllJavas(): Promise<JavaInstall[]> {
         if (exe) await add(exe)
       }
     } catch {
-      // Unreadable directory — skip
+      // Unreadable directory; skip
     }
   }
 
@@ -168,8 +168,8 @@ function findJavaExeInDir(dir: string): string | undefined {
   const exe = process.platform === 'win32' ? 'java.exe' : 'java'
 
   // Candidate `bin/java` locations relative to a JRE/JDK root:
-  //   <base>/bin/java                — Windows / Linux, and archives extracted flat
-  //   <base>/Contents/Home/bin/java  — macOS .jdk bundle layout
+  //   <base>/bin/java                : Windows / Linux, and archives extracted flat
+  //   <base>/Contents/Home/bin/java  : macOS .jdk bundle layout
   const candidates = (base: string): string[] => [
     join(base, 'bin', exe),
     join(base, 'Contents', 'Home', 'bin', exe),
@@ -217,7 +217,7 @@ async function fetchAdoptiumPackage(major: number): Promise<{ url: string; filen
  * Ensure a Java executable of at least `requiredMajor` is available.
  *
  * Priority order:
- *   1. `overridePath` (user's configured path in settings) — used as-is, error if invalid
+ *   1. `overridePath` (user's configured path in settings): used as-is, error if invalid
  *   2. Any installed system Java that meets the version requirement
  *   3. A previously auto-downloaded JRE in userData/java/{major}/
  *   4. Auto-download Temurin JRE from Adoptium and extract to userData/java/{major}/
@@ -229,7 +229,7 @@ export async function ensureJava(
   overridePath: string | undefined,
   onProgress: (msg: string, pct?: number) => void
 ): Promise<string> {
-  // 1. User-configured path — use it only if it meets the version requirement
+  // 1. User-configured path; use it only if it meets the version requirement
   if (overridePath) {
     const info = await probeJava(overridePath)
     if (!info) throw new Error(`Java not found at configured path: ${overridePath}`)
@@ -248,7 +248,7 @@ export async function ensureJava(
   if (cachedExe) return cachedExe
 
   // 4. Auto-download from Eclipse Adoptium (Temurin)
-  onProgress(`Java ${requiredMajor} not found — downloading automatically…`, 0)
+  onProgress(`Java ${requiredMajor} not found. Downloading automatically…`, 0)
 
   const pkg = await fetchAdoptiumPackage(requiredMajor)
 
@@ -312,7 +312,7 @@ export async function ensureJava(
   onProgress(`Finalising Java ${requiredMajor}…`, 95)
 
   const javaExe = findJavaExeInDir(managedDir)
-  if (!javaExe) throw new Error(`Java ${requiredMajor} installation failed — executable not found after extraction`)
+  if (!javaExe) throw new Error(`Java ${requiredMajor} installation failed. Executable not found after extraction.`)
 
   return javaExe
 }

@@ -6,6 +6,7 @@ import SetupWizard from './components/SetupWizard'
 import UpdateToast from './components/UpdateToast'
 import Home from './pages/Home'
 import Library from './pages/Library'
+import GregTech from './pages/GregTech'
 import Servers from './pages/Servers'
 import Friends from './pages/Friends'
 import Settings from './pages/Settings'
@@ -14,6 +15,7 @@ import { useApp } from './store'
 const PAGES = {
   home: Home,
   library: Library,
+  gregtech: GregTech,
   servers: Servers,
   friends: Friends,
   settings: Settings
@@ -22,6 +24,7 @@ const PAGES = {
 const TITLES: Record<string, string> = {
   home: 'Home',
   library: 'Library',
+  gregtech: 'GregTech Hub',
   servers: 'Servers',
   friends: 'Friends',
   settings: 'Settings'
@@ -38,6 +41,7 @@ export default function App(): JSX.Element {
   const clearLogs = useApp((s) => s.clearLogs)
   const loadTheme = useApp((s) => s.loadTheme)
   const loadLiteMode = useApp((s) => s.loadLiteMode)
+  const setGregTechHubEnabled = useApp((s) => s.setGregTechHubEnabled)
   const setUpdateInfo = useApp((s) => s.setUpdateInfo)
   const setUpdateDownload = useApp((s) => s.setUpdateDownload)
   const setUpdateCheckStatus = useApp((s) => s.setUpdateCheckStatus)
@@ -51,6 +55,7 @@ export default function App(): JSX.Element {
     Promise.all([loadTheme(), loadLiteMode(), refreshAccounts(), refreshInstances()])
       .then(async () => {
         const settings = await window.api.settings.get()
+        setGregTechHubEnabled(!!settings.gregTechHubEnabled)
         if (!settings.setupComplete) setShowWizard(true)
         setAppReady(true)
       })
@@ -65,7 +70,7 @@ export default function App(): JSX.Element {
     const unsubUpToDate = window.api.update.onUpToDate(() => setUpdateCheckStatus('up-to-date'))
     const unsubUpdate = window.api.update.onAvailable((info) => {
       // Whether a silent download starts is main's call (auto-download
-      // setting) — it flips us to 'downloading' via a progress event.
+      // setting); it flips us to 'downloading' via a progress event.
       // Re-checks re-fire this every 5 minutes while an update is pending,
       // so only toast the first sighting of a version.
       if (useApp.getState().updateInfo?.version !== info.version) {
@@ -93,7 +98,7 @@ export default function App(): JSX.Element {
       unsubProgress(); unsubLog(); unsubChecking(); unsubUpToDate()
       unsubUpdate(); unsubDownload(); unsubReady(); unsubUpdateError()
     }
-  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setProgress, addLog, clearLogs, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus])
+  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setGregTechHubEnabled, setProgress, addLog, clearLogs, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus])
 
   useEffect(() => {
     const unsubIdle = window.api.window.onIdle(() => {

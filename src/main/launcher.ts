@@ -1,4 +1,5 @@
 import { join } from 'path'
+import { existsSync, readFileSync } from 'fs'
 import { spawn } from 'child_process'
 import { EventEmitter } from 'events'
 import { BrowserWindow } from 'electron'
@@ -32,6 +33,7 @@ import {
   readNeoforgeJvmArgs
 } from './modpack'
 import { autoInstallShader } from './shaders'
+import { PRISM_PROFILE_FILE, type PrismLaunchProfile } from './prism'
 
 /** Instances currently running, keyed by instance id. */
 const running = new Map<string, ChildProcess>()
@@ -87,6 +89,16 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
   if (!instance) throw new Error('Instance not found.')
 
   const settings = getSettings()
+  const gameDir = instanceGameDir(instanceId)
+  let prismProfile: PrismLaunchProfile | null = null
+  const prismProfilePath = join(gameDir, PRISM_PROFILE_FILE)
+  if (existsSync(prismProfilePath)) {
+    try {
+      prismProfile = JSON.parse(readFileSync(prismProfilePath, 'utf8')) as PrismLaunchProfile
+    } catch (err) {
+      throw new Error(`Imported Prism launch profile is invalid: ${(err as Error).message}`, { cause: err })
+    }
+  }
 
   setState(instanceId, 'preparing', 'Authenticating…')
   const authorization = await getActiveMclcUser()
@@ -172,8 +184,8 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
   }
 
   // ── Java: auto-detect or auto-download the correct version ─────────────────
-  // Must happen before loader setup — NeoForge needs Java to run its installer.
-  let requiredMajor = await resolveRequiredJavaMajor(instance.mcVersion)
+  // Must happen before loader setup because NeoForge needs Java to run its installer.
+  let requiredMajor = prismProfile?.javaMajor ?? await resolveRequiredJavaMajor(instance.mcVersion)
   let resolvedJavaPath: string
   try {
     resolvedJavaPath = await ensureJava(
@@ -189,12 +201,14 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
 
   // ── Loader setup ────────────────────────────────────────────────────────────
 
-  let customVersion: string | undefined
+  let customVersion: string | undefined = prismProfile?.versionId
   let forgeInstallerPath: string | undefined
   let neoforgeJvmArgs: string[] = []
 
-  if (resolvedLoaderType === 'fabric') {
-    // MCLC has no built-in Fabric support — we install the Fabric profile JSON
+  if (prismProfile) {
+    setState(instanceId, 'preparing', 'Preparing imported Prism instance…')
+  } else if (resolvedLoaderType === 'fabric') {
+    // MCLC has no built-in Fabric support, so we install the Fabric profile JSON
     // ourselves and point version.custom at it, the same way Quilt is handled.
     const fabricVer = resolvedLoaderVersion ?? await resolveFabricVersion(instance.mcVersion)
     if (fabricVer) {
@@ -202,11 +216,11 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
       customVersion = await installFabricLoader(instanceGameDir(instanceId), instance.mcVersion, fabricVer)
         .catch(() => undefined)
       if (!customVersion) {
-        setState(instanceId, 'preparing', 'Fabric loader install failed — launching vanilla')
+        setState(instanceId, 'preparing', 'Fabric loader install failed. Launching vanilla.')
         await new Promise((r) => setTimeout(r, 1000))
       }
     } else {
-      setState(instanceId, 'preparing', 'Could not resolve Fabric version — launching vanilla')
+      setState(instanceId, 'preparing', 'Could not resolve Fabric version. Launching vanilla.')
       await new Promise((r) => setTimeout(r, 1000))
     }
   } else if (resolvedLoaderType === 'quilt') {
@@ -217,7 +231,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
         .catch(() => undefined)
     }
   } else if (resolvedLoaderType === 'forge') {
-    // MCLC handles Forge via ForgeWrapper — we just download the installer JAR
+    // MCLC handles Forge via ForgeWrapper; we just download the installer JAR
     // and pass it as `forge:`. ForgeWrapper runs the installer and reads the
     // resulting version profile. The JAR is cached so only downloaded once.
     const forgeVer = resolvedLoaderVersion ?? await resolveForgeVersion(instance.mcVersion)
@@ -226,11 +240,11 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
       forgeInstallerPath = await installForgeLoader(instanceGameDir(instanceId), instance.mcVersion, forgeVer)
         .catch(() => undefined)
       if (!forgeInstallerPath) {
-        setState(instanceId, 'preparing', 'Forge installer download failed — launching vanilla')
+        setState(instanceId, 'preparing', 'Forge installer download failed. Launching vanilla.')
         await new Promise((r) => setTimeout(r, 1000))
       }
     } else {
-      setState(instanceId, 'preparing', 'Could not resolve Forge version — launching vanilla')
+      setState(instanceId, 'preparing', 'Could not resolve Forge version. Launching vanilla.')
       await new Promise((r) => setTimeout(r, 1000))
     }
   } else if (resolvedLoaderType === 'neoforge') {
@@ -257,11 +271,11 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send('launch:log', { instanceId, line: `[Launcher] NeoForge ${neoVer} install failed: ${reason}` })
         }
-        setState(instanceId, 'error', `NeoForge ${neoVer} install failed — check the log panel for details.`)
+        setState(instanceId, 'error', `NeoForge ${neoVer} install failed. Check the log panel for details.`)
         throw new Error(`NeoForge ${neoVer} install failed: ${reason}`, { cause: err })
       }
     } else {
-      setState(instanceId, 'preparing', 'Could not resolve NeoForge version — launching vanilla')
+      setState(instanceId, 'preparing', 'Could not resolve NeoForge version. Launching vanilla.')
       await new Promise((r) => setTimeout(r, 1000))
     }
   }
@@ -273,7 +287,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
   if (resolvedLoaderType === 'neoforge') {
     const neoJavaMajor = detectNeoforgeJavaMajor(instanceGameDir(instanceId))
     if (neoJavaMajor !== null && neoJavaMajor > requiredMajor) {
-      setState(instanceId, 'preparing', `NeoForge requires Java ${neoJavaMajor} — checking…`)
+      setState(instanceId, 'preparing', `NeoForge requires Java ${neoJavaMajor}. Checking…`)
       try {
         resolvedJavaPath = await ensureJava(
           neoJavaMajor,
@@ -300,7 +314,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     writeDefaultOptions(instanceGameDir(instanceId), instance.mcVersion, settings.defaultGameSettings)
   }
 
-  // Apply curated default controls on every launch (1.13+ only) — runs after
+  // Apply curated default controls on every launch (1.13+ only); runs after
   // writeDefaultOptions so the merge sees the freshly created options.txt.
   if (settings.defaultControls && Object.keys(settings.defaultControls).length > 0) {
     applyControls(instanceGameDir(instanceId), instance.mcVersion, settings.defaultControls)
@@ -330,7 +344,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     return proc
   }
 
-  // Capture MCLC's internal errors — without this listener they are silently
+  // Capture MCLC's internal errors; without this listener they are silently
   // swallowed and `client.launch()` returns undefined with no explanation.
   let mclcError: Error | undefined
   client.on('error', (e: unknown) => {
@@ -365,13 +379,13 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     if (shaderMatch) {
       const [, shaderName, version] = shaderMatch
       const shaderpacks = join(instanceGameDir(instanceId), 'shaderpacks')
-      emitLog(`[Thendrask Launcher] Detected missing shader: ${shaderName} ${version} — downloading automatically…`)
+      emitLog(`[Thendrask Launcher] Detected missing shader: ${shaderName} ${version}. Downloading automatically…`)
       autoInstallShader(shaderName, version, shaderpacks)
         .then((dest) => {
           if (dest) {
             emitLog(`[Thendrask Launcher] ✓ ${shaderName} ${version} installed. Close and relaunch the game to apply.`)
           } else {
-            emitLog(`[Thendrask Launcher] Could not find ${shaderName} ${version} on Modrinth — download manually from https://www.complementary.dev/`)
+            emitLog(`[Thendrask Launcher] Could not find ${shaderName} ${version} on Modrinth. Download it manually from https://www.complementary.dev/`)
           }
         })
         .catch((e: Error) => {
@@ -394,7 +408,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     if (sessionStart > 0) addPlayTime(instanceId, Date.now() - sessionStart)
     emitLog(`\n[Launcher] Game exited with code ${code}.`)
     if (!launched) {
-      // Game process exited before producing any output — it crashed on startup.
+      // Game process exited before producing any output; it crashed on startup.
       setState(instanceId, 'error', `Game crashed on startup (exit code ${code}). Open the log panel for details.`)
     } else {
       setState(instanceId, 'closed', `Game exited (code ${code}).`)
@@ -437,14 +451,19 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     ...(serverAddress ? { quickPlay: { type: quickPlayType(instance.mcVersion), identifier: serverAddress } } : {}),
     ...(() => {
       const userArgs = instance.jvmArgs?.trim() ? instance.jvmArgs.trim().split(/\s+/).filter(Boolean) : []
-      const allArgs = [...neoforgeJvmArgs, ...userArgs]
+      const allArgs = [...(prismProfile?.jvmArgs ?? []), ...neoforgeJvmArgs, ...userArgs]
       return allArgs.length > 0 ? { customArgs: allArgs } : {}
-    })()
+    })(),
+    ...(prismProfile ? {
+      overrides: {
+        versionJson: join(gameDir, 'versions', prismProfile.versionId, `${prismProfile.versionId}.json`)
+      }
+    } : {})
   })
 
   if (!proc) {
     running.delete(instanceId)
-    const reason = mclcError?.message ?? 'unknown — check the main process console for [MCLC debug] output'
+    const reason = mclcError?.message ?? 'unknown. Check the main process console for [MCLC debug] output.'
     setState(instanceId, 'error', `Launch failed: ${reason}`)
     throw new Error(`minecraft-launcher-core returned no process: ${reason}`)
   }

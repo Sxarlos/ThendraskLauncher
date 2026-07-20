@@ -3,7 +3,7 @@ import type { MojangVersion } from '@shared/types'
 const MANIFEST_URL = 'https://launchermeta.mojang.com/mc/game/version_manifest_v2.json'
 
 // Manifest entries carry a `url` to each version's own JSON. That per-version
-// JSON is what declares the required Java runtime — we keep the url internally
+// JSON is what declares the required Java runtime; we keep the URL internally
 // even though the renderer-facing MojangVersion type omits it.
 interface RawVersion extends MojangVersion {
   url: string
@@ -36,7 +36,7 @@ const javaMajorCache = new Map<string, number>()
 /**
  * The Java major version Mojang declares for a Minecraft version, read from that
  * version's own JSON (`javaVersion.majorVersion`). This is the authoritative
- * source — newer Minecraft versions bump it (e.g. Java 25) and mods built for
+ * source. Newer Minecraft versions bump it (e.g. Java 25) and mods built for
  * them refuse older runtimes. Returns null when the version is unknown or the
  * field is absent (pre-1.17 versions omit it), so callers can fall back.
  */
