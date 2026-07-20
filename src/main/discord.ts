@@ -10,7 +10,7 @@ export function initDiscord(clientId: string | undefined, enabled: boolean): voi
     return
   }
 
-  // Already connected with the same ID — nothing to do
+  // Already connected with the same ID; nothing to do
   if (clientId === activeClientId && connected) return
 
   destroyDiscord()

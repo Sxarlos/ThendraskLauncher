@@ -67,6 +67,8 @@ import {
   toggleManagedMod,
   updateManagedMods
 } from './customMods'
+import { installGregTechAddon, listGregTechAddons } from './gregtechAddons'
+import { checkGTNHUpdate, installGTNHUpdate, installGTNHSpecialBuild, listGTNHSpecialBuilds } from './gtnhUpdates'
 import type { Friend } from '@shared/types'
 import type { AppSettings, BrowseParams, ServerEntry } from '@shared/types'
 
@@ -168,7 +170,7 @@ function showFromTray(): void {
   }
 }
 
-/** Destroy the launcher window and park it in the system tray — frees the whole renderer process. */
+/** Destroy the launcher window and park it in the system tray, freeing the whole renderer process. */
 function enterTrayMode(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   trayModeActive = true
@@ -201,7 +203,7 @@ function destroyTray(): void {
  * Applies the "Free memory while playing" policy. Runs on every running-state
  * transition reported by launcher.ts (a game reaching 'running', or exiting):
  * on the first game to reach running state, hide the window to the tray (if
- * the setting is on); once the last running game exits, restore it — but only
+ * the setting is on); once the last running game exits, restore it, but only
  * if this policy is the one that hid it in the first place.
  */
 function applyTrayPolicy(): void {
@@ -359,7 +361,7 @@ function registerIpcHandlers(): void {
       void checkForUpdate()
     }
     if ('autoDownloadUpdates' in patch && next.autoDownloadUpdates !== false) {
-      // Re-enabled mid-session — fetch any update we already know about.
+      // Re-enabled mid-session; fetch any update we already know about.
       downloadPendingUpdate()
     }
     return next
@@ -390,7 +392,7 @@ function registerIpcHandlers(): void {
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
-  // Mod file picker — returns selected .jar paths
+  // Mod file picker; returns selected .jar paths
   handle('dialog:pickModFiles', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
@@ -431,7 +433,7 @@ function registerIpcHandlers(): void {
 
   handle('instance:removeMod', (instanceId: string, fileName: string) => {
     if (isRunning(instanceId)) throw new Error('Stop the instance before removing mods.')
-    // Plain file names only — no separators or '..' that could reach outside mods/
+    // Plain file names only; no separators or '..' that could reach outside mods/
     if (basename(fileName) !== fileName || (!fileName.endsWith('.jar') && !fileName.endsWith('.jar.disabled'))) {
       throw new Error('Invalid mod file name.')
     }
@@ -472,6 +474,36 @@ function registerIpcHandlers(): void {
   handle('customMods:update', (instanceId: string) => {
     if (isRunning(instanceId)) throw new Error('Stop the instance before updating mods.')
     return updateManagedMods(instanceId)
+  })
+
+  handle('gregtech:addons', (instanceId: string) => {
+    if (!getSettings().gregTechHubEnabled) throw new Error('Enable the GregTech Hub in Settings before using community addons.')
+    return listGregTechAddons(instanceId)
+  })
+  handle('gregtech:install', (instanceId: string, addonId: import('@shared/types').GregTechCommunityAddon['id']) => {
+    if (!getSettings().gregTechHubEnabled) throw new Error('Enable the GregTech Hub in Settings before installing community addons.')
+    if (isRunning(instanceId)) throw new Error('Stop the instance before installing addons.')
+    return installGregTechAddon(instanceId, addonId)
+  })
+  handle('gregtech:checkPackUpdate', (instanceId: string, channel: 'stable' | 'beta' = 'stable') => {
+    if (!getSettings().gregTechHubEnabled) throw new Error('Enable the GregTech Hub in Settings before checking pack updates.')
+    if (channel !== 'stable' && channel !== 'beta') throw new Error('Invalid GTNH update channel.')
+    return checkGTNHUpdate(instanceId, channel)
+  })
+  handle('gregtech:installPackUpdate', (instanceId: string, channel: 'stable' | 'beta' = 'stable') => {
+    if (!getSettings().gregTechHubEnabled) throw new Error('Enable the GregTech Hub in Settings before updating GTNH.')
+    if (channel !== 'stable' && channel !== 'beta') throw new Error('Invalid GTNH update channel.')
+    if (isRunning(instanceId)) throw new Error('Stop the instance before updating GTNH.')
+    return installGTNHUpdate(instanceId, (progress) => mainWindow?.webContents.send('gregtech:packUpdateProgress', progress), channel)
+  })
+  handle('gregtech:specialBuilds', (instanceId: string) => {
+    if (!getSettings().gregTechHubEnabled) throw new Error('Enable the GregTech Hub in Settings before viewing special builds.')
+    return listGTNHSpecialBuilds(instanceId)
+  })
+  handle('gregtech:installSpecialBuild', (instanceId: string, specialId: string) => {
+    if (!getSettings().gregTechHubEnabled) throw new Error('Enable the GregTech Hub in Settings before installing special builds.')
+    if (isRunning(instanceId)) throw new Error('Stop the instance before installing a GTNH special build.')
+    return installGTNHSpecialBuild(instanceId, specialId, (progress) => mainWindow?.webContents.send('gregtech:packUpdateProgress', progress))
   })
 
   // Backups, repair, storage, and diagnostics
@@ -603,7 +635,10 @@ function registerIpcHandlers(): void {
         name: result.name,
         mcVersion: result.mcVersion,
         loader: result.marker.loaderType as import('@shared/types').LoaderType,
-        loaderVersion: result.marker.loaderVersion
+        loaderVersion: result.marker.loaderVersion,
+        recommendedRamMb: result.recommendedRamMb,
+        jvmArgs: result.jvmArgs,
+        iconUrl: result.iconUrl
       })
     } catch (err) {
       removeInstance(tempInst.id, true)
@@ -665,7 +700,7 @@ app.on('before-quit', () => {
 
 app.on('window-all-closed', () => {
   // The tray-while-playing policy destroys the window on purpose while a game
-  // keeps running (detached: false — quitting here would kill the game too).
+  // keeps running (detached: false; quitting here would kill the game too).
   // Only fall through to the normal quit-on-close-all behavior when that
   // policy isn't the reason the window count hit zero.
   if (trayModeActive) return

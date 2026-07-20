@@ -7,7 +7,8 @@ const execFileAsync = promisify(execFile)
 const FILE = 'settings.json'
 
 const DEFAULTS: AppSettings = {
-  maxRamMb: 4096
+  maxRamMb: 4096,
+  gregTechHubEnabled: false
 }
 
 export function getSettings(): AppSettings {

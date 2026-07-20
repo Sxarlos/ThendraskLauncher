@@ -3,6 +3,7 @@ import { join } from 'path'
 import { net } from 'electron'
 import type { Instance } from '@shared/types'
 import { instanceGameDir, listInstances } from './instances'
+import { requiresChatPatch } from './chatSupport'
 
 const MODRINTH_API = 'https://api.modrinth.com/v2'
 const PROJECT_SLUG = 'no-chat-restrictions'
@@ -49,10 +50,11 @@ async function downloadToFile(url: string, dest: string): Promise<void> {
 /** Ensure No Chat Reports is present for a single instance before launch. */
 export async function ensureChatMod(instance: Instance): Promise<void> {
   if (instance.loader === 'vanilla') return
+  if (!requiresChatPatch(instance.mcVersion)) return
 
   const dir = modsDir(instance.id)
 
-  // Already installed — skip download
+  // Already installed; skip download
   const existing = readdirSync(dir).find(isChatModFile)
   if (existing) return
 
@@ -65,7 +67,7 @@ export async function ensureChatMod(instance: Instance): Promise<void> {
     `&loaders=${encodeURIComponent(JSON.stringify([loader]))}`
 
   const versions = await fetchJson<ModrinthVersion[]>(versionsUrl)
-  if (!versions.length) return // No compatible version — skip silently
+  if (!versions.length) return // No compatible version; skip silently
 
   const latest = versions[0]
   const file = latest.files.find((f) => f.primary) ?? latest.files[0]
