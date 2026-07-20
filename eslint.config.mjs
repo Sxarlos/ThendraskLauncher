@@ -20,7 +20,7 @@ export default tseslint.config(
   },
   {
     rules: {
-      // Third-party pack/API responses are untyped JSON — `any` is pervasive by design
+      // Third-party pack/API responses are untyped JSON; `any` is pervasive by design
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/no-unused-vars': [

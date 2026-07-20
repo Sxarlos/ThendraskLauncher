@@ -70,7 +70,7 @@ function friendlyAuthError(err: unknown): Error {
       const size = typeof resp?.size === 'number' ? resp.size : -1
       if (size === 0) {
         return new Error(
-          'Minecraft auth servers returned an empty response — this is usually a temporary Microsoft/Mojang outage or rate-limit. Wait a few minutes and try again.'
+          'Minecraft auth servers returned an empty response. This is usually a temporary Microsoft/Mojang outage or rate-limit. Wait a few minutes and try again.'
         )
       }
       return new Error(
@@ -160,7 +160,7 @@ export function setActive(id: string): Account[] {
 /** Fetches the full Minecraft profile (skins + capes) for the active account. */
 export async function getMinecraftProfile(): Promise<MinecraftProfile> {
   const user = await getActiveMclcUser()
-  // MclcUser always has access_token — cast to reach it
+  // MclcUser always has access_token; cast to reach it
   const token = (user as unknown as Record<string, string>)['access_token']
   if (!token) throw new Error('No access token available.')
 
@@ -357,7 +357,7 @@ export async function getActiveMclcUser(): Promise<MclcUser> {
         : typeof err === 'object'
         ? JSON.stringify(err)
         : String(err)
-    throw new Error(`SESSION_EXPIRED:${active.username} — session expired, please sign in again. (${raw})`, { cause: err })
+    throw new Error(`SESSION_EXPIRED:${active.username}. Session expired, please sign in again. (${raw})`, { cause: err })
   }
 
   // Persist the rotated refresh token immediately. A later Minecraft-services

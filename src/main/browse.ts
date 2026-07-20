@@ -51,7 +51,7 @@ async function cfGet(path: string, params: Record<string, string | number>): Pro
     if (res.status === 403 || res.status === 401) {
       throw new Error(
         'CurseForge key rejected (403). Common causes: ' +
-        '(1) wrong key — go to console.curseforge.com → API Keys and copy the full key starting with $2a$10$; ' +
+        '(1) wrong key: go to console.curseforge.com → API Keys and copy the full key starting with $2a$10$; ' +
         '(2) new keys can take a few minutes to activate after creation; ' +
         '(3) go to Settings → API Keys in Thendrask Launcher and re-paste the key.'
       )
