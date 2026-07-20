@@ -39,7 +39,7 @@ export function removeFriend(id: string): Friend[] {
 
 export async function pollFriend(code: string): Promise<object> {
   const { relayUrl } = getSettings()
-  if (!relayUrl) throw new Error('No relay server configured — add a relay URL in Settings')
+  if (!relayUrl) throw new Error('No relay server configured. Add a relay URL in Settings.')
   const bare = code.replace(/-/g, '').toUpperCase()
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 6000)

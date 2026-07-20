@@ -9,12 +9,12 @@ import type { UpdateInfo } from '@shared/types'
 // per-platform installers plus the electron-updater metadata (latest.yml /
 // latest-mac.yml / latest-linux.yml) to its GitHub Releases; electron-updater
 // picks the correct artifact for the running OS/arch and verifies it against the
-// sha512 recorded in that metadata — so there is no manual asset-name matching
+// sha512 recorded in that metadata, so there is no manual asset-name matching
 // or magic-byte check here anymore.
 //
 //   Windows (NSIS) : downloads + runs the installer, then relaunches.
 //   Linux (AppImage): downloads + swaps the AppImage, then relaunches.
-//   macOS (zip)     : downloads via Squirrel.Mac. NOTE — Squirrel.Mac only
+//   macOS (zip)     : downloads via Squirrel.Mac. NOTE: Squirrel.Mac only
 //                     *applies* an update when the app is code-signed; on the
 //                     unsigned builds the banner/download still work but the
 //                     final apply is a no-op until signing is added.
@@ -44,7 +44,7 @@ autoUpdater.autoInstallOnAppQuit = true
 // The most recent update electron-updater told us about. The renderer can only
 // ever trigger a download/install of what the main process itself resolved.
 let latest: UpdateInfo | null = null
-// electron-updater's own verdict from the last check — more reliable than a
+// electron-updater's own verdict from the last check, which is more reliable than a
 // hand-rolled semver compare, and it correctly orders prerelease (beta) tags.
 let updateIsAvailable = false
 // Versions we are downloading / have finished downloading, so periodic
@@ -80,7 +80,7 @@ function toAppInfo(info: { version: string; releaseNotes?: string | RawReleaseNo
   return {
     version: info.version,
     notes,
-    // Used only as a fallback "open in browser" link — the actual download is
+    // Used only as a fallback "open in browser" link; the actual download is
     // handled internally by electron-updater, not via this URL.
     downloadUrl: `https://github.com/${REPO}/releases/tag/v${info.version}`
   }
@@ -90,7 +90,7 @@ autoUpdater.on('update-available', (info) => {
   updateIsAvailable = true
   latest = toAppInfo(info)
   if (readyVersion === info.version) {
-    // Already downloaded on an earlier check this session — just remind the
+    // Already downloaded on an earlier check this session; just remind the
     // renderer it can restart, don't kick off another download.
     broadcast('update:ready', latest)
     return
@@ -124,14 +124,14 @@ autoUpdater.on('error', (err) => {
 /**
  * Fetch the update silently in the background. Guarded so the automatic path
  * (every successful check re-fires 'update-available') and the renderer's
- * Retry button can't start overlapping downloads. Never throws — failures are
+ * Retry button can't start overlapping downloads. Never throws; failures are
  * broadcast as 'update:error' by the autoUpdater error handler above.
  */
 async function startBackgroundDownload(): Promise<void> {
   if (!latest) return
   if (downloadingVersion === latest.version || readyVersion === latest.version) return
   downloadingVersion = latest.version
-  // Synchronous with the caller — flips the renderer into 'downloading' state.
+  // Synchronous with the caller; flips the renderer into 'downloading' state.
   broadcast('update:download-progress', 0)
   try {
     await autoUpdater.downloadUpdate()
@@ -142,7 +142,7 @@ async function startBackgroundDownload(): Promise<void> {
 }
 
 /**
- * Kick off the silent download for an update we already know about — used when
+ * Kick off the silent download for an update we already know about. Used when
  * the user re-enables auto-download in Settings. No-op if nothing is pending
  * or the download already ran.
  */
@@ -153,7 +153,7 @@ export function downloadPendingUpdate(): void {
 /**
  * @param notify Broadcast 'update:checking' / 'update:up-to-date' so the
  * renderer can show a transient "Checking for updates…" toast. Only the
- * startup check notifies — the 5-minute re-checks and the Settings-page manual
+ * startup check notifies. The 5-minute re-checks and the Settings-page manual
  * check (which renders its own inline status) stay silent.
  */
 export async function checkForUpdate(notify = false): Promise<UpdateInfo | null> {
@@ -163,7 +163,7 @@ export async function checkForUpdate(notify = false): Promise<UpdateInfo | null>
   try {
     await autoUpdater.checkForUpdates()
     // Resolved by the 'update-available' / 'update-not-available' handlers that
-    // fire during the check — this respects the beta/stable channel and orders
+    // fire during the check. This respects the beta/stable channel and orders
     // prerelease tags correctly.
     if (notify && !updateIsAvailable) broadcast('update:up-to-date', null)
     return updateIsAvailable ? latest : null
@@ -179,7 +179,7 @@ export function openDownloadUrl(url: string): void {
 }
 
 /**
- * Renderer-initiated download — now only the Retry path, since downloads start
+ * Renderer-initiated download, now only the Retry path since downloads start
  * automatically when an update is found. Completion/failure reach the renderer
  * via the 'update:ready' / 'update:error' broadcasts, not this return value.
  */
@@ -210,7 +210,7 @@ export function startUpdateChecker(): void {
   setTimeout(() => {
     // Only the startup check shows the "Checking for updates…" toast.
     void checkForUpdate(true)
-    // Skip periodic re-checks while a game is running — no point spending
+    // Skip periodic re-checks while a game is running; no point spending
     // network/CPU on a background check the user can't act on right now.
     setInterval(() => {
       if (runningInstanceIds().length === 0) void checkForUpdate()

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { gunzipSync } from 'zlib'
 
-/** Minimal NBT reader — only handles what's needed for servers.dat. */
+/** Minimal NBT reader that only handles what's needed for servers.dat. */
 function parseNbt(raw: Buffer): Record<string, unknown> {
   const buf = (raw[0] === 0x1f && raw[1] === 0x8b) ? gunzipSync(raw) : raw
   let p = 0

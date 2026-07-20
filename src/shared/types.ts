@@ -1,6 +1,6 @@
 // Shared types used across the main process, preload bridge, and renderer UI.
 
-export type Page = 'home' | 'library' | 'servers' | 'friends' | 'settings'
+export type Page = 'home' | 'library' | 'gregtech' | 'servers' | 'friends' | 'settings'
 
 /** Available UI themes. 'thendrask' is the default dark green. */
 export type ThemeId =
@@ -66,7 +66,7 @@ export interface ServerEntry {
   name: string
   host: string
   port: number // game port (default 25565)
-  permanent?: boolean // hardcoded by the launcher — cannot be removed
+  permanent?: boolean // hardcoded by the launcher; cannot be removed
   rconPort?: number
   // RCON password is stored separately/securely; never returned to the renderer.
   hasRconPassword?: boolean
@@ -117,6 +117,8 @@ export interface AppSettings {
   discordRpc?: boolean
   discordClientId?: string
   setupComplete?: boolean
+  /** Opt-in visibility and access for the curated GregTech community addon hub. */
+  gregTechHubEnabled?: boolean
   betaUpdates?: boolean  // opt in to prerelease (beta) auto-updates
   /** Silent background update downloads. Default true (undefined = on); false shows a Download button instead. */
   autoDownloadUpdates?: boolean
@@ -256,6 +258,50 @@ export interface LocalMod {
 export interface ModInstallResult {
   installed: LocalMod[]
   addedCount: number
+}
+
+export interface GregTechCommunityAddon {
+  id: 'twist-space-technology' | 'gt-not-leisure' | '123technology' | 'nh-utilities' | 'programmable-hatches'
+  title: string
+  author: string
+  category: 'content expansion' | 'automation & utility'
+  description: string
+  repositoryUrl: string
+  packVersion?: string
+  compatibleVersion?: string
+  compatibilityLabel: string
+  installable: boolean
+  installedVersion?: string
+}
+
+export interface GTNHUpdateInfo {
+  channel: 'stable' | 'beta'
+  currentVersion: string
+  latestVersion: string
+  available: boolean
+  downloadBytes?: number
+  requiredBytes?: number
+  freeBytes?: number
+  diskSpaceSufficient?: boolean
+  releasePageUrl: string
+  changelogUrl?: string
+}
+
+export interface GTNHSpecialBuild {
+  id: string
+  title: string
+  date: string
+  description: string
+  downloadBytes?: number
+  requiredBytes?: number
+  freeBytes?: number
+  diskSpaceSufficient?: boolean
+}
+
+export interface GTNHUpdateProgress {
+  instanceId: string
+  message: string
+  percent?: number
 }
 
 export interface InstanceSnapshot {

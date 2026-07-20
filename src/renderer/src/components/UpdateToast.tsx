@@ -5,7 +5,7 @@ import { useApp } from '../store'
  * Bottom-right update toast, Discord/VS Code style:
  *   - "Checking for updates…" while the startup check runs
  *   - "You're up to date" / "Downloading vX.Y.Z…" for a moment, then fades
- *   - "Update ready — restart to apply" persists until dismissed or clicked
+ *   - "Update ready. Restart to apply" persists until dismissed or clicked
  * Downloads themselves are silent; the sidebar carries the progress bar.
  */
 export default function UpdateToast(): JSX.Element | null {
@@ -79,7 +79,7 @@ export default function UpdateToast(): JSX.Element | null {
           <span style={{ color: 'var(--text-muted)' }}>You&apos;re up to date</span>
         </>
       ) : (
-        // 'found' — with auto-download on a silent download just started;
+        // 'found' means a silent download just started when auto-download is on;
         // with it off we only announce (the sidebar carries the Download button).
         <>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', flexShrink: 0 }}>

@@ -3,7 +3,7 @@ import { renderSkinBody } from '../skinRender'
 import SkinFace from './SkinFace'
 
 interface Props {
-  /** Skin texture as a data/URL — the flat 64×64 (or legacy 64×32) atlas. */
+  /** Skin texture as a data/URL containing the flat 64×64 (or legacy 64×32) atlas. */
   skinUrl: string
   variant?: 'CLASSIC' | 'SLIM'
   width?: number

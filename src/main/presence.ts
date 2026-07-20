@@ -10,7 +10,7 @@ let _registered = false
 let _playingInstanceId: string | null = null
 let _playingSince: number | null = null
 
-// Push every 30s while active; back off to 60s while idle — still comfortably
+// Push every 30s while active; back off to 60s while idle, still comfortably
 // under the relay's 90s offline TTL, but roughly halves idle background traffic.
 const ACTIVE_INTERVAL_MS = 30_000
 const IDLE_INTERVAL_MS = 60_000

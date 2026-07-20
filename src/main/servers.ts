@@ -28,7 +28,7 @@ export function addServer(data: Omit<ServerEntry, 'id'>): ServerEntry[] {
 }
 
 export function removeServer(id: string): ServerEntry[] {
-  if (id.startsWith('perm-')) return listServers() // permanent — ignore
+  if (id.startsWith('perm-')) return listServers() // permanent; ignore
   const saved = readJson<ServerEntry[]>(FILE, [])
     .filter((s) => s.id !== id && !PERMANENT_HOSTS.has(s.host) && !s.id.startsWith('perm-'))
   writeJson(FILE, saved)

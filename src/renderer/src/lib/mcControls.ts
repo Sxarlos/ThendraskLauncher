@@ -1,7 +1,7 @@
 /**
  * Maps between browser input events (KeyboardEvent.code / MouseEvent.button)
  * and Minecraft's GLFW-based key names (key.keyboard.*, key.mouse.*), plus
- * friendly display labels for the Settings UI. Renderer-only — no Electron
+ * friendly display labels for the Settings UI. Renderer-only; no Electron
  * or main-process imports.
  */
 
