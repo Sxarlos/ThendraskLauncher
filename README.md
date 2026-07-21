@@ -1,6 +1,6 @@
 # Thendrask Launcher
 
-**[ender-client.xyz](https://ender-client.xyz)** · [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/zzWF8nBhYD) · [![YouTube](https://img.shields.io/badge/YouTube-Subscribe-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/@EnderClientApp)
+**[thendrask.org](https://thendrask.org)** · [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/zzWF8nBhYD) · [![YouTube](https://img.shields.io/badge/YouTube-Subscribe-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/@EnderClientApp)
 
 A custom Minecraft launcher built with Electron and React. It is **just an interface**: it downloads modpacks and spawns the official game; it does not modify Minecraft itself.
 
@@ -17,7 +17,7 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 - **Launch:** downloads the game version and assets on first run via `minecraft-launcher-core`. Progress and live game logs stream onto the instance card.
 - **Server monitor:** add servers to watch; the launcher pings them and shows live player counts and status.
 - **Friends list:** add friends by code and see if they're online and what they're playing. Requires a [self-hosted relay](relay/README.md).
-- **Discord Rich Presence:** shows what instance you're playing in Discord, with a button linking to ender-client.xyz.
+- **Discord Rich Presence:** shows what instance you're playing in Discord, with a button linking to thendrask.org.
 - **In-app updates:** the launcher self-updates via `electron-updater`, checking GitHub Releases and downloading new versions without leaving the app (Windows & Linux apply automatically; macOS pending code-signing).
 - **No Chat Restrictions:** optionally injects the No Chat Restrictions mod into all modded instances (required in some regions for unsigned-chat servers).
 - **Shader auto-install:** detects missing EuphoriaPatcher shaders from game output and downloads them automatically via Modrinth.

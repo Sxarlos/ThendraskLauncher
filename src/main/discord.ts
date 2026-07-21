@@ -63,7 +63,7 @@ export function setPlaying(instanceName: string, loader?: string, mcVersion?: st
     largeImageKey: 'logo',
     largeImageText: 'Thendrask Launcher',
     instance: false,
-    buttons: [{ label: 'ender-client.xyz', url: 'https://ender-client.xyz' }],
+    buttons: [{ label: 'thendrask.org', url: 'https://thendrask.org' }],
   }).catch(() => { /* Discord may have disconnected */ })
 }
 
@@ -76,6 +76,6 @@ export function setIdle(): void {
     largeImageKey: 'logo',
     largeImageText: 'Thendrask Launcher',
     instance: false,
-    buttons: [{ label: 'ender-client.xyz', url: 'https://ender-client.xyz' }],
+    buttons: [{ label: 'thendrask.org', url: 'https://thendrask.org' }],
   }).catch(() => { /* Discord may have disconnected */ })
 }
