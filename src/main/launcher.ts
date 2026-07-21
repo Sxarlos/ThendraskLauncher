@@ -5,7 +5,7 @@ import { EventEmitter } from 'events'
 import { BrowserWindow } from 'electron'
 import { Client } from 'minecraft-launcher-core'
 import type { ChildProcess } from 'child_process'
-import type { LaunchProgress, LaunchState } from '@shared/types'
+import type { Instance, LaunchProgress, LaunchState } from '@shared/types'
 import { getActiveMclcUser } from './accounts'
 import { getInstance, instanceGameDir, markPlayed, addPlayTime, updateInstance } from './instances'
 import { getSettings } from './settings'
@@ -34,9 +34,12 @@ import {
 } from './modpack'
 import { autoInstallShader } from './shaders'
 import { PRISM_PROFILE_FILE, type PrismLaunchProfile } from './prism'
+import { parseJvmArgs } from './jvmArgs'
 
 /** Instances currently running, keyed by instance id. */
 const running = new Map<string, ChildProcess>()
+/** Instances reserved for launch while authentication/download/setup is still in progress. */
+const launching = new Set<string>()
 
 // Notifies main/index.ts of the two lifecycle edges it needs for the tray
 // policy: a game reaching its 'running' state, and its process exiting
@@ -65,7 +68,7 @@ function setState(instanceId: string, state: LaunchState, message?: string, perc
 }
 
 export function isRunning(instanceId: string): boolean {
-  return running.has(instanceId)
+  return running.has(instanceId) || launching.has(instanceId)
 }
 
 export function runningInstanceIds(): string[] {
@@ -83,10 +86,26 @@ function quickPlayType(mcVersion: string): 'multiplayer' | 'legacy' {
  * Progress and lifecycle are streamed to the renderer via 'launch:progress'.
  */
 export async function launchInstance(instanceId: string, serverAddress?: string): Promise<void> {
-  if (running.has(instanceId)) throw new Error('This instance is already running.')
+  if (running.has(instanceId) || launching.has(instanceId)) {
+    throw new Error('This instance is already running or launching.')
+  }
 
   const instance = getInstance(instanceId)
   if (!instance) throw new Error('Instance not found.')
+
+  launching.add(instanceId)
+  try {
+    await launchReservedInstance(instanceId, instance, serverAddress)
+  } finally {
+    launching.delete(instanceId)
+  }
+}
+
+async function launchReservedInstance(
+  instanceId: string,
+  instance: Instance,
+  serverAddress?: string
+): Promise<void> {
 
   const settings = getSettings()
   const gameDir = instanceGameDir(instanceId)
@@ -450,7 +469,7 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
     javaPath: resolvedJavaPath === 'java' ? undefined : resolvedJavaPath,
     ...(serverAddress ? { quickPlay: { type: quickPlayType(instance.mcVersion), identifier: serverAddress } } : {}),
     ...(() => {
-      const userArgs = instance.jvmArgs?.trim() ? instance.jvmArgs.trim().split(/\s+/).filter(Boolean) : []
+      const userArgs = parseJvmArgs(instance.jvmArgs ?? '')
       const allArgs = [...(prismProfile?.jvmArgs ?? []), ...neoforgeJvmArgs, ...userArgs]
       return allArgs.length > 0 ? { customArgs: allArgs } : {}
     })(),
