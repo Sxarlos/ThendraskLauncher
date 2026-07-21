@@ -136,7 +136,10 @@ function FriendCard({
     setPolling(true)
     try {
       const result = await window.api.friends.poll(friend.code)
-      setPresence({ ...result, lastSeen: result.online ? Date.now() : presence?.lastSeen })
+      setPresence((previous) => ({
+        ...result,
+        lastSeen: result.online ? Date.now() : previous?.lastSeen
+      }))
     } catch {
       setPresence((prev) => (prev ? { ...prev, online: false } : { online: false }))
     } finally {

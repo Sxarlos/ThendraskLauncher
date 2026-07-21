@@ -44,11 +44,14 @@ export default function SplashScreen({ appReady }: Props): JSX.Element | null {
   const [phase, setPhase]   = useState<Phase>('appear')
   const canPop              = useRef(false)
   const appReadyRef         = useRef(false)
-  appReadyRef.current       = appReady
 
   const triggerPop = useCallback(() => {
     setPhase((prev) => (prev === 'float' ? 'pop' : prev))
   }, [])
+
+  useEffect(() => {
+    appReadyRef.current = appReady
+  }, [appReady])
 
   /* appear → float after appear animation completes */
   useEffect(() => {

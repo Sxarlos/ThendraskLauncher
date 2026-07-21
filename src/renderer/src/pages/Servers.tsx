@@ -281,7 +281,7 @@ export default function Servers(): JSX.Element {
   const [statuses, setStatuses]   = useState<StatusMap>({})
   const [showAdd, setShowAdd]     = useState(false)
   const [pingingAll, setPingingAll] = useState(false)
-  const pingControllers = useRef<Map<string, AbortController>>(new Map())
+  const mountedRef = useRef(true)
 
   const load = useCallback(async () => {
     const list = await window.api.servers.list()
@@ -290,8 +290,10 @@ export default function Servers(): JSX.Element {
   }, [])
 
   const pingOne = useCallback(async (server: ServerEntry) => {
+    if (!mountedRef.current) return
     setStatuses((prev) => ({ ...prev, [server.id]: { ...prev[server.id], online: false, loading: true } }))
     const result = await window.api.servers.ping(server.host, server.port)
+    if (!mountedRef.current) return
     setStatuses((prev) => ({ ...prev, [server.id]: { ...result, loading: false } }))
   }, [])
 
@@ -299,12 +301,13 @@ export default function Servers(): JSX.Element {
     if (!list.length) return
     setPingingAll(true)
     await Promise.all(list.map((s) => pingOne(s)))
-    setPingingAll(false)
+    if (mountedRef.current) setPingingAll(false)
   }, [pingOne])
 
   useEffect(() => {
+    mountedRef.current = true
     load().then((list) => pingAll(list))
-    return () => { pingControllers.current.clear() }
+    return () => { mountedRef.current = false }
   }, [load, pingAll])
 
   const handleAdd = async (data: Omit<ServerEntry, 'id'>): Promise<void> => {
