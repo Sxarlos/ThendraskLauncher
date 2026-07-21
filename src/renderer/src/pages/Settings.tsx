@@ -824,11 +824,11 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
           <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Visit the official Thendrask Launcher website.</div>
         </div>
         <button
-          onClick={() => window.api.shell.openExternal('https://ender-client.xyz')}
+          onClick={() => window.api.shell.openExternal('https://thendrask.org')}
           className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
           style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}
         >
-          ender-client.xyz
+          thendrask.org
         </button>
       </div>
 

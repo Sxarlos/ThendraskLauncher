@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import AccountSwitcher from './components/AccountSwitcher'
 import SplashScreen from './components/SplashScreen'
 import SetupWizard from './components/SetupWizard'
 import UpdateToast from './components/UpdateToast'
 import Home from './pages/Home'
-import Library from './pages/Library'
-import GregTech from './pages/GregTech'
-import Servers from './pages/Servers'
-import Friends from './pages/Friends'
-import Settings from './pages/Settings'
 import { useApp } from './store'
+
+const Library = lazy(() => import('./pages/Library'))
+const GregTech = lazy(() => import('./pages/GregTech'))
+const Servers = lazy(() => import('./pages/Servers'))
+const Friends = lazy(() => import('./pages/Friends'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 const PAGES = {
   home: Home,
@@ -128,7 +129,9 @@ export default function App(): JSX.Element {
         )}
 
         <main className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <Current />
+          <Suspense fallback={<div className="flex-1 skeleton" aria-label="Loading page" />}>
+            <Current />
+          </Suspense>
         </main>
       </div>
 

@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Instance } from '@shared/types'
+import { useMemo } from 'react'
 import { useApp, activeAccount } from '../store'
 import { ipcError } from '../lib/ipcError'
 import { formatPlayTime } from '../lib/formatPlayTime'
@@ -16,20 +17,21 @@ function HeroSlideshow({ urls }: { urls: string[] }): JSX.Element {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Wall-clock time when the current slide's panDrift started.
-  const slideStartRef = useRef(Date.now())
+  const slideStartRef = useRef<number | null>(null)
 
   // Negative animation-delay to apply to the outgoing (prev) element so its
   // panDrift resumes at the exact point the current element was at when the
   // transition fired - eliminating the jump on slide change.
-  const prevPanDelayRef = useRef('0s')
+  const [prevPanDelay, setPrevPanDelay] = useState('0s')
 
   const advance = useCallback(() => {
     if (urls.length <= 1) return
     // Capture how far into the pan cycle the outgoing slide was.
-    const elapsed = (Date.now() - slideStartRef.current) % PAN_MS
-    prevPanDelayRef.current = `${-(elapsed / 1000).toFixed(3)}s`
+    const now = Date.now()
+    const elapsed = slideStartRef.current === null ? 0 : (now - slideStartRef.current) % PAN_MS
+    setPrevPanDelay(`${-(elapsed / 1000).toFixed(3)}s`)
     // Reset timer for the incoming slide.
-    slideStartRef.current = Date.now()
+    slideStartRef.current = now
     setPrev(current)
     setCurrent((c) => (c + 1) % urls.length)
   }, [current, urls.length])
@@ -37,6 +39,7 @@ function HeroSlideshow({ urls }: { urls: string[] }): JSX.Element {
   // Advance every 7s, pausing while the window is idle (minimised) to save CPU.
   useEffect(() => {
     if (urls.length <= 1) return
+    slideStartRef.current = Date.now()
     const start = (): void => {
       if (timerRef.current) clearInterval(timerRef.current)
       timerRef.current = setInterval(advance, 7000)
@@ -86,7 +89,7 @@ function HeroSlideshow({ urls }: { urls: string[] }): JSX.Element {
           src={urls[prev]}
           style={{
             ...baseStyle,
-            animation: `panDrift 30s ease-in-out ${prevPanDelayRef.current} infinite, imgFadeOut ${FADE}`,
+            animation: `panDrift 30s ease-in-out ${prevPanDelay} infinite, imgFadeOut ${FADE}`,
           }}
           onAnimationEnd={(e) => {
             if (e.animationName === 'imgFadeOut') setPrev(null)
@@ -299,8 +302,14 @@ export default function Home(): JSX.Element {
   }
 
   // Most recently played (or first) instance becomes the featured hero
-  const featured =
-    [...instances].sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0))[0] ?? null
+  const featured = useMemo(
+    () => [...instances].sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0))[0] ?? null,
+    [instances]
+  )
+  const featuredId = featured?.id
+  const featuredExternalId = featured?.externalId
+  const featuredSource = featured?.source
+  const featuredScreenshotCount = featured?.screenshotUrls?.length ?? 0
 
   // Lazily fetch screenshots for the featured instance if not yet stored
   useEffect(() => {
@@ -311,22 +320,23 @@ export default function Home(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (!featured) return
-    if (featured.screenshotUrls?.length) return             // already fetched
-    if (!featured.externalId || featured.source === 'manual') return  // no source to fetch from
-    window.api.instances.fetchScreenshots(featured.id)
+    if (!featuredId || featuredScreenshotCount > 0) return
+    if (!featuredExternalId || featuredSource === 'manual') return
+    window.api.instances.fetchScreenshots(featuredId)
       .then((urls) => { if (urls?.length) void refreshInstances() })
       .catch(() => { /* silent - just won't have screenshots */ })
-  }, [featured?.id])
+  }, [featuredExternalId, featuredId, featuredScreenshotCount, featuredSource, refreshInstances])
 
   useEffect(() => {
     setSavedServers([])
     setServerPickerOpen(false)
-    if (!featured) return
-    window.api.instance.savedServers(featured.id)
-      .then(setSavedServers)
+    if (!featuredId) return
+    let cancelled = false
+    window.api.instance.savedServers(featuredId)
+      .then((servers) => { if (!cancelled) setSavedServers(servers) })
       .catch(() => {})
-  }, [featured?.id])
+    return () => { cancelled = true }
+  }, [featuredId])
 
   const signedIn = !!activeAccount(accounts)
   const prog     = featured ? progress[featured.id] : undefined

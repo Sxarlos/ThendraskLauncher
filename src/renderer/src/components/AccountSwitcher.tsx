@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { activeAccount, useApp } from '../store'
-import ProfileModal from './ProfileModal'
+
+const ProfileModal = lazy(() => import('./ProfileModal'))
 
 /*
  * msmc returns UUIDs WITHOUT dashes (32 hex chars).
@@ -182,12 +183,14 @@ export default function AccountSwitcher(): JSX.Element {
       )}
 
       {showProfile && active && (
-        <ProfileModal
-          uuid={dashedUuid(active.id)}
-          username={active.username}
-          onClose={() => setShowProfile(false)}
-          onReauth={() => { setShowProfile(false); void login() }}
-        />
+        <Suspense fallback={<div className="fixed inset-0 z-30 bg-black/70" aria-label="Loading profile" />}>
+          <ProfileModal
+            uuid={dashedUuid(active.id)}
+            username={active.username}
+            onClose={() => setShowProfile(false)}
+            onReauth={() => { setShowProfile(false); void login() }}
+          />
+        </Suspense>
       )}
     </div>
   )
