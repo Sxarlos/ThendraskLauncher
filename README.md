@@ -8,6 +8,8 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 
 > **Windows** builds are stable. **macOS and Linux** builds are now available as **public betas**. See [Platform support](#platform-support) below.
 
+> **Signing notice:** current releases are unsigned. Only download Thendrask Launcher from this repository's [Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases), and read [Trust and security](#trust-and-security) before bypassing an operating-system warning.
+
 ## Features
 
 - **Microsoft account login:** secure OAuth via `msmc`. Only the refresh token is stored, encrypted with the OS keychain (`safeStorage`). If secure storage is unavailable, the launcher refuses to persist the token rather than falling back to plaintext. Your password is never seen or stored.
@@ -49,7 +51,36 @@ The macOS and Linux clients are feature-complete but haven't been battle-tested 
 
 - **Node.js 18+** (for development)
 - **Windows, macOS, or Linux:** the launcher builds and runs on all three
-- **Java** for launching the game: Java 21 for Minecraft 1.20.5+, Java 17 for 1.17–1.20.4, Java 8 for older versions
+- **A Microsoft account that owns Minecraft: Java Edition** (offline fallback is available only after a successful sign-in)
+- **No separate Java installation is normally required:** the launcher can find or download a compatible runtime automatically
+
+## Java runtimes
+
+Thendrask selects Java per instance instead of assuming that one system-wide version works for every Minecraft release.
+
+1. It reads the required Java major version from Mojang's version metadata. If that metadata is unavailable, it falls back to Java 21 for Minecraft 1.20.5 and newer, Java 17 for 1.17–1.20.4, and Java 8 for older releases.
+2. Imported Prism instances can supply their own compatible Java requirement. NeoForge installations are also checked for a newer runtime requirement.
+3. The launcher searches `PATH`, common Java installation directories, and runtimes it previously downloaded.
+4. If no compatible runtime is found, it downloads an Eclipse Temurin JRE for the current operating system and CPU architecture from the Eclipse Adoptium API. The archive is verified against Adoptium's SHA-256 checksum before extraction.
+
+Managed runtimes are kept inside the launcher's user-data directory under `java/`; Thendrask does not modify the system Java installation or `PATH`. A JRE is sufficient—you do not need a full JDK.
+
+You can choose a specific `java` or `java.exe` in **Settings → General → Java**. The settings page lists detected installations and their major version/vendor. An invalid configured path stops the launch with an error; a valid but outdated runtime is skipped in favour of a compatible detected or managed runtime.
+
+Because Mojang can raise the runtime requirement for future Minecraft versions (for example, to Java 25), the value from Mojang's metadata takes precedence over the fallback table above.
+
+## Trust and security
+
+Thendrask is open source, so its launcher, update, authentication, and download behaviour can be audited in this repository. That does not eliminate every risk, especially when running community-authored mods, so the relevant trust boundaries are documented here.
+
+- **Unsigned releases:** current Windows and macOS packages are not code-signed. SmartScreen or Gatekeeper may therefore warn even for a genuine build. Download only from the repository's [Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases); see [CODE_SIGNING.md](CODE_SIGNING.md) for the current signing status and platform-specific consequences.
+- **Microsoft credentials:** sign-in is handled through Microsoft OAuth. The launcher never receives your password. Only the resulting refresh token is retained, encrypted with Electron `safeStorage` and the operating system's credential protection. If secure storage is unavailable, Thendrask refuses to save the token; tokens are never exposed to the React renderer.
+- **Desktop isolation:** the Electron renderer runs sandboxed with context isolation enabled and Node.js integration disabled. A preload bridge exposes the limited launcher API, and the renderer uses a Content Security Policy.
+- **Downloads and archives:** managed Java archives are SHA-256 verified, and downloaded pack/mod files are checksum-verified where the provider supplies a supported hash. Manifest and backup paths are checked to prevent writes outside the instance directory, and backup imports enforce size and compression-ratio limits.
+- **Recovery:** modpack and custom-mod changes create snapshots where supported and roll back after a failed operation, reducing the chance that an interrupted or invalid update destroys a working instance.
+- **Privacy:** there is no analytics, advertising, or launcher-operated telemetry. See [PRIVACY.md](PRIVACY.md) for the local data and external services used by each optional feature.
+
+Minecraft mods and modpacks are third-party executable Java code. Checksums prove that a downloaded file matches the file published by its provider; they do **not** prove that the publisher or code is trustworthy. Review a project's source, authorship, permissions, and reputation before running it, particularly for packs imported from local archives or smaller third-party catalogues.
 
 ## Develop
 
@@ -69,10 +100,12 @@ The friends feature requires a small relay server that you self-host. Presence w
 
 The launcher self-updates via [electron-updater](https://www.electron.build/auto-update), checking the GitHub Releases API directly. No token or extra secrets are needed. To release a new version:
 
-1. Bump `version` in `package.json`
-2. Commit and push to `main`
-3. `git tag vX.Y.Z && git push origin vX.Y.Z`
-4. CI builds on Windows, macOS, and Linux and publishes a GitHub Release with the per-platform installers (`.exe`, `.dmg`, `.AppImage`, `.deb`) plus the electron-updater metadata (`latest.yml` / `latest-mac.yml` / `latest-linux.yml`) attached. Users see the update banner within ~5 minutes.
+1. Bump `version` in `package.json` and `package-lock.json` to `X.Y.Z-beta.1`.
+2. Move completed entries from `Unreleased` into the prerelease version in `CHANGELOG.md`, then commit and push to `main`.
+3. Publish the beta with `git tag vX.Y.Z-beta.1 && git push origin vX.Y.Z-beta.1`. Use later beta or release-candidate tags for fixes instead of cutting a stable release immediately.
+4. Let the prerelease soak for at least 48 hours. Resolve blocker reports before promoting the tested code.
+5. If the beta is healthy, change only `package.json`, `package-lock.json`, and `CHANGELOG.md` from the prerelease version to `X.Y.Z`, then commit and tag it with `git tag vX.Y.Z && git push origin vX.Y.Z`. If code changes, publish another prerelease first.
+6. The release workflow runs typecheck, lint, tests, and a production build before packaging, then publishes the matching `CHANGELOG.md` section as the GitHub release notes. Prerelease tags build Windows, macOS, and Linux; stable tags publish the Windows stable channel.
 
 > **macOS note:** because the macOS build is currently unsigned, the update banner and download work, but Squirrel.Mac only *applies* the update once the app is code-signed. See [CODE_SIGNING.md](CODE_SIGNING.md).
 

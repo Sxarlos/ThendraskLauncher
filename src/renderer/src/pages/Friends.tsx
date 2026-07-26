@@ -148,9 +148,12 @@ function FriendCard({
   }, [friend.code, hasRelay])
 
   useEffect(() => {
-    poll()
+    const initialPoll = setTimeout(() => { void poll() }, 0)
     intervalRef.current = setInterval(poll, 30_000)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+    return () => {
+      clearTimeout(initialPoll)
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
   }, [poll])
 
   const online = presence?.online ?? false

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Sxarlos/ThendraskLauncher/security/advisories/new
+    about: Report security issues privately instead of opening a public issue.
+  - name: Community support
+    url: https://discord.gg/zzWF8nBhYD
+    about: Ask usage and troubleshooting questions in the Thendrask Discord community.

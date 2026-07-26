@@ -1,0 +1,87 @@
+name: Bug report
+description: Report a reproducible problem with Thendrask Launcher
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Search existing issues first, and do not include credentials or unredacted personal data. For security vulnerabilities, use the private reporting link in SECURITY.md.
+  - type: input
+    id: launcher-version
+    attributes:
+      label: Launcher version
+      description: Find this in Settings, or use the version shown on the downloaded release.
+      placeholder: "0.5.7"
+    validations:
+      required: true
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: Operating system version
+      placeholder: "Windows 11 24H2, macOS 15.5, or Ubuntu 24.04"
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation type
+      options:
+        - Windows installer
+        - macOS DMG
+        - Linux AppImage
+        - Linux DEB
+        - Development build
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant sanitized logs or attach screenshots. Remove usernames, tokens, server addresses, and other private data.
+      render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Include the Minecraft version, loader, modpack, Java version, or instance source when relevant.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I removed credentials and other sensitive information from this report.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

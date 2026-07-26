@@ -19,12 +19,17 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
   const [showSnapshots, setShowSnapshots] = useState(false)
   const [mcVersion, setMcVersion] = useState('')
   const [loader, setLoader] = useState<LoaderType>('vanilla')
-  const [loaderVersions, setLoaderVersions] = useState<string[]>([])
+  const [loaderVersionResult, setLoaderVersionResult] = useState<{
+    key: string
+    versions: string[]
+  } | null>(null)
   const [loaderVersion, setLoaderVersion] = useState('')
-  const [loaderVersionsLoading, setLoaderVersionsLoading] = useState(false)
   const [creating, setCreating] = useState(false)
 
   const loaderFetchRef = useRef<string>('')
+  const loaderKey = loader === 'vanilla' || !mcVersion ? null : `${loader}:${mcVersion}`
+  const loaderVersions = loaderVersionResult?.key === loaderKey ? loaderVersionResult.versions : []
+  const loaderVersionsLoading = loaderKey !== null && loaderVersionResult?.key !== loaderKey
 
   useEffect(() => {
     window.api.mojang
@@ -39,30 +44,19 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
 
   // Fetch loader versions whenever loader or MC version changes
   useEffect(() => {
-    if (loader === 'vanilla' || !mcVersion) {
-      setLoaderVersions([])
-      setLoaderVersion('')
-      return
-    }
-    const key = `${loader}:${mcVersion}`
+    if (!loaderKey) return
+    const key = loaderKey
     loaderFetchRef.current = key
-    setLoaderVersionsLoading(true)
-    setLoaderVersions([])
-    setLoaderVersion('')
     ;(window.api as any).loader?.versions?.(loader, mcVersion)
       .then((versions: string[]) => {
         if (loaderFetchRef.current !== key) return
-        setLoaderVersions(versions)
-        setLoaderVersion('') // empty string = "latest" (let launcher resolve)
+        setLoaderVersionResult({ key, versions })
       })
       .catch(() => {
         if (loaderFetchRef.current !== key) return
-        setLoaderVersions([])
+        setLoaderVersionResult({ key, versions: [] })
       })
-      .finally(() => {
-        if (loaderFetchRef.current === key) setLoaderVersionsLoading(false)
-      })
-  }, [loader, mcVersion])
+  }, [loader, loaderKey, mcVersion])
 
   const shown = useMemo(
     () => mcVersions.filter((v) => (showSnapshots ? true : v.type === 'release')),
@@ -117,7 +111,10 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
         </div>
         <select
           value={mcVersion}
-          onChange={(e) => setMcVersion(e.target.value)}
+          onChange={(e) => {
+            setMcVersion(e.target.value)
+            setLoaderVersion('')
+          }}
           className="w-full mb-4 px-3 py-2 rounded-lg bg-panel2 border border-border outline-none focus:border-accent2"
         >
           {shown.map((v) => (
@@ -132,7 +129,10 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
           {LOADERS.map((l) => (
             <button
               key={l.value}
-              onClick={() => setLoader(l.value)}
+              onClick={() => {
+                setLoader(l.value)
+                setLoaderVersion('')
+              }}
               className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
               style={
                 loader === l.value
