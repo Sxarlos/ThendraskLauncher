@@ -126,6 +126,8 @@ export interface AppSettings {
   liteMode?: boolean
   /** While a game is running, close the launcher window and park it in the system tray to free RAM. */
   trayWhilePlaying?: boolean
+  /** Use the last verified saved identity when Microsoft/Minecraft authentication is unavailable. */
+  offlineAuthFallback?: boolean
 }
 
 export interface JavaInstall {

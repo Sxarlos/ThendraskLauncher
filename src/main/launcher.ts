@@ -1,12 +1,12 @@
 import { join } from 'path'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { spawn } from 'child_process'
 import { EventEmitter } from 'events'
 import { BrowserWindow } from 'electron'
 import { Client } from 'minecraft-launcher-core'
 import type { ChildProcess } from 'child_process'
 import type { Instance, LaunchProgress, LaunchState } from '@shared/types'
-import { getActiveMclcUser } from './accounts'
+import { getLaunchAccount } from './accounts'
 import { getInstance, instanceGameDir, markPlayed, addPlayTime, updateInstance } from './instances'
 import { getSettings } from './settings'
 import { ensureJava, resolveRequiredJavaMajor, detectNeoforgeJavaMajor } from './java'
@@ -33,8 +33,15 @@ import {
   readNeoforgeJvmArgs
 } from './modpack'
 import { autoInstallShader } from './shaders'
-import { PRISM_PROFILE_FILE, type PrismLaunchProfile } from './prism'
+import {
+  normalizePrismLibraryPaths,
+  PRISM_PROFILE_FILE,
+  type PrismLaunchProfile,
+  type PrismLibrary
+} from './prism'
 import { parseJvmArgs } from './jvmArgs'
+import { sanitizeMclcDebug } from './launcherLog'
+import { needsJavaArgFile, serializeJavaArgFile } from './javaArgFile'
 
 /** Instances currently running, keyed by instance id. */
 const running = new Map<string, ChildProcess>()
@@ -114,13 +121,32 @@ async function launchReservedInstance(
   if (existsSync(prismProfilePath)) {
     try {
       prismProfile = JSON.parse(readFileSync(prismProfilePath, 'utf8')) as PrismLaunchProfile
+      const libraries = prismProfile.versionJson.libraries as PrismLibrary[] | undefined
+      if (libraries && normalizePrismLibraryPaths(libraries)) {
+        // Repair profiles imported by older launcher builds as well as new imports.
+        writeFileSync(prismProfilePath, JSON.stringify(prismProfile, null, 2))
+        const versionDir = join(gameDir, 'versions', prismProfile.versionId)
+        writeFileSync(
+          join(versionDir, `${prismProfile.versionId}.json`),
+          JSON.stringify(prismProfile.versionJson, null, 2)
+        )
+      }
     } catch (err) {
       throw new Error(`Imported Prism launch profile is invalid: ${(err as Error).message}`, { cause: err })
     }
   }
 
   setState(instanceId, 'preparing', 'Authenticating…')
-  const authorization = await getActiveMclcUser()
+  const launchAccount = await getLaunchAccount(settings.offlineAuthFallback !== false)
+  const authorization = launchAccount.authorization
+  if (launchAccount.offline) {
+    console.warn(`[Launcher] Authentication unavailable; launching ${authorization.name} offline.`)
+    setState(
+      instanceId,
+      'preparing',
+      `Authentication unavailable — launching ${authorization.name} offline. Online-mode servers will not work.`
+    )
+  }
 
   // ── Modpack installation ────────────────────────────────────────────────────
   // Downloads mod files on the first launch (or after a version switch).
@@ -347,9 +373,24 @@ async function launchReservedInstance(
   // Override startMinecraft to suppress the console/terminal window that MCLC's
   // default detached spawn creates on Windows, while still piping stdout/stderr.
   ;(client as any).startMinecraft = function(launchArguments: string[]): ChildProcess {
+    const javaPath = (this.options.javaPath as string | undefined) ?? 'java'
+    let processArguments = launchArguments
+    let argumentFile: string | undefined
+
+    if (needsJavaArgFile(javaPath, launchArguments)) {
+      argumentFile = join(this.options.root as string, '.thendrask-launch.args')
+      writeFileSync(argumentFile, serializeJavaArgFile(launchArguments), { mode: 0o600 })
+      processArguments = [`@${argumentFile}`]
+      this.emit('debug', '[MCLC]: Using a Java argument file for the oversized Windows command line')
+    }
+
+    const cleanArgumentFile = (): void => {
+      if (argumentFile) rmSync(argumentFile, { force: true })
+    }
+
     const proc = spawn(
-      (this.options.javaPath as string | undefined) ?? 'java',
-      launchArguments,
+      javaPath,
+      processArguments,
       {
         cwd: (this.options.overrides?.cwd as string | undefined) ?? this.options.root as string,
         detached: false,
@@ -359,19 +400,31 @@ async function launchReservedInstance(
     )
     proc.stdout!.on('data', (d: Buffer) => this.emit('data', d.toString('utf-8')))
     proc.stderr!.on('data', (d: Buffer) => this.emit('data', d.toString('utf-8')))
-    proc.on('close', (code: number) => this.emit('close', code))
+    proc.on('error', (error: Error) => {
+      cleanArgumentFile()
+      this.emit('error', error)
+    })
+    proc.on('close', (code: number) => {
+      cleanArgumentFile()
+      this.emit('close', code)
+    })
     return proc
   }
 
   // Capture MCLC's internal errors; without this listener they are silently
   // swallowed and `client.launch()` returns undefined with no explanation.
   let mclcError: Error | undefined
+  let mclcFailure: string | undefined
   client.on('error', (e: unknown) => {
     mclcError = e instanceof Error ? e : new Error(String(e))
     console.error('[MCLC]', mclcError.message)
   })
 
-  client.on('debug', (msg: string) => console.log('[MCLC debug]', msg))
+  client.on('debug', (msg: string) => {
+    console.log('[MCLC debug]', sanitizeMclcDebug(String(msg)))
+    const failure = String(msg).match(/\[MCLC\]: Failed to start due to (.+?), closing\.\.\.$/)
+    if (failure) mclcFailure = failure[1]
+  })
 
   client.on('progress', (e: { type: string; task: number; total: number }) => {
     const percent = e.total > 0 ? Math.round((e.task / e.total) * 100) : undefined
@@ -379,6 +432,7 @@ async function launchReservedInstance(
   })
 
   function emitLog(line: string): void {
+    console.log(`[Minecraft:${instanceId}]`, line)
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send('launch:log', { instanceId, line })
     }
@@ -389,6 +443,7 @@ async function launchReservedInstance(
 
   let launched = false
   let sessionStart = 0
+  let trayHandoffTimer: ReturnType<typeof setTimeout> | undefined
   client.on('data', (line: string) => {
     const str = String(line).trimEnd()
     emitLog(str)
@@ -418,11 +473,14 @@ async function launchReservedInstance(
       markPlayed(instanceId)
       setState(instanceId, 'running', 'Minecraft is running.')
       setPlaying(instance.name, instance.loader, instance.mcVersion)
-      notifyRunningChanged()
+      // Keep the launcher visible long enough to show fast JVM/bootstrap
+      // failures instead of briefly disappearing into the tray.
+      trayHandoffTimer = setTimeout(notifyRunningChanged, 10_000)
     }
   })
 
   client.on('close', (code: number) => {
+    if (trayHandoffTimer) clearTimeout(trayHandoffTimer)
     running.delete(instanceId)
     if (sessionStart > 0) addPlayTime(instanceId, Date.now() - sessionStart)
     emitLog(`\n[Launcher] Game exited with code ${code}.`)
@@ -450,9 +508,18 @@ async function launchReservedInstance(
   // msmc's MclcUser is structurally what MCLC needs; the lib's exported types
   // mark a few fields optional, so cast to MCLC's expected authorization type.
   type LaunchAuthorization = Parameters<Client['launch']>[0]['authorization']
+  // Legacy Minecraft expects --userProperties to contain JSON. MSMC leaves it
+  // undefined for Microsoft accounts, which makes MCLC emit the flag with no
+  // value and crashes 1.7.10 while Gson parses the following argument.
+  const launchAuthorization = {
+    ...authorization,
+    user_properties: typeof authorization.user_properties === 'string'
+      ? authorization.user_properties
+      : JSON.stringify(authorization.user_properties ?? {})
+  } as unknown as LaunchAuthorization
 
   const proc = await client.launch({
-    authorization: authorization as LaunchAuthorization,
+    authorization: launchAuthorization,
     root: instanceGameDir(instanceId),
     version: {
       number: instance.mcVersion,
@@ -482,7 +549,7 @@ async function launchReservedInstance(
 
   if (!proc) {
     running.delete(instanceId)
-    const reason = mclcError?.message ?? 'unknown. Check the main process console for [MCLC debug] output.'
+    const reason = mclcError?.message ?? mclcFailure ?? 'unknown. Check the main process console for [MCLC debug] output.'
     setState(instanceId, 'error', `Launch failed: ${reason}`)
     throw new Error(`minecraft-launcher-core returned no process: ${reason}`)
   }

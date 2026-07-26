@@ -671,6 +671,16 @@ function GeneralTab({ settings, onChange }: { settings: AppSettings; onChange: (
         <Toggle checked={!!settings.usePackRam} onChange={(v) => onChange({ usePackRam: v })} />
       </Row>
 
+      <Row
+        label="Offline authentication fallback"
+        desc="If Microsoft or Minecraft authentication is unavailable, launch with the last verified saved account. Online-mode servers and account services will not work."
+      >
+        <Toggle
+          checked={settings.offlineAuthFallback !== false}
+          onChange={(v) => onChange({ offlineAuthFallback: v })}
+        />
+      </Row>
+
       <NoChatRow settings={settings} onChange={onChange} />
 
       <Row label="Discord Rich Presence" desc="Show what you're playing in Discord">
