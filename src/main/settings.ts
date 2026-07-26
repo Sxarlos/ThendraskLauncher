@@ -8,7 +8,8 @@ const FILE = 'settings.json'
 
 const DEFAULTS: AppSettings = {
   maxRamMb: 4096,
-  gregTechHubEnabled: false
+  gregTechHubEnabled: false,
+  offlineAuthFallback: true
 }
 
 export function getSettings(): AppSettings {

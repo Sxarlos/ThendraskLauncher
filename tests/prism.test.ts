@@ -4,6 +4,7 @@ import {
   findPrismIconDataUrl,
   findPrismRoot,
   mergePrismComponents,
+  normalizePrismLibraryPaths,
   parseInstanceCfg
 } from '../src/main/prism'
 
@@ -82,6 +83,43 @@ JavaVendor="Azul Systems, Inc."
       'com.google.guava:guava:17.0',
       'com.github.GTNewHorizons:lwjgl3ify:2.1.16:forgePatches'
     ])
+    expect((profile.versionJson.libraries as Array<any>)[0].url).toBe(
+      'https://libraries.minecraft.net/'
+    )
+    expect((profile.versionJson.libraries as Array<any>)[1].downloads.artifact.path).toBe(
+      'lwjgl3ify-2.1.16-forgePatches.jar'
+    )
+  })
+
+  it('adds paths required by MCLC to Prism native classifiers', () => {
+    const libraries = [{
+      name: 'net.java.jinput:jinput-platform:2.0.5',
+      downloads: {
+        classifiers: {
+          'natives-windows': {
+            sha1: 'abc',
+            url: 'https://libraries.minecraft.net/net/java/jinput/jinput-platform/2.0.5/jinput-platform-2.0.5-natives-windows.jar'
+          }
+        }
+      }
+    }]
+
+    expect(normalizePrismLibraryPaths(libraries)).toBe(true)
+    expect(libraries[0].downloads.classifiers['natives-windows'].path).toBe(
+      'net/java/jinput/jinput-platform/2.0.5/jinput-platform-2.0.5-natives-windows.jar'
+    )
+    expect(normalizePrismLibraryPaths(libraries)).toBe(false)
+  })
+
+  it('adds Prism default Maven URL to legacy libraries without download metadata', () => {
+    const libraries = [
+      { name: 'com.google.guava:guava:17.0' },
+      { name: 'lzma:lzma:0.0.1' }
+    ]
+
+    expect(normalizePrismLibraryPaths(libraries)).toBe(true)
+    expect(libraries.every((library) => library.url === 'https://libraries.minecraft.net/')).toBe(true)
+    expect(normalizePrismLibraryPaths(libraries)).toBe(false)
   })
 
   it.runIf(Boolean(process.env.GTNH_ZIP))('merges the real GTNH Prism archive', () => {
