@@ -264,8 +264,11 @@ export default function Home(): JSX.Element {
   const [updateDismissed, setUpdateDismissed] = useState(false)
   const [dismissedNews, setDismissedNews] = useState<Set<string>>(getDismissed)
   const [appVersion, setAppVersion] = useState(() => localStorage.getItem(VERSION_KEY) ?? '')
-  const [savedServers, setSavedServers] = useState<{ name: string; ip: string }[]>([])
-  const [serverPickerOpen, setServerPickerOpen] = useState(false)
+  const [savedServerResult, setSavedServerResult] = useState<{
+    instanceId: string
+    servers: { name: string; ip: string }[]
+  } | null>(null)
+  const [serverPickerInstanceId, setServerPickerInstanceId] = useState<string | null>(null)
 
   const dismissNews = (id: string): void => {
     setDismissedNews((prev) => {
@@ -310,6 +313,8 @@ export default function Home(): JSX.Element {
   const featuredExternalId = featured?.externalId
   const featuredSource = featured?.source
   const featuredScreenshotCount = featured?.screenshotUrls?.length ?? 0
+  const savedServers = savedServerResult?.instanceId === featuredId ? savedServerResult.servers : []
+  const serverPickerOpen = serverPickerInstanceId === featuredId
 
   // Lazily fetch screenshots for the featured instance if not yet stored
   useEffect(() => {
@@ -328,12 +333,12 @@ export default function Home(): JSX.Element {
   }, [featuredExternalId, featuredId, featuredScreenshotCount, featuredSource, refreshInstances])
 
   useEffect(() => {
-    setSavedServers([])
-    setServerPickerOpen(false)
     if (!featuredId) return
     let cancelled = false
     window.api.instance.savedServers(featuredId)
-      .then((servers) => { if (!cancelled) setSavedServers(servers) })
+      .then((servers) => {
+        if (!cancelled) setSavedServerResult({ instanceId: featuredId, servers })
+      })
       .catch(() => {})
     return () => { cancelled = true }
   }, [featuredId])
@@ -348,7 +353,7 @@ export default function Home(): JSX.Element {
   const play = async (serverAddress?: string): Promise<void> => {
     if (!featured) return
     setError(null)
-    setServerPickerOpen(false)
+    setServerPickerInstanceId(null)
     try {
       await window.api.launch.start(featured.id, serverAddress)
     } catch (e) {
@@ -592,7 +597,7 @@ export default function Home(): JSX.Element {
             {savedServers.length > 0 && !running && (
               <div className="relative shrink-0">
                 <button
-                  onClick={() => setServerPickerOpen((v) => !v)}
+                  onClick={() => setServerPickerInstanceId((id) => id === featuredId ? null : (featuredId ?? null))}
                   disabled={!signedIn || busy}
                   className="flex items-center gap-1.5 px-3 py-3 rounded-xl font-semibold text-[13px] transition-all duration-200 disabled:opacity-50"
                   style={{
@@ -617,7 +622,7 @@ export default function Home(): JSX.Element {
                     {/* Invisible backdrop to close picker on outside click */}
                     <div
                       className="fixed inset-0 z-40"
-                      onClick={() => setServerPickerOpen(false)}
+                      onClick={() => setServerPickerInstanceId(null)}
                     />
                   <div
                     className="absolute bottom-full mb-2 right-0 rounded-xl overflow-hidden z-50 min-w-[200px]"

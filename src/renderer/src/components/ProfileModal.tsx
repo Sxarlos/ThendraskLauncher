@@ -224,8 +224,6 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
   const previewDiffers = previewCapeId !== undefined && previewCapeId !== activeCapeId
 
   const loadProfile = useCallback(async () => {
-    setLoading(true)
-    setError(null)
     const savedSkinsApi = window.api.profile.listSavedSkins
     // The saved-skin library lives on disk and needs no Minecraft session.
     // Load it independently of the profile so an expired Microsoft token
@@ -251,7 +249,10 @@ export default function ProfileModal({ uuid, username, onClose, onReauth }: Prop
     setLoading(false)
   }, [])
 
-  useEffect(() => { void loadProfile() }, [loadProfile])
+  useEffect(() => {
+    const initialLoad = setTimeout(() => { void loadProfile() }, 0)
+    return () => clearTimeout(initialLoad)
+  }, [loadProfile])
 
   /* Close on backdrop click */
   const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>): void => {

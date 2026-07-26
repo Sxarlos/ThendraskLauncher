@@ -21,17 +21,20 @@ const cache = new Map<string, string>()
  */
 export default function SkinBody({ skinUrl, variant, width = 44, height = 78 }: Props): JSX.Element {
   const key = `${variant ?? 'auto'}:${skinUrl}`
-  const [src, setSrc] = useState<string | null>(() => cache.get(key) ?? null)
+  const [rendered, setRendered] = useState<{ key: string; src: string } | null>(() => {
+    const cached = cache.get(key)
+    return cached ? { key, src: cached } : null
+  })
+  const src = rendered?.key === key ? rendered.src : (cache.get(key) ?? null)
 
   useEffect(() => {
     const cached = cache.get(key)
-    if (cached) { setSrc(cached); return }
+    if (cached) return
     let cancelled = false
-    setSrc(null)
     renderSkinBody(skinUrl, variant)
       .then((url) => {
         cache.set(key, url)
-        if (!cancelled) setSrc(url)
+        if (!cancelled) setRendered({ key, src: url })
       })
       // On failure we simply leave src null and fall back to the face below.
       .catch(() => undefined)

@@ -20,12 +20,12 @@ import type { UpdateInfo } from '@shared/types'
 //                     final apply is a no-op until signing is added.
 //
 // RELEASING AN UPDATE:
-//   1. Bump version in package.json
-//   2. Commit and push to main
-//   3. git tag vX.Y.Z && git push origin vX.Y.Z
-//   4. CI builds on windows/macos/ubuntu and runs `electron-builder --publish
-//      always`, uploading every platform's artifacts + *.yml to one GitHub
-//      Release. Users see the update banner within ~5 minutes.
+//   1. Bump package.json/package-lock.json to X.Y.Z-beta.1 and update CHANGELOG.
+//   2. Commit, push, then tag/push vX.Y.Z-beta.1.
+//   3. After a 48-hour soak, bump only version/changelog metadata to X.Y.Z and
+//      tag/push vX.Y.Z. Code fixes require another prerelease first.
+//   4. The release workflow validates, packages, and publishes the appropriate
+//      platform artifacts and electron-updater metadata.
 
 const { autoUpdater } = electronUpdater
 

@@ -306,8 +306,13 @@ export default function Servers(): JSX.Element {
 
   useEffect(() => {
     mountedRef.current = true
-    load().then((list) => pingAll(list))
-    return () => { mountedRef.current = false }
+    const initialLoad = setTimeout(() => {
+      void load().then((list) => pingAll(list))
+    }, 0)
+    return () => {
+      clearTimeout(initialLoad)
+      mountedRef.current = false
+    }
   }, [load, pingAll])
 
   const handleAdd = async (data: Omit<ServerEntry, 'id'>): Promise<void> => {

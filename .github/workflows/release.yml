@@ -11,6 +11,79 @@ permissions:
   contents: write
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Validate release tag
+        shell: bash
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.[0-9]+)?$ ]]; then
+            echo "::error::Use vX.Y.Z, vX.Y.Z-beta.N, or vX.Y.Z-rc.N release tags."
+            exit 1
+          fi
+
+      - name: Require a prerelease before a stable release
+        if: ${{ !contains(github.ref_name, '-') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          prerelease_tag="$(git tag --list "${GITHUB_REF_NAME}-*" --sort=-version:refname | head -n 1)"
+          if [[ -z "$prerelease_tag" ]]; then
+            echo "::error::Stable tag ${GITHUB_REF_NAME} requires an existing same-version prerelease tag (for example ${GITHUB_REF_NAME}-beta.1)."
+            exit 1
+          fi
+
+          prerelease_commit="$(git rev-list -n 1 "$prerelease_tag")"
+          if ! git merge-base --is-ancestor "$prerelease_commit" "$GITHUB_SHA"; then
+            echo "::error::Stable tag ${GITHUB_REF_NAME} must descend from prerelease ${prerelease_tag}."
+            exit 1
+          fi
+
+          unexpected_files="$(git diff --name-only "$prerelease_commit" "$GITHUB_SHA" | grep -Ev '^(CHANGELOG\.md|package\.json|package-lock\.json)$' || true)"
+          if [[ -n "$unexpected_files" ]]; then
+            echo "::error::Code changed after ${prerelease_tag}. Publish another beta or release candidate before stable promotion."
+            echo "$unexpected_files"
+            exit 1
+          fi
+
+          published_at="$(gh release view "$prerelease_tag" --json isPrerelease,publishedAt --jq 'select(.isPrerelease) | .publishedAt')"
+          if [[ -z "$published_at" ]]; then
+            echo "::error::Prerelease ${prerelease_tag} has not published a GitHub prerelease successfully."
+            exit 1
+          fi
+
+          age_seconds="$(( $(date +%s) - $(date -d "$published_at" +%s) ))"
+          if (( age_seconds < 172800 )); then
+            echo "::error::Prerelease ${prerelease_tag} must soak for at least 48 hours before stable promotion."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
   # Determines which OSes the release job's matrix builds on. Platform policy:
   # stable tags (no "-") ship Windows-only — Windows is the stable update
   # channel. Prerelease tags (containing "-") ship on all three OSes — the
@@ -34,7 +107,7 @@ jobs:
           fi
 
   release:
-    needs: plan
+    needs: [validate, plan]
     strategy:
       fail-fast: false
       matrix:
@@ -109,3 +182,29 @@ jobs:
           $checksumFile = Join-Path dist "$assetName.sha256"
           "$hash  $assetName" | Out-File -FilePath $checksumFile -Encoding ascii -NoNewline
           gh release upload "$env:GITHUB_REF_NAME" $checksumFile --clobber
+
+  finalize:
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish changelog release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v version="$version" '
+            index($0, "## [" version "]") == 1 { capture = 1; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [[ ! -s release-notes.md ]]; then
+            echo "::error::CHANGELOG.md has no release notes for ${version}."
+            exit 1
+          fi
+
+          gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
