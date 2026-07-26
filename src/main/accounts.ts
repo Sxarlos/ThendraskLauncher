@@ -6,6 +6,10 @@ import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSyn
 import { randomUUID } from 'crypto'
 import type { Account, MinecraftProfile, SavedSkin, SkinPreview } from '@shared/types'
 import { dataDir, readJson, writeJson } from './persist'
+import {
+  resolveLaunchAuthorization,
+  type LaunchAuthorizationResult
+} from './offlineAuth'
 
 /** Launcher-ready user object as produced by msmc's `Minecraft.mclc()`. */
 export type MclcUser = ReturnType<Minecraft['mclc']>
@@ -19,6 +23,8 @@ interface AccountRecord {
   tokenEnc: string
   active: boolean
 }
+
+export type LaunchAccount = LaunchAuthorizationResult<MclcUser>
 
 function load(): AccountRecord[] {
   return readJson<AccountRecord[]>(FILE, [])
@@ -387,4 +393,15 @@ export async function getActiveMclcUser(): Promise<MclcUser> {
   save(records)
 
   return mc.mclc(true)
+}
+
+/**
+ * Resolve a launch identity, optionally falling back to the last verified
+ * saved profile when Microsoft/Minecraft authentication is unavailable.
+ * Account-management operations continue to require working online auth.
+ */
+export async function getLaunchAccount(allowOffline: boolean): Promise<LaunchAccount> {
+  const records = load()
+  const active = records.find((record) => record.active) ?? records[0]
+  return resolveLaunchAuthorization(getActiveMclcUser, active, allowOffline)
 }

@@ -49,6 +49,73 @@ export interface PrismLaunchProfile {
   versionJson: Record<string, unknown>
 }
 
+interface PrismDownload {
+  path?: string
+  url?: string
+  [key: string]: unknown
+}
+
+/**
+ * Prism metadata may omit Maven paths because Prism can derive them from the
+ * library coordinate. MCLC derives artifact paths too, but requires native
+ * classifier paths and crashes before launch when one is missing.
+ */
+export function normalizePrismLibraryPaths(libraries: PrismLibrary[]): boolean {
+  let changed = false
+
+  for (const library of libraries) {
+    const [group, artifact, version, classifier] = library.name.split(':')
+    if (!group || !artifact || !version) continue
+    const directory = `${group.replace(/\./g, '/')}/${artifact}/${version}`
+    let downloads = library.downloads as {
+      artifact?: PrismDownload
+      classifiers?: Record<string, PrismDownload>
+    } | undefined
+
+    // Prism resolves legacy coordinates without an explicit repository from
+    // Mojang's library Maven. MCLC does not apply that default to custom
+    // profiles, so dependencies such as Guava 17 and LZMA are otherwise added
+    // to the classpath without ever being downloaded.
+    if (!library.url && !downloads && library['MMC-hint'] !== 'local') {
+      library.url = 'https://libraries.minecraft.net/'
+      changed = true
+    }
+
+    // Prism exports MMC-hint=local libraries flat under libraries/. Giving
+    // MCLC an explicit flat artifact path prevents it from inventing a nested
+    // Maven path for a JAR that cannot be downloaded.
+    if (library['MMC-hint'] === 'local' && !downloads?.artifact) {
+      const filename = `${artifact}-${version}${classifier ? `-${classifier}` : ''}.jar`
+      downloads = { ...(downloads ?? {}), artifact: { path: filename } }
+      library.downloads = downloads
+      changed = true
+    }
+
+    if (!downloads) continue
+
+    const addPath = (download: PrismDownload | undefined, fallbackName: string): void => {
+      if (!download || download.path) return
+      let filename = fallbackName
+      if (download.url) {
+        try {
+          filename = decodeURIComponent(new URL(download.url).pathname.split('/').pop() || fallbackName)
+        } catch {
+          // Keep the coordinate-derived filename for malformed or non-URL values.
+        }
+      }
+      download.path = `${directory}/${filename}`
+      changed = true
+    }
+
+    addPath(downloads.artifact, `${artifact}-${version}.jar`)
+    for (const [classifier, download] of Object.entries(downloads.classifiers ?? {})) {
+      addPath(download, `${artifact}-${version}-${classifier}.jar`)
+    }
+  }
+
+  return changed
+}
+
 /** Locate mmc-pack.json even when an exported instance is wrapped in a folder. */
 export function findPrismRoot(entries: AdmZip.IZipEntry[]): string | null {
   const candidates = entries
@@ -180,6 +247,7 @@ export function mergePrismComponents(
   }
   // Prism calls the main client artifact `mainJar`; MCLC expects downloads.client.
   if (versionJson.downloads.artifact) versionJson.downloads = { client: versionJson.downloads.artifact }
+  normalizePrismLibraryPaths(versionJson.libraries)
 
   const javaMajor = compatibleJavaMajors.has(21)
     ? 21
