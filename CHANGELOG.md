@@ -7,6 +7,36 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.8-beta.2] - 2026-07-27
+
+### Added
+
+- A renderer recovery screen with a reload action for unexpected client
+  crashes.
+- Regression coverage for beta-profile startup and archive safety checks.
+
+### Changed
+
+- Launcher startup now continues when an individual settings, account, or
+  instance request fails and reports the failed section in the client.
+- Lazy client pages are preloaded after startup for faster tab switching.
+- Presence updates are serialized and time-limited to prevent overlapping or
+  stalled relay requests.
+- Safe, non-breaking dependency updates were applied to the lockfile.
+
+### Fixed
+
+- Fixed the blank launcher window caused by a missing saved server result when
+  beta-enabled profiles loaded the Home page.
+- Prevented the previous tab from flashing underneath while a client page was
+  loading.
+- Added a visible production fallback if the renderer fails to load or exits
+  unexpectedly instead of leaving a hidden or blank window.
+- Applied consistent expanded-size, per-entry, entry-count, and compression
+  ratio limits to imported backups, modpacks, and Java runtime archives.
+- Friends, servers, and account actions now surface asynchronous failures
+  instead of failing silently.
+
 ## [0.5.8-beta.1] - 2026-07-26
 
 ### Added
@@ -78,7 +108,8 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Earlier release history is available on the
 [GitHub Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases).
 
-[Unreleased]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.1...HEAD
+[Unreleased]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.2...HEAD
+[0.5.8-beta.2]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.1...v0.5.8-beta.2
 [0.5.8-beta.1]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.7...v0.5.8-beta.1
 [0.5.7]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.5...v0.5.6

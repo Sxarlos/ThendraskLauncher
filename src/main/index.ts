@@ -117,7 +117,35 @@ function createWindow(): BrowserWindow {
 
   mainWindow = win
 
-  win.on('ready-to-show', () => win.show())
+  let showingLoadFailure = false
+  const revealTimer = setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show()
+  }, 8000)
+
+  const showLoadFailure = (reason: string): void => {
+    if (showingLoadFailure || win.isDestroyed()) return
+    showingLoadFailure = true
+    console.error(`[renderer:load] ${reason}`)
+    const html = `<!doctype html>
+      <html>
+        <head><meta charset="utf-8"><title>Thendrask Launcher</title></head>
+        <body style="margin:0;background:#0a0c10;color:#d7d9df;font:14px system-ui;display:grid;place-items:center;height:100vh">
+          <main style="max-width:520px;padding:32px;background:#11141a;border:1px solid #292e38;border-radius:16px">
+            <h1 style="margin:0 0 12px;font-size:20px">The launcher interface could not load</h1>
+            <p style="margin:0 0 20px;color:#9ca3af;line-height:1.5">Your instances and settings are safe. Close and reopen the launcher. If this continues, reinstall the latest build.</p>
+            <button onclick="window.close()" style="border:0;border-radius:8px;padding:10px 16px;background:#a855f7;color:#08090c;font-weight:700;cursor:pointer">Close launcher</button>
+          </main>
+        </body>
+      </html>`
+    void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+      .catch((err) => console.error('[renderer:fallback]', err.message))
+    win.show()
+  }
+
+  win.on('ready-to-show', () => {
+    clearTimeout(revealTimer)
+    win.show()
+  })
 
   win.on('minimize', () => {
     if (typeof global.gc === 'function') global.gc()
@@ -131,6 +159,7 @@ function createWindow(): BrowserWindow {
   })
 
   win.on('closed', () => {
+    clearTimeout(revealTimer)
     if (mainWindow === win) mainWindow = null
   })
 
@@ -139,12 +168,18 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
+    if (!isMainFrame || code === -3) return
+    showLoadFailure(`${code} ${description} ${url}`)
+  })
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    showLoadFailure(`Renderer process exited: ${details.reason}`)
+  })
+
   if (!app.isPackaged) {
     win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
       console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`)
-    })
-    win.webContents.on('did-fail-load', (_event, code, description, url) => {
-      console.error(`[renderer:load] ${code} ${description} ${url}`)
     })
   }
 

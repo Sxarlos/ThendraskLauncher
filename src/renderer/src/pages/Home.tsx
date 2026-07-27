@@ -313,7 +313,10 @@ export default function Home(): JSX.Element {
   const featuredExternalId = featured?.externalId
   const featuredSource = featured?.source
   const featuredScreenshotCount = featured?.screenshotUrls?.length ?? 0
-  const savedServers = savedServerResult?.instanceId === featuredId ? savedServerResult.servers : []
+  const savedServers =
+    savedServerResult && savedServerResult.instanceId === featuredId
+      ? savedServerResult.servers
+      : []
   const serverPickerOpen = serverPickerInstanceId === featuredId
 
   // Lazily fetch screenshots for the featured instance if not yet stored

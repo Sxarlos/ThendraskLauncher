@@ -1,4 +1,5 @@
 import AdmZip from 'adm-zip'
+import { validateArchiveEntries } from './archiveSafety'
 import type { BrowseParams, ModpackResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
 import { getSettings } from './settings'
 
@@ -174,6 +175,7 @@ async function downloadBuffer(url: string): Promise<Buffer> {
 
 function extractJsonFromZip(buf: Buffer, filename: string): any {
   const zip = new AdmZip(buf)
+  validateArchiveEntries(zip.getEntries(), 'Modpack')
   const entry = zip.getEntry(filename)
   if (!entry) throw new Error(`${filename} not found in archive`)
   return JSON.parse(entry.getData().toString('utf8'))
