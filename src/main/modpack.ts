@@ -11,6 +11,7 @@ import AdmZip from 'adm-zip'
 import { instanceGameDir } from './instances'
 import { getSettings } from './settings'
 import { safeJoin } from './safePath'
+import { validateArchiveEntries } from './archiveSafety'
 import {
   PRISM_PROFILE_FILE,
   findPrismIconDataUrl,
@@ -24,6 +25,12 @@ import {
 const MR_BASE = 'https://api.modrinth.com/v2'
 const CF_BASE = 'https://api.curseforge.com/v1'
 const UA = 'thendrask-launcher (github.com/Sxarlos/ThendraskLauncher)'
+
+function openValidatedZip(input: string | Buffer, label = 'Modpack'): AdmZip {
+  const zip = new AdmZip(input)
+  validateArchiveEntries(zip.getEntries(), label)
+  return zip
+}
 
 function verifyPackFile(path: string, hashes?: Record<string, string>): void {
   const expected = hashes?.sha512 ?? hashes?.sha1
@@ -472,7 +479,7 @@ export async function installMrpack(
   if (!packRes.ok) throw new Error(`Failed to download mrpack: ${packRes.status}`)
   const packBuf = Buffer.from(await packRes.arrayBuffer())
 
-  const zip = new AdmZip(packBuf)
+  const zip = openValidatedZip(packBuf)
 
   const indexEntry = zip.getEntry('modrinth.index.json')
   if (!indexEntry) throw new Error('modrinth.index.json missing from mrpack')
@@ -750,7 +757,7 @@ export async function importLocalPack(
   onProgress('Reading pack file…')
   // Pass the path directly so very large Prism exports do not retain both a
   // separate readFile buffer and AdmZip's archive buffer in memory.
-  const zip = new AdmZip(filePath)
+  const zip = openValidatedZip(filePath)
 
   const mrpackEntry = zip.getEntry('modrinth.index.json')
   const cfEntry = zip.getEntry('manifest.json')
@@ -968,7 +975,7 @@ export async function installAtlPack(
     if (configRes.ok) {
       onProgress('Extracting configs…', 90)
       const configBuf = Buffer.from(await configRes.arrayBuffer())
-      const configZip = new AdmZip(configBuf)
+      const configZip = openValidatedZip(configBuf, 'ATLauncher configuration')
       configZip.extractAllTo(gameDir, true)
     }
   } catch { /* configs zip might not exist for all packs */ }
@@ -1025,7 +1032,7 @@ export async function installTechnicPack(
       const modRes = await fetch(mod.url)
       if (!modRes.ok) throw new Error(`Technic mod download failed: ${modRes.status}`)
       const buf = Buffer.from(await modRes.arrayBuffer())
-      const zip = new AdmZip(buf)
+      const zip = openValidatedZip(buf, 'Technic mod')
       zip.extractAllTo(gameDir, true)
     }
   } else {
@@ -1038,7 +1045,7 @@ export async function installTechnicPack(
     if (!packZipRes.ok) throw new Error(`Technic download ${packZipRes.status}`)
     const buf = Buffer.from(await packZipRes.arrayBuffer())
     onProgress('Extracting modpack…', 85)
-    const zip = new AdmZip(buf)
+    const zip = openValidatedZip(buf, 'Technic configuration')
     zip.extractAllTo(gameDir, true)
   }
 
@@ -1082,7 +1089,7 @@ export async function installCfPack(
   if (!packRes.ok) throw new Error(`Failed to download pack: ${packRes.status}`)
   const packBuf = Buffer.from(await packRes.arrayBuffer())
 
-  const zip = new AdmZip(packBuf)
+  const zip = openValidatedZip(packBuf)
   const manifestEntry = zip.getEntry('manifest.json')
   if (!manifestEntry) throw new Error('manifest.json missing from CurseForge pack')
   const manifest = JSON.parse(manifestEntry.getData().toString('utf8'))

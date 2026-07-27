@@ -94,14 +94,22 @@ export default function AccountSwitcher(): JSX.Element {
   }
 
   const pick = async (id: string): Promise<void> => {
-    await window.api.accounts.setActive(id)
-    await refreshAccounts()
-    setOpen(false)
+    try {
+      await window.api.accounts.setActive(id)
+      await refreshAccounts()
+      setOpen(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not switch account.')
+    }
   }
 
   const remove = async (id: string): Promise<void> => {
-    await window.api.accounts.remove(id)
-    await refreshAccounts()
+    try {
+      await window.api.accounts.remove(id)
+      await refreshAccounts()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove account.')
+    }
   }
 
   return (

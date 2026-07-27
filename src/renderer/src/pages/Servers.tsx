@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ServerEntry, ServerStatus } from '@shared/types'
 
 /* ── Ping latency colour ────────────────────────────────────── */
+import { useApp } from '../store'
+import { ipcError } from '../lib/ipcError'
+
 function pingColor(ms?: number): string {
   if (ms === undefined) return 'var(--text-muted)'
   if (ms < 60)  return 'var(--accent-strong)'
@@ -277,6 +280,7 @@ function ServerCard({ server, status, onRemove, onPing }: CardProps): JSX.Elemen
 type StatusMap = Record<string, ServerStatus & { loading?: boolean }>
 
 export default function Servers(): JSX.Element {
+  const setError = useApp((s) => s.setError)
   const [servers, setServers]     = useState<ServerEntry[]>([])
   const [statuses, setStatuses]   = useState<StatusMap>({})
   const [showAdd, setShowAdd]     = useState(false)
@@ -292,41 +296,62 @@ export default function Servers(): JSX.Element {
   const pingOne = useCallback(async (server: ServerEntry) => {
     if (!mountedRef.current) return
     setStatuses((prev) => ({ ...prev, [server.id]: { ...prev[server.id], online: false, loading: true } }))
-    const result = await window.api.servers.ping(server.host, server.port)
-    if (!mountedRef.current) return
-    setStatuses((prev) => ({ ...prev, [server.id]: { ...result, loading: false } }))
+    try {
+      const result = await window.api.servers.ping(server.host, server.port)
+      if (!mountedRef.current) return
+      setStatuses((prev) => ({ ...prev, [server.id]: { ...result, loading: false } }))
+    } catch (err) {
+      if (!mountedRef.current) return
+      setStatuses((prev) => ({
+        ...prev,
+        [server.id]: { online: false, loading: false, error: ipcError(err) }
+      }))
+    }
   }, [])
 
   const pingAll = useCallback(async (list: ServerEntry[]) => {
     if (!list.length) return
     setPingingAll(true)
-    await Promise.all(list.map((s) => pingOne(s)))
-    if (mountedRef.current) setPingingAll(false)
+    try {
+      await Promise.all(list.map((s) => pingOne(s)))
+    } finally {
+      if (mountedRef.current) setPingingAll(false)
+    }
   }, [pingOne])
 
   useEffect(() => {
     mountedRef.current = true
     const initialLoad = setTimeout(() => {
-      void load().then((list) => pingAll(list))
+      void load()
+        .then((list) => pingAll(list))
+        .catch((err) => setError(ipcError(err)))
     }, 0)
     return () => {
       clearTimeout(initialLoad)
       mountedRef.current = false
     }
-  }, [load, pingAll])
+  }, [load, pingAll, setError])
 
   const handleAdd = async (data: Omit<ServerEntry, 'id'>): Promise<void> => {
-    const updated = await window.api.servers.add(data)
-    setServers(updated)
-    // Ping the newly added server
-    const newest = updated[updated.length - 1]
-    if (newest) void pingOne(newest)
+    try {
+      const updated = await window.api.servers.add(data)
+      setServers(updated)
+      // Ping the newly added server
+      const newest = updated[updated.length - 1]
+      if (newest) void pingOne(newest)
+    } catch (err) {
+      setError(ipcError(err))
+    }
   }
 
   const handleRemove = async (id: string): Promise<void> => {
-    const updated = await window.api.servers.remove(id)
-    setServers(updated)
-    setStatuses((prev) => { const n = { ...prev }; delete n[id]; return n })
+    try {
+      const updated = await window.api.servers.remove(id)
+      setServers(updated)
+      setStatuses((prev) => { const n = { ...prev }; delete n[id]; return n })
+    } catch (err) {
+      setError(ipcError(err))
+    }
   }
 
   return (
