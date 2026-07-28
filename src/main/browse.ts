@@ -296,11 +296,25 @@ export async function fetchCurseFormMods(modId: string, fileId?: string): Promis
   const files: Array<{ projectID: number; fileID: number; required: boolean }> = manifest.files ?? []
 
   const modIds = [...new Set(files.map((f) => f.projectID))]
-  const modMap: Record<number, { name: string; logo?: { thumbnailUrl?: string } }> = {}
+  const modMap: Record<number, {
+    name: string
+    slug?: string
+    logo?: { thumbnailUrl?: string }
+    links?: { websiteUrl?: string }
+  }> = {}
   if (modIds.length > 0) {
     try {
       const batchData = await cfPost('/mods', { modIds })
       for (const m of batchData.data ?? []) modMap[m.id] = m
+    } catch (_) {}
+  }
+
+  const fileMap: Record<number, { fileName?: string }> = {}
+  const fileIds = files.map((file) => file.fileID)
+  for (let i = 0; i < fileIds.length; i += 100) {
+    try {
+      const batchData = await cfPost('/mods/files', { fileIds: fileIds.slice(i, i + 100) })
+      for (const file of batchData.data ?? []) fileMap[file.id] = file
     } catch (_) {}
   }
 
@@ -310,7 +324,12 @@ export async function fetchCurseFormMods(modId: string, fileId?: string): Promis
       name: m?.name ?? `Mod #${f.projectID}`,
       optional: !f.required,
       serverOnly: false,
-      iconUrl: m?.logo?.thumbnailUrl
+      iconUrl: m?.logo?.thumbnailUrl,
+      source: 'curseforge',
+      projectId: String(f.projectID),
+      fileName: fileMap[f.fileID]?.fileName,
+      externalUrl: m?.links?.websiteUrl
+        || (m?.slug ? `https://www.curseforge.com/minecraft/mc-mods/${m.slug}` : undefined)
     }
   })
 }

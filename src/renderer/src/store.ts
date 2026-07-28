@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Account, Instance, LaunchProgress, Page, ThemeId, UpdateInfo } from '@shared/types'
+import type { Account, Instance, LaunchProgress, ModpackImportProgress, Page, ThemeId, UpdateInfo } from '@shared/types'
 
 export const DEFAULT_THEME: ThemeId = 'thendrask'
 
@@ -20,6 +20,10 @@ export function applyTheme(theme: ThemeId): void {
 /** Toggle the `lite` class on the document root; see index.css for what it strips. */
 export function applyLiteMode(liteMode: boolean): void {
   document.documentElement.classList.toggle('lite', liteMode)
+}
+
+export interface ImportProgressView extends ModpackImportProgress {
+  status: 'active' | 'complete' | 'partial' | 'error'
 }
 
 interface AppState {
@@ -50,6 +54,9 @@ interface AppState {
   /** Count of in-flight installs (from Browse tab). */
   installingCount: number
   setInstalling: (delta: 1 | -1) => void
+
+  importProgress: ImportProgressView | null
+  setImportProgress: (progress: ImportProgressView | null) => void
 
   /** Captured stdout per instance id (capped at 500 lines). */
   logs: Record<string, string[]>
@@ -131,6 +138,9 @@ export const useApp = create<AppState>((set) => ({
   installingCount: 0,
   setInstalling: (delta) =>
     set((s) => ({ installingCount: Math.max(0, s.installingCount + delta) })),
+
+  importProgress: null,
+  setImportProgress: (importProgress) => set({ importProgress }),
 
   logs: {},
   addLog: (instanceId, line) =>

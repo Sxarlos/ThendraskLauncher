@@ -3,7 +3,8 @@ app.commandLine.appendSwitch('js-flags', '--expose-gc')
 
 import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog, Tray, Menu } from 'electron'
 import { join, basename } from 'path'
-import { existsSync, mkdirSync, copyFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, copyFileSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
+import { createHash } from 'crypto'
 import { listAccounts, loginInteractive, removeAccount, setActive, getMinecraftProfile, setActiveCape, previewSkin, uploadSkin, listSavedSkins, saveSkin, deleteSavedSkin, uploadSavedSkin } from './accounts'
 import {
   createInstance,
@@ -48,7 +49,14 @@ import {
   fetchCurseForgeChangelog,
   fetchFtbChangelog
 } from './browse'
-import { importLocalPack, listLoaderVersions } from './modpack'
+import {
+  importLocalPack,
+  listLoaderVersions,
+  listMissingCurseForgeFiles,
+  markCurseForgeFileImported,
+  findCurseForgePackIdentity,
+  readMarker
+} from './modpack'
 import { readSavedServers } from './nbtReader'
 import { applyToAllInstances } from './chatmod'
 import { detectAllJavas } from './java'
@@ -275,6 +283,24 @@ function handle<T>(channel: string, fn: (...args: any[]) => T | Promise<T>): voi
   })
 }
 
+function handleWithEvent<T>(
+  channel: string,
+  fn: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => T | Promise<T>
+): void {
+  ipcMain.handle(channel, async (event, ...args) => {
+    try {
+      if (!mainWindow || event.sender !== mainWindow.webContents) {
+        throw new Error('Rejected IPC call from an untrusted renderer.')
+      }
+      return await fn(event, ...args)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[ipc:${channel}]`, message)
+      throw new Error(message, { cause: err })
+    }
+  })
+}
+
 async function fetchAndStoreScreenshots(
   instanceId: string,
   source: 'modrinth' | 'curseforge' | 'ftb',
@@ -454,6 +480,35 @@ function registerIpcHandlers(): void {
     return basename(sourcePath)
   })
 
+  handle(
+    'instance:importMissingCurseForgeMod',
+    (
+      instanceId: string,
+      sourcePath: string,
+      projectId: number,
+      fileId: number,
+      expectedFileName?: string
+    ) => {
+      if (isRunning(instanceId)) throw new Error('Stop the instance before adding mods.')
+      if (!existsSync(sourcePath) || !statSync(sourcePath).isFile() || !sourcePath.toLowerCase().endsWith('.jar')) {
+        throw new Error('Select a valid mod JAR file.')
+      }
+      const selectedFileName = basename(sourcePath)
+      if (expectedFileName && selectedFileName.toLowerCase() !== expectedFileName.toLowerCase()) {
+        throw new Error(`Select ${expectedFileName}. You chose ${selectedFileName}.`)
+      }
+      const modsDir = join(instanceGameDir(instanceId), 'mods')
+      mkdirSync(modsDir, { recursive: true })
+      copyFileSync(sourcePath, join(modsDir, selectedFileName))
+      return markCurseForgeFileImported(
+        instanceId,
+        Number(projectId),
+        Number(fileId),
+        selectedFileName
+      )
+    }
+  )
+
   handle('instance:listLocalMods', (instanceId: string) => {
     const modsDir = join(instanceGameDir(instanceId), 'mods')
     if (!existsSync(modsDir)) return []
@@ -464,6 +519,50 @@ function registerIpcHandlers(): void {
         const size = statSync(join(modsDir, f)).size
         return { name: f, size, enabled: f.endsWith('.jar') }
       })
+  })
+
+  handle('instance:identifyLocalMods', async (instanceId: string, fileNames: string[]) => {
+    const names = [...new Set(fileNames)].slice(0, 50)
+    const modsDir = join(instanceGameDir(instanceId), 'mods')
+    const nameByHash = new Map<string, string>()
+    for (const fileName of names) {
+      if (basename(fileName) !== fileName || !fileName.toLowerCase().endsWith('.jar')) continue
+      const filePath = join(modsDir, fileName)
+      if (!existsSync(filePath) || !statSync(filePath).isFile()) continue
+      nameByHash.set(createHash('sha1').update(readFileSync(filePath)).digest('hex'), fileName)
+    }
+    if (!nameByHash.size) return {}
+    const versionRes = await fetch('https://api.modrinth.com/v2/version_files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'thendrask-launcher' },
+      body: JSON.stringify({ hashes: [...nameByHash.keys()], algorithm: 'sha1' })
+    })
+    if (!versionRes.ok) return {}
+    const versions = await versionRes.json() as Record<string, { project_id?: string }>
+    const projectIds = [...new Set(Object.values(versions).map((version) => version.project_id).filter(Boolean))] as string[]
+    if (!projectIds.length) return {}
+    const projectsRes = await fetch(
+      `https://api.modrinth.com/v2/projects?ids=${encodeURIComponent(JSON.stringify(projectIds))}`,
+      { headers: { 'User-Agent': 'thendrask-launcher' } }
+    )
+    if (!projectsRes.ok) return {}
+    const projects = await projectsRes.json() as Array<{ id: string; slug: string; title: string; icon_url?: string }>
+    const projectById = new Map(projects.map((project) => [project.id, project]))
+    return Object.fromEntries(
+      Object.entries(versions).flatMap(([hash, version]) => {
+        const fileName = nameByHash.get(hash)
+        const project = version.project_id ? projectById.get(version.project_id) : undefined
+        return fileName && project
+          ? [[fileName, {
+              projectId: project.id,
+              source: 'modrinth',
+              displayName: project.title,
+              iconUrl: project.icon_url,
+              externalUrl: `https://modrinth.com/mod/${project.slug}`
+            }]]
+          : []
+      })
+    )
   })
 
   handle('instance:removeMod', (instanceId: string, fileName: string) => {
@@ -652,7 +751,12 @@ function registerIpcHandlers(): void {
   handle('loader:versions', (loader: string, mcVersion: string) => listLoaderVersions(loader, mcVersion))
 
   // Local pack import (.mrpack or CurseForge zip)
-  handle('modpack:importFile', async (filePath: string) => {
+  handleWithEvent('modpack:importFile', async (event, filePath: string) => {
+    event.sender.send('modpack:importProgress', {
+      message: 'Starting modpack import…',
+      percent: 0,
+      status: 'active'
+    })
     const tempInst = createInstance({
       name: 'Importing…',
       mcVersion: '',
@@ -664,21 +768,74 @@ function registerIpcHandlers(): void {
       const result = await importLocalPack(
         tempInst.id,
         filePath,
-        () => {} // no per-file progress needed for now
+        (message, percent) => {
+          event.sender.send('modpack:importProgress', { message, percent })
+        }
       )
-      return updateInstance(tempInst.id, {
+      const instance = updateInstance(tempInst.id, {
         name: result.name,
         mcVersion: result.mcVersion,
         loader: result.marker.loaderType as import('@shared/types').LoaderType,
         loaderVersion: result.marker.loaderVersion,
         recommendedRamMb: result.recommendedRamMb,
         jvmArgs: result.jvmArgs,
-        iconUrl: result.iconUrl
+        iconUrl: result.iconUrl,
+        source: result.source,
+        externalId: result.externalId,
+        packVersionId: result.packVersionId,
+        screenshotUrls: result.screenshotUrls
       })
+      if (!instance) throw new Error('Imported instance could not be saved.')
+      const missingFiles = result.missingFiles ?? []
+      event.sender.send('modpack:importProgress', {
+        message: missingFiles.length
+          ? `Import complete · ${missingFiles.length} manual file${missingFiles.length === 1 ? '' : 's'} needed`
+          : 'Modpack import complete',
+        percent: 100,
+        status: missingFiles.length ? 'partial' : 'complete'
+      })
+      return {
+        instance,
+        missingFiles
+      }
     } catch (err) {
+      event.sender.send('modpack:importProgress', {
+        message: 'Import failed',
+        status: 'error'
+      })
       removeInstance(tempInst.id, true)
       throw err
     }
+  })
+
+  handle('modpack:missingCurseForgeFiles', (instanceId: string) =>
+    listMissingCurseForgeFiles(instanceId)
+  )
+
+  handle('modpack:enrichCurseForgeImport', async (instanceId: string) => {
+    const instance = listInstances().find((candidate) => candidate.id === instanceId)
+    if (!instance || instance.source !== 'manual') return instance
+    const marker = readMarker(instanceId)
+    if (!marker?.missingCurseForgeFiles?.length) return instance
+    const apiKey = getSettings().curseforgeApiKey
+    if (!apiKey) return instance
+    const savedImport = marker.curseForgeImport
+    const identity = await findCurseForgePackIdentity(
+      apiKey,
+      savedImport?.name ?? instance.name,
+      savedImport?.version,
+      savedImport?.sourceFileName
+    )
+    if (!identity) return instance
+    return updateInstance(instanceId, {
+      source: 'curseforge',
+      externalId: identity.externalId,
+      packVersionId: identity.packVersionId,
+      iconUrl: identity.iconUrl ?? instance.iconUrl,
+      screenshotUrls: identity.screenshotUrls?.length
+        ? identity.screenshotUrls
+        : instance.screenshotUrls
+    })
   })
 
   // Servers

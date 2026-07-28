@@ -7,6 +7,43 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.8-beta.3] - 2026-07-28
+
+### Added
+
+- A universal Library import button for Modrinth `.mrpack` and CurseForge ZIP
+  modpacks.
+- Partial CurseForge imports that install every API-accessible file while
+  reporting files that require an author-approved manual download.
+- A persistent Manual files tab with official download links, validated JAR
+  importing, remaining-file counts, and completion ticks.
+- Sidebar import progress with live download and override-extraction status.
+- CurseForge metadata enrichment for imported ZIPs, including official pack
+  identity, icons, screenshots, descriptions, authors, changelogs, and
+  versions, with embedded profile images as a fallback.
+- Official project links on included pack mods and hash-based Modrinth links
+  for identifiable JARs bundled outside the CurseForge manifest.
+
+### Changed
+
+- CurseForge ZIP imports now use the dedicated authenticated download URL
+  endpoint when batch metadata omits a permitted file URL.
+- Imported pack mod lists now reconcile manifest entries, managed additions,
+  and local JARs by project ID and exact filename so each mod is counted once.
+- CurseForge import progress now reports extraction work through completion
+  instead of appearing stalled at 90%.
+
+### Fixed
+
+- Prevented restricted CurseForge files from causing an otherwise valid
+  modpack import to fail or delete the partially completed instance.
+- Fixed the partial-import report layout, scrolling, opaque background, and
+  controls for large missing-file lists.
+- Fixed imported CurseForge instances appearing with a blank icon or without
+  their source-platform details.
+- Fixed installed pack JARs being duplicated under Local mods and inflating
+  mod totals.
+
 ## [0.5.8-beta.2] - 2026-07-27
 
 ### Added
@@ -108,7 +145,8 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Earlier release history is available on the
 [GitHub Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases).
 
-[Unreleased]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.2...HEAD
+[Unreleased]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.3...HEAD
+[0.5.8-beta.3]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.2...v0.5.8-beta.3
 [0.5.8-beta.2]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.1...v0.5.8-beta.2
 [0.5.8-beta.1]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.7...v0.5.8-beta.1
 [0.5.7]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.6...v0.5.7
