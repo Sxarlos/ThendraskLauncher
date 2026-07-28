@@ -2,6 +2,8 @@ import AdmZip from 'adm-zip'
 import { validateArchiveEntries } from './archiveSafety'
 import type { BrowseParams, ModpackResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
 import { getSettings } from './settings'
+import { assertCurseForgeEnabled } from './curseforgePolicy'
+import { assertRestrictedCatalogsEnabled } from './catalogPolicy'
 
 const CF_BASE = 'https://api.curseforge.com/v1'
 const MR_BASE = 'https://api.modrinth.com/v2'
@@ -28,13 +30,14 @@ async function mrGet(path: string, params: Record<string, string>): Promise<any>
     if (v !== '' && v !== undefined) url.searchParams.set(k, v)
   }
   const res = await fetch(url.toString(), {
-    headers: { 'User-Agent': 'ender-launcher/0.1.5 (github.com/ender-launcher)' }
+    headers: { 'User-Agent': 'thendrask-launcher (github.com/Sxarlos/ThendraskLauncher)' }
   })
   if (!res.ok) throw new Error(`Modrinth ${res.status}: ${res.statusText}`)
   return res.json()
 }
 
 async function cfGet(path: string, params: Record<string, string | number>): Promise<any> {
+  assertCurseForgeEnabled()
   const key = (getSettings().curseforgeApiKey ?? '').trim()
   if (!key) throw new Error('NO_CF_KEY')
 
@@ -149,6 +152,7 @@ export async function fetchCurseForgePackOverview(modId: string): Promise<PackOv
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 async function cfPost(path: string, body: unknown): Promise<any> {
+  assertCurseForgeEnabled()
   const key = (getSettings().curseforgeApiKey ?? '').trim()
   if (!key) throw new Error('NO_CF_KEY')
   const res = await fetch(CF_BASE + path, {
@@ -167,7 +171,7 @@ async function cfPost(path: string, body: unknown): Promise<any> {
 
 async function downloadBuffer(url: string): Promise<Buffer> {
   const res = await fetch(url, {
-    headers: { 'User-Agent': 'ender-launcher/0.1.5 (github.com/ender-launcher)' }
+    headers: { 'User-Agent': 'thendrask-launcher (github.com/Sxarlos/ThendraskLauncher)' }
   })
   if (!res.ok) throw new Error(`Download failed: ${res.status}`)
   return Buffer.from(await res.arrayBuffer())
@@ -464,12 +468,13 @@ export async function searchFtbLegacy(params: BrowseParams, category: string): P
 // ── ATLauncher ────────────────────────────────────────────────────────────────
 
 const ATL_CDN = 'https://download.nodecdn.net/containers/atl'
-const ATL_UA  = 'Mozilla/5.0 ATLauncher/3.4.26.0'
+const ATL_UA = 'Sxarlos/ThendraskLauncher (github.com/Sxarlos/ThendraskLauncher)'
 
 let _atlCache: any[] | null = null
 let _atlCacheAt = 0
 
 async function getAtlPacks(): Promise<any[]> {
+  assertRestrictedCatalogsEnabled()
   if (_atlCache && Date.now() - _atlCacheAt < 10 * 60 * 1000) return _atlCache
   const res = await fetch(`${ATL_CDN}/launcher/json/packsnew.json`, {
     headers: { 'User-Agent': ATL_UA }
@@ -505,6 +510,7 @@ function mapAtlPack(p: any): ModpackResult {
 }
 
 export async function searchAtlauncher(params: BrowseParams, category: string): Promise<ModpackResult[]> {
+  assertRestrictedCatalogsEnabled()
   const packs = await getAtlPacks()
   const targetType = category === 'private' ? 'private' : 'public'
   const q = (params.query ?? '').toLowerCase()
@@ -537,6 +543,7 @@ export async function searchAtlauncher(params: BrowseParams, category: string): 
 }
 
 export async function fetchAtlPackOverview(packId: string): Promise<PackOverview> {
+  assertRestrictedCatalogsEnabled()
   const packs = await getAtlPacks()
   const pack = packs.find((p: any) => String(p.id) === packId)
   if (!pack) return { description: '', screenshotUrls: [] }
@@ -550,6 +557,7 @@ export async function fetchAtlPackOverview(packId: string): Promise<PackOverview
 }
 
 export async function fetchAtlVersions(packId: string): Promise<PackVersion[]> {
+  assertRestrictedCatalogsEnabled()
   const packs = await getAtlPacks()
   const pack = packs.find((p: any) => String(p.id) === packId)
   if (!pack) return []
@@ -566,12 +574,12 @@ export async function fetchAtlVersions(packId: string): Promise<PackVersion[]> {
 
 // ── FTB ───────────────────────────────────────────────────────────────────────
 
-const FTB_BASE = 'https://api.modpacks.ch'
+const FTB_BASE = 'https://api.feed-the-beast.com/v1/modpacks'
 const FTB_LOADER_NAMES = new Set(['forge', 'fabric', 'quilt', 'neoforge'])
 
 async function ftbGet(path: string): Promise<any> {
   const res = await fetch(FTB_BASE + path, {
-    headers: { 'User-Agent': 'ender-launcher/0.1.5 (github.com/ender-launcher)' }
+    headers: { 'User-Agent': 'thendrask-launcher (github.com/Sxarlos/ThendraskLauncher)' }
   })
   if (!res.ok) throw new Error(`FTB ${res.status}: ${res.statusText}`)
   return res.json()
@@ -762,9 +770,10 @@ export async function searchCurseForge(params: BrowseParams): Promise<ModpackRes
 // ── Technic Launcher ──────────────────────────────────────────────────────────
 
 const TECHNIC_API = 'https://api.technicpack.net'
-const TECHNIC_UA  = 'Mozilla/5.0 TechnicLauncher/4.0.0'
+const TECHNIC_UA = 'Sxarlos/ThendraskLauncher (github.com/Sxarlos/ThendraskLauncher)'
 
 async function technicGet(path: string): Promise<any> {
+  assertRestrictedCatalogsEnabled()
   const res = await fetch(`${TECHNIC_API}${path}`, { headers: { 'User-Agent': TECHNIC_UA } })
   if (!res.ok) throw new Error(`Technic ${res.status}: ${res.statusText}`)
   return res.json()

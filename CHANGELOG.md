@@ -7,6 +7,44 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.8-beta.4] - 2026-07-28
+
+### Changed
+
+- Disabled ATLauncher and Technic catalogue browsing and installation in public
+  builds pending explicit provider permission, and removed official-client
+  impersonation from their optional request identifiers.
+- Migrated FTB catalogue requests from the retired `api.modpacks.ch` host to
+  FTB's current public API host.
+- Expanded the privacy policy to cover Modrinth and FTB browsing, searches,
+  metadata, and downloads.
+- Refreshed maintained same-major runtime and development dependencies and
+  corrected the documented location of the presence relay setting.
+- Temporarily disabled CurseForge browsing, searching, installation, updates,
+  dependency resolution, API-assisted ZIP imports, setup, and API-key entry in
+  all public builds. Modrinth, FTB, FTB Legacy, local imports, manual JAR
+  installation, and ordinary instance management remain available.
+- Removed previously stored CurseForge API keys from local primary, backup,
+  temporary, legacy, and partially written settings copies without creating a
+  new backup containing the key.
+
+### Security
+
+- Added a production-dependency audit gate to CI and release validation.
+- Added compile-time, IPC, URL-opening, fetch-redirect, and Electron session
+  enforcement that prevents disabled builds from contacting CurseForge or
+  ForgeCDN hosts, including through redirected provider downloads.
+- Replaced the deprecated `request` dependency used by
+  `minecraft-launcher-core` with a local native-fetch compatibility transport,
+  and upgraded its ZIP and UUID dependencies to maintained versions.
+- Upgraded the local release toolchain to `electron-builder` 26, removing the
+  critical legacy `tar` packaging chain and stale unresolved-dependency
+  warnings.
+- Upgraded the packaged Electron runtime from 33 to 43 to incorporate current
+  Chromium, Node.js, and Electron security fixes.
+- Upgraded `electron-vite`, Vite, and the React build plugin to supported,
+  advisory-free versions of the development toolchain.
+
 ## [0.5.8-beta.3] - 2026-07-28
 
 ### Added
@@ -145,7 +183,8 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Earlier release history is available on the
 [GitHub Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases).
 
-[Unreleased]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.3...HEAD
+[Unreleased]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.4...HEAD
+[0.5.8-beta.4]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.3...v0.5.8-beta.4
 [0.5.8-beta.3]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.2...v0.5.8-beta.3
 [0.5.8-beta.2]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.1...v0.5.8-beta.2
 [0.5.8-beta.1]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.7...v0.5.8-beta.1

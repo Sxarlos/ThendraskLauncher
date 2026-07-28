@@ -1,6 +1,7 @@
 import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import type { Instance, InstanceSnapshot, InstanceStorageInfo, LocalMod, MissingCurseForgeFile, ModSearchResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
+import { CURSEFORGE_ENABLED } from '../../../shared/features'
 import { activeAccount, useApp } from '../store'
 import { ipcError } from '../lib/ipcError'
 import BrowseModpacks from './LibraryBrowse'
@@ -1332,12 +1333,13 @@ function InstanceDetailPanel({
   instance: Instance
   onBack: () => void
 }): JSX.Element {
+  const sourceAvailable = instance.source !== 'curseforge' || CURSEFORGE_ENABLED
   const [detailTab, setDetailTab] = useState<'overview' | 'changelog' | 'mods' | 'manual' | 'versions' | 'console' | 'settings'>(
-    instance.externalId && instance.source !== 'manual' ? 'overview' : instance.loader !== 'vanilla' ? 'mods' : 'settings'
+    instance.externalId && instance.source !== 'manual' && sourceAvailable ? 'overview' : instance.loader !== 'vanilla' ? 'mods' : 'settings'
   )
   const [versions, setVersions] = useState<PackVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(
-    () => !!instance.externalId && instance.source !== 'manual'
+    () => !!instance.externalId && instance.source !== 'manual' && sourceAvailable
   )
   const [versionsError, setVersionsError] = useState<string | null>(null)
   const [mods, setMods] = useState<PackMod[]>([])
@@ -1373,7 +1375,7 @@ function InstanceDetailPanel({
   const signedIn = !!activeAccount(accounts)
   const busy = progress && ['preparing', 'downloading', 'launching'].includes(progress.state)
   const running = progress?.state === 'running'
-  const hasModSource = !!instance.externalId && instance.source !== 'manual'
+  const hasModSource = !!instance.externalId && instance.source !== 'manual' && sourceAvailable
   const remainingManualFiles = missingCurseForgeFiles.filter((file) => !file.importedFileName).length
   const packFileNames = new Set(
     mods.map((mod) => mod.fileName?.toLowerCase()).filter((name): name is string => !!name)
@@ -1418,6 +1420,7 @@ function InstanceDetailPanel({
   }, [instance.id, hasModSource])
 
   useEffect(() => {
+    if (!CURSEFORGE_ENABLED) return
     window.api.modpack.missingCurseForgeFiles(instance.id)
       .then(async (files) => {
         setMissingCurseForgeFiles(files)
@@ -1804,7 +1807,7 @@ function InstanceDetailPanel({
             )}
           </button>
         ))}
-        {missingCurseForgeFiles.length > 0 && (
+        {CURSEFORGE_ENABLED && missingCurseForgeFiles.length > 0 && (
           <button
             onClick={() => setDetailTab('manual')}
             className="relative px-4 py-2.5 text-sm font-medium transition-colors duration-150"
@@ -1924,7 +1927,7 @@ function InstanceDetailPanel({
 
             <div className="rounded-2xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
               <div className="flex gap-1 mb-3">
-                {(['modrinth', 'curseforge'] as const).map((source) => <button
+                {(['modrinth', ...(CURSEFORGE_ENABLED ? ['curseforge' as const] : [])] as const).map((source) => <button
                   key={source}
                   onClick={() => { setModSource(source); setModResults([]) }}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold"
@@ -2230,7 +2233,7 @@ export default function Library(): JSX.Element {
                 style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}
                 onMouseEnter={(e) => { if (!importing) { e.currentTarget.style.background = 'var(--surface-3)'; e.currentTarget.style.color = 'var(--text-bright)' } }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-soft)' }}
-                title="Import a .mrpack or CurseForge zip"
+                title="Import a Modrinth .mrpack or Prism/MultiMC zip"
               >
                 {importing ? 'Importing…' : '↑ Import'}
               </button>

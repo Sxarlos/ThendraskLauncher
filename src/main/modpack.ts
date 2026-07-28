@@ -13,6 +13,8 @@ import { getSettings } from './settings'
 import { safeJoin } from './safePath'
 import { validateArchiveEntries } from './archiveSafety'
 import type { MissingCurseForgeFile } from '@shared/types'
+import { assertCurseForgeEnabled } from './curseforgePolicy'
+import { assertRestrictedCatalogsEnabled } from './catalogPolicy'
 import {
   PRISM_PROFILE_FILE,
   findPrismIconDataUrl,
@@ -482,6 +484,7 @@ export async function getCurseForgeDownloadUrl(
   fileId: number,
   advertisedUrl?: string | null
 ): Promise<string | null> {
+  assertCurseForgeEnabled()
   if (advertisedUrl) return advertisedUrl
   const res = await fetch(`${CF_BASE}/mods/${modId}/files/${fileId}/download-url`, {
     headers: { 'x-api-key': apiKey, Accept: 'application/json' }
@@ -575,6 +578,7 @@ export async function findCurseForgePackIdentity(
   packVersion?: string,
   sourceFileName?: string
 ): Promise<CurseForgePackIdentity | null> {
+  assertCurseForgeEnabled()
   const fullName = packName.trim()
   if (!fullName) return null
   const broadName = fullName.split(/[:\-–—]/, 1)[0].trim()
@@ -756,7 +760,7 @@ export async function installMrpack(
 
 // ── FTB pack ─────────────────────────────────────────────────────────────────
 
-const FTB_API = 'https://api.modpacks.ch'
+const FTB_API = 'https://api.feed-the-beast.com/v1/modpacks'
 
 export async function installFtbPack(
   instanceId: string,
@@ -1034,6 +1038,7 @@ export async function importLocalPack(
   }
 
   if (cfEntry) {
+    assertCurseForgeEnabled()
     // ── CurseForge format ────────────────────────────────────────────────────
     const cfKey = getSettings().curseforgeApiKey
     if (!cfKey) {
@@ -1186,7 +1191,7 @@ export async function importLocalPack(
 // ── ATLauncher pack ───────────────────────────────────────────────────────────
 
 const ATL_CDN = 'https://download.nodecdn.net/containers/atl'
-const ATL_INST_UA = 'Mozilla/5.0 ATLauncher/3.4.26.0'
+const ATL_INST_UA = 'Sxarlos/ThendraskLauncher (github.com/Sxarlos/ThendraskLauncher)'
 
 export async function installAtlPack(
   instanceId: string,
@@ -1194,6 +1199,7 @@ export async function installAtlPack(
   packVersionId: string | undefined,
   onProgress: (msg: string, pct?: number) => void
 ): Promise<PackMarker> {
+  assertRestrictedCatalogsEnabled()
   const gameDir = instanceGameDir(instanceId)
 
   onProgress('Fetching pack list…')
@@ -1272,7 +1278,7 @@ export async function installAtlPack(
 // ── Technic pack ─────────────────────────────────────────────────────────────
 
 const TECHNIC_API_INST = 'https://api.technicpack.net'
-const TECHNIC_INST_UA  = 'Mozilla/5.0 TechnicLauncher/4.0.0'
+const TECHNIC_INST_UA = 'Sxarlos/ThendraskLauncher (github.com/Sxarlos/ThendraskLauncher)'
 
 export async function installTechnicPack(
   instanceId: string,
@@ -1280,6 +1286,7 @@ export async function installTechnicPack(
   packVersionId: string | undefined,
   onProgress: (msg: string, pct?: number) => void
 ): Promise<PackMarker> {
+  assertRestrictedCatalogsEnabled()
   const gameDir = instanceGameDir(instanceId)
 
   onProgress('Fetching modpack info…')
@@ -1344,6 +1351,7 @@ export async function installCfPack(
   fileId: string | undefined,
   onProgress: (msg: string, pct?: number) => void
 ): Promise<PackMarker> {
+  assertCurseForgeEnabled()
   const gameDir = instanceGameDir(instanceId)
   const cfKey = getSettings().curseforgeApiKey
   if (!cfKey) throw new Error('A CurseForge API key is required. Add it in Settings → API Keys.')

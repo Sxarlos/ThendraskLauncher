@@ -53,6 +53,7 @@ export interface CreateInstanceInput {
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
+    capabilities: (): Promise<{ curseforge: boolean }> => ipcRenderer.invoke('app:capabilities'),
     /** The host OS, so the renderer can adapt platform-specific UI (e.g. file pickers). */
     platform: process.platform as NodeJS.Platform
   },

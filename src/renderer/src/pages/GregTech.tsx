@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { GregTechCommunityAddon, GTNHSpecialBuild, GTNHUpdateInfo, GTNHUpdateProgress, Instance, LocalMod, ModSearchResult } from '@shared/types'
+import { CURSEFORGE_ENABLED } from '../../../shared/features'
 import { useApp } from '../store'
 import { ipcError } from '../lib/ipcError'
 
@@ -38,7 +39,7 @@ export default function GregTech(): JSX.Element {
   const moddedInstances = useMemo(() => instances.filter((instance) => instance.loader !== 'vanilla'), [instances])
   const preferred = useMemo(() => moddedInstances.filter(isLikelyGregTech), [moddedInstances])
   const [instanceId, setInstanceId] = useState('')
-  const [source, setSource] = useState<Source>('curseforge')
+  const [source, setSource] = useState<Source>('modrinth')
   const [query, setQuery] = useState('gregtech')
   const [results, setResults] = useState<ModSearchResult[]>([])
   const [installed, setInstalled] = useState<LocalMod[]>([])
@@ -270,7 +271,7 @@ export default function GregTech(): JSX.Element {
               <button disabled={!effectiveInstanceId || loading} onClick={() => void search()} className="px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-40" style={{ background: 'var(--accent-strong)', color: '#000' }}>{loading ? 'Searching…' : 'Search'}</button>
             </div>
             <div className="flex rounded-xl p-1" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-              {(['curseforge', 'modrinth'] as Source[]).map((item) => <button key={item} onClick={() => { setSource(item); void search(query, item) }} className="px-3 py-1.5 rounded-lg text-xs font-semibold capitalize" style={{ background: source === item ? 'rgba(var(--accent-rgb),0.14)' : 'transparent', color: source === item ? 'var(--accent)' : 'var(--text-muted)' }}>{item}</button>)}
+              {(['modrinth', ...(CURSEFORGE_ENABLED ? ['curseforge' as const] : [])] as Source[]).map((item) => <button key={item} onClick={() => { setSource(item); void search(query, item) }} className="px-3 py-1.5 rounded-lg text-xs font-semibold capitalize" style={{ background: source === item ? 'rgba(var(--accent-rgb),0.14)' : 'transparent', color: source === item ? 'var(--accent)' : 'var(--text-muted)' }}>{item}</button>)}
             </div>
           </div>
           <div className="flex gap-2 mt-3 flex-wrap">

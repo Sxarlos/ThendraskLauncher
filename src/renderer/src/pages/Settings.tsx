@@ -1,9 +1,10 @@
 ﻿import { useEffect, useRef, useState } from 'react'
 import type { AppSettings, DefaultGameSettings, JavaInstall, ThemeId } from '@shared/types'
+import { CURSEFORGE_ENABLED } from '../../../shared/features'
 import { normalizeThemeId, useApp } from '../store'
 import { CURATED_ACTIONS, codeToMcKey, friendlyKeyName, mouseButtonToMcKey } from '../lib/mcControls'
 
-type SettingsTab = 'general' | 'appearance' | 'apikeys'
+type SettingsTab = 'general' | 'appearance' | 'connections'
 
 const THEMES: { id: ThemeId; name: string; desc: string; swatch: string; base: string }[] = [
   { id: 'thendrask', name: 'Thendrask', desc: 'Classic dark green',  swatch: '#22c55e', base: '#111318' },
@@ -967,8 +968,8 @@ function AppearanceTab({ settings, onChange }: { settings: AppSettings; onChange
   )
 }
 
-/* ── API Keys tab ──────────────────────────────────────── */
-function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (patch: Partial<AppSettings>) => void }): JSX.Element {
+/* ── Connections tab ───────────────────────────────────── */
+function ConnectionsTab({ settings, onChange }: { settings: AppSettings; onChange: (patch: Partial<AppSettings>) => void }): JSX.Element {
   const [cfKey, setCfKey] = useState(settings.curseforgeApiKey ?? '')
   const [cfSaved, setCfSaved] = useState(false)
   const [relayUrl, setRelayUrl] = useState(settings.relayUrl ?? '')
@@ -988,6 +989,7 @@ function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (
 
   return (
     <div>
+      {CURSEFORGE_ENABLED && <>
       <SectionHeader>CurseForge</SectionHeader>
       <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
         <div className="text-sm font-medium mb-1" style={{ color: 'var(--text-bright)' }}>CurseForge API Key</div>
@@ -1021,6 +1023,7 @@ function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (
           </button>
         </div>
       </div>
+      </>}
 
       <SectionHeader>Friends</SectionHeader>
       <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
@@ -1083,7 +1086,7 @@ export default function Settings(): JSX.Element {
   const TABS: { id: SettingsTab; label: string }[] = [
     { id: 'general',    label: 'General' },
     { id: 'appearance', label: 'Appearance' },
-    { id: 'apikeys',    label: 'API Keys' },
+    { id: 'connections', label: 'Connections' },
   ]
 
   return (
@@ -1124,7 +1127,7 @@ export default function Settings(): JSX.Element {
           <>
             {tab === 'general'    && <GeneralTab    settings={settings} onChange={handleChange} />}
             {tab === 'appearance' && <AppearanceTab settings={settings} onChange={handleChange} />}
-            {tab === 'apikeys'    && <ApiKeysTab    settings={settings} onChange={handleChange} />}
+            {tab === 'connections' && <ConnectionsTab settings={settings} onChange={handleChange} />}
           </>
         )}
       </div>

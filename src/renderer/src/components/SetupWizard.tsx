@@ -1,12 +1,21 @@
 ﻿import { useEffect, useState } from 'react'
 import type { Account, AppSettings } from '@shared/types'
+import { CURSEFORGE_ENABLED } from '../../../shared/features'
 import { useApp } from '../store'
 
 /* ── Step type ───────────────────────────────────────────── */
 
 type Step = 'welcome' | 'account' | 'curseforge' | 'friends' | 'performance' | 'features' | 'done'
-const STEP_ORDER: Step[] = ['welcome', 'account', 'curseforge', 'friends', 'performance', 'features', 'done']
-const PROGRESS_STEPS: Step[] = ['account', 'curseforge', 'friends', 'performance', 'features', 'done']
+const STEP_ORDER: Step[] = [
+  'welcome',
+  'account',
+  ...(CURSEFORGE_ENABLED ? ['curseforge' as const] : []),
+  'friends',
+  'performance',
+  'features',
+  'done'
+]
+const PROGRESS_STEPS: Step[] = STEP_ORDER.filter((step) => step !== 'welcome')
 
 /* ── Step indicator ──────────────────────────────────────── */
 
@@ -50,7 +59,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
       <div>
         <h1 className="text-2xl font-black text-white mb-2">Welcome to Thendrask Launcher</h1>
         <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)', maxWidth: 340 }}>
-          Let's get you set up in a couple of quick steps - signing in and optionally connecting CurseForge.
+          Let's get you set up in a couple of quick steps.
         </p>
       </div>
 
@@ -670,7 +679,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }):
 
         {step === 'welcome'    && <WelcomeStep onNext={next} />}
         {step === 'account'    && <AccountStep onNext={next} />}
-        {step === 'curseforge' && <CurseForgeStep onNext={next} />}
+        {CURSEFORGE_ENABLED && step === 'curseforge' && <CurseForgeStep onNext={next} />}
         {step === 'friends'    && <FriendsStep onNext={next} />}
         {step === 'performance' && <PerformanceStep onNext={next} />}
         {step === 'features'   && <FeaturesStep onNext={next} />}
