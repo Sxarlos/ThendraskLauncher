@@ -775,7 +775,7 @@ export default function Home(): JSX.Element {
               </svg>
             }
             title="Browse Modpacks"
-            desc="Find and install modpacks from Modrinth & CurseForge"
+            desc="Find and install modpacks from Modrinth, FTB, ATLauncher & Technic"
           />
           <QuickCard
             onClick={() => setPage('library')}

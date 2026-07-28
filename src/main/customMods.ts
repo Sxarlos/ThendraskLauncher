@@ -6,6 +6,8 @@ import { getInstance, instanceGameDir } from './instances'
 import { safeJoin } from './safePath'
 import { createSnapshot, restoreSnapshot } from './snapshots'
 import { getSettings } from './settings'
+import { CURSEFORGE_ENABLED } from '../shared/features'
+import { assertCurseForgeEnabled, assertCurseForgeSourceAllowed } from './curseforgePolicy'
 
 const API = 'https://api.modrinth.com/v2'
 const CF_API = 'https://api.curseforge.com/v1'
@@ -104,12 +106,14 @@ function curseForgeLoader(loader: string): number {
 }
 
 function curseForgeHeaders(): Record<string, string> {
+  assertCurseForgeEnabled()
   const key = getSettings().curseforgeApiKey
   if (!key) throw new Error('Add a CurseForge API key in Settings before browsing CurseForge mods.')
   return { 'x-api-key': key, Accept: 'application/json' }
 }
 
 async function cfJson<T>(url: string): Promise<T> {
+  assertCurseForgeEnabled()
   const response = await fetch(url, { headers: curseForgeHeaders() })
   if (!response.ok) throw new Error(`CurseForge returned HTTP ${response.status}`)
   return response.json() as Promise<T>
@@ -176,6 +180,7 @@ async function searchCurseForgeMods(instanceId: string, query: string): Promise<
 }
 
 export async function searchCompatibleMods(instanceId: string, query: string, source: ModSource = 'modrinth'): Promise<ModSearchResult[]> {
+  assertCurseForgeSourceAllowed(source)
   return source === 'curseforge'
     ? searchCurseForgeMods(instanceId, query)
     : searchModrinthMods(instanceId, query)
@@ -389,6 +394,7 @@ async function installCurseForgeMod(instanceId: string, projectId: string): Prom
 }
 
 export async function installCompatibleMod(instanceId: string, projectId: string, source: ModSource = 'modrinth'): Promise<ModInstallResult> {
+  assertCurseForgeSourceAllowed(source)
   return source === 'curseforge'
     ? installCurseForgeMod(instanceId, projectId)
     : installModrinthMod(instanceId, projectId)
@@ -450,6 +456,7 @@ export async function updateManagedMods(instanceId: string): Promise<ModInstallR
     const records = new Map(current.map((record) => [recordKey(recordSource(record), record.projectId), record]))
     let addedCount = 0
     for (const record of current) {
+      if (recordSource(record) === 'curseforge' && !CURSEFORGE_ENABLED) continue
       if (recordSource(record) === 'modrinth') {
         const version = (await compatibleVersions(instanceId, record.projectId))[0]
         if (version && version.id !== record.versionId) {

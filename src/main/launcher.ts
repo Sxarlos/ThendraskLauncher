@@ -33,15 +33,16 @@ import {
   readNeoforgeJvmArgs
 } from './modpack'
 import { autoInstallShader } from './shaders'
+import { assertCurseForgeEnabled } from './curseforgePolicy'
 import {
   normalizePrismLibraryPaths,
   PRISM_PROFILE_FILE,
   type PrismLaunchProfile,
   type PrismLibrary
 } from './prism'
-import { parseJvmArgs } from './jvmArgs'
 import { sanitizeMclcDebug } from './launcherLog'
 import { needsJavaArgFile, serializeJavaArgFile } from './javaArgFile'
+import { buildLauncherOptions } from './launcherOptions'
 
 /** Instances currently running, keyed by instance id. */
 const running = new Map<string, ChildProcess>()
@@ -80,11 +81,6 @@ export function isRunning(instanceId: string): boolean {
 
 export function runningInstanceIds(): string[] {
   return [...running.keys()]
-}
-
-function quickPlayType(mcVersion: string): 'multiplayer' | 'legacy' {
-  const [, minor = '0'] = mcVersion.split('.')
-  return parseInt(minor, 10) >= 20 ? 'multiplayer' : 'legacy'
 }
 
 /**
@@ -175,6 +171,7 @@ async function launchReservedInstance(
             (msg, pct) => setState(instanceId, 'downloading', msg, pct)
           )
         } else if (instance.source === 'curseforge') {
+          assertCurseForgeEnabled()
           effectiveMarker = await installCfPack(
             instanceId,
             instance.externalId,
@@ -505,47 +502,23 @@ async function launchReservedInstance(
     javaPath: resolvedJavaPath
   })
 
-  // msmc's MclcUser is structurally what MCLC needs; the lib's exported types
-  // mark a few fields optional, so cast to MCLC's expected authorization type.
-  type LaunchAuthorization = Parameters<Client['launch']>[0]['authorization']
-  // Legacy Minecraft expects --userProperties to contain JSON. MSMC leaves it
-  // undefined for Microsoft accounts, which makes MCLC emit the flag with no
-  // value and crashes 1.7.10 while Gson parses the following argument.
-  const launchAuthorization = {
-    ...authorization,
-    user_properties: typeof authorization.user_properties === 'string'
-      ? authorization.user_properties
-      : JSON.stringify(authorization.user_properties ?? {})
-  } as unknown as LaunchAuthorization
-
-  const proc = await client.launch({
-    authorization: launchAuthorization,
+  const proc = await client.launch(buildLauncherOptions({
+    authorization,
     root: instanceGameDir(instanceId),
-    version: {
-      number: instance.mcVersion,
-      type: versionType,
-      custom: customVersion  // Fabric / Quilt profile ID
-    },
-    // Forge / NeoForge: MCLC's forge option triggers ForgeWrapper to run
-    // the installer JAR and read the resulting version profile.
-    ...(forgeInstallerPath ? { forge: forgeInstallerPath } : {}),
-    memory: {
-      max: `${settings.usePackRam && instance.recommendedRamMb ? instance.recommendedRamMb : settings.maxRamMb}M`,
-      min: '512M'
-    },
-    javaPath: resolvedJavaPath === 'java' ? undefined : resolvedJavaPath,
-    ...(serverAddress ? { quickPlay: { type: quickPlayType(instance.mcVersion), identifier: serverAddress } } : {}),
-    ...(() => {
-      const userArgs = parseJvmArgs(instance.jvmArgs ?? '')
-      const allArgs = [...(prismProfile?.jvmArgs ?? []), ...neoforgeJvmArgs, ...userArgs]
-      return allArgs.length > 0 ? { customArgs: allArgs } : {}
-    })(),
-    ...(prismProfile ? {
-      overrides: {
-        versionJson: join(gameDir, 'versions', prismProfile.versionId, `${prismProfile.versionId}.json`)
-      }
-    } : {})
-  })
+    gameDir,
+    mcVersion: instance.mcVersion,
+    versionType,
+    customVersion,
+    forgeInstallerPath,
+    maxRamMb: settings.maxRamMb,
+    usePackRam: settings.usePackRam,
+    recommendedRamMb: instance.recommendedRamMb,
+    resolvedJavaPath,
+    serverAddress,
+    instanceJvmArgs: instance.jvmArgs,
+    prismProfile,
+    neoforgeJvmArgs
+  }))
 
   if (!proc) {
     running.delete(instanceId)

@@ -1,7 +1,7 @@
 // Allow explicit GC calls (global.gc) used in idle mode
 app.commandLine.appendSwitch('js-flags', '--expose-gc')
 
-import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog, Tray, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog, Tray, Menu, session } from 'electron'
 import { join, basename } from 'path'
 import { existsSync, mkdirSync, copyFileSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
 import { createHash } from 'crypto'
@@ -15,7 +15,7 @@ import {
   type CreateInstanceInput
 } from './instances'
 import { isRunning, launchInstance, runningInstanceIds, onRunningChanged } from './launcher'
-import { detectJava, getSettings, setSettings } from './settings'
+import { detectJava, getSettings, migrateStoredCurseForgeKeys, setSettings } from './settings'
 import { applyControls } from './gameoptions'
 import { getVersions } from './mojang'
 import { listServers, addServer, removeServer, pingServer } from './servers'
@@ -79,6 +79,18 @@ import { installGregTechAddon, listGregTechAddons } from './gregtechAddons'
 import { checkGTNHUpdate, installGTNHUpdate, installGTNHSpecialBuild, listGTNHSpecialBuilds } from './gtnhUpdates'
 import type { Friend } from '@shared/types'
 import type { AppSettings, BrowseParams, ServerEntry } from '@shared/types'
+import { CURSEFORGE_ENABLED } from '../shared/features'
+import {
+  assertCurseForgeEnabled,
+  assertCurseForgeIpcAllowed,
+  assertCurseForgeSourceAllowed,
+  assertCurseForgeUrlAllowed,
+  installMainFetchGuard,
+  installSessionRequestGuard
+} from './curseforgePolicy'
+
+installMainFetchGuard()
+if (!CURSEFORGE_ENABLED) migrateStoredCurseForgeKeys()
 
 // Lite mode also strips GPU-accelerated rendering to remove the GPU process
 // entirely (~60-150 MB). This only takes effect if applied before the app is
@@ -186,8 +198,10 @@ function createWindow(): BrowserWindow {
   })
 
   if (!app.isPackaged) {
-    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`)
+    win.webContents.on('console-message', (details) => {
+      console.log(
+        `[renderer:${details.level}] ${details.message} (${details.sourceId}:${details.lineNumber})`
+      )
     })
   }
 
@@ -260,6 +274,7 @@ function applyTrayPolicy(): void {
 
 /** Open a URL in the default browser, refusing anything that isn't http(s). */
 function openExternalSafe(url: string): Promise<void> {
+  assertCurseForgeUrlAllowed(url)
   const proto = new URL(url).protocol
   if (proto !== 'https:' && proto !== 'http:') {
     return Promise.reject(new Error(`Blocked non-http(s) URL: ${url}`))
@@ -274,6 +289,7 @@ function handle<T>(channel: string, fn: (...args: any[]) => T | Promise<T>): voi
       if (!mainWindow || event.sender !== mainWindow.webContents) {
         throw new Error('Rejected IPC call from an untrusted renderer.')
       }
+      assertCurseForgeIpcAllowed(channel, args)
       return await fn(...args)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -292,6 +308,7 @@ function handleWithEvent<T>(
       if (!mainWindow || event.sender !== mainWindow.webContents) {
         throw new Error('Rejected IPC call from an untrusted renderer.')
       }
+      assertCurseForgeIpcAllowed(channel, args)
       return await fn(event, ...args)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -325,6 +342,7 @@ async function fetchAndStoreScreenshots(
 
 function registerIpcHandlers(): void {
   handle('app:version', () => app.getVersion())
+  handle('app:capabilities', () => ({ curseforge: CURSEFORGE_ENABLED }))
   handle('shell:openExternal', (url: string) => openExternalSafe(url))
 
   // Accounts
@@ -344,6 +362,7 @@ function registerIpcHandlers(): void {
   // Instances
   handle('instances:list', () => listInstances())
   handle('instances:create', async (input: CreateInstanceInput) => {
+    assertCurseForgeSourceAllowed(input.source)
     // Auto-populate packVersionId on first install so update tracking works
     if (input.externalId && input.source && input.source !== 'manual' && !input.packVersionId) {
       try {
@@ -399,6 +418,7 @@ function registerIpcHandlers(): void {
   handle('instances:fetchScreenshots', (id: string) => {
     const inst = listInstances().find((i) => i.id === id)
     if (!inst?.externalId || !inst.source || inst.source === 'manual') return null
+    assertCurseForgeSourceAllowed(inst.source)
     return fetchAndStoreScreenshots(id, inst.source as 'modrinth' | 'curseforge' | 'ftb', inst.externalId)
   })
 
@@ -489,6 +509,7 @@ function registerIpcHandlers(): void {
       fileId: number,
       expectedFileName?: string
     ) => {
+      assertCurseForgeEnabled()
       if (isRunning(instanceId)) throw new Error('Stop the instance before adding mods.')
       if (!existsSync(sourcePath) || !statSync(sourcePath).isFile() || !sourcePath.toLowerCase().endsWith('.jar')) {
         throw new Error('Select a valid mod JAR file.')
@@ -591,17 +612,23 @@ function registerIpcHandlers(): void {
   })
 
   // Custom modpack builder (Modrinth)
-  handle('customMods:search', (instanceId: string, query: string, source: 'modrinth' | 'curseforge') => searchCompatibleMods(instanceId, query, source))
+  handle('customMods:search', (instanceId: string, query: string, source: 'modrinth' | 'curseforge') => {
+    assertCurseForgeSourceAllowed(source)
+    return searchCompatibleMods(instanceId, query, source)
+  })
   handle('customMods:list', (instanceId: string) => listManagedMods(instanceId))
   handle('customMods:install', (instanceId: string, projectId: string, source: 'modrinth' | 'curseforge') => {
+    assertCurseForgeSourceAllowed(source)
     if (isRunning(instanceId)) throw new Error('Stop the instance before installing mods.')
     return installCompatibleMod(instanceId, projectId, source)
   })
   handle('customMods:toggle', (instanceId: string, source: 'modrinth' | 'curseforge', projectId: string, enabled: boolean) => {
+    assertCurseForgeSourceAllowed(source)
     if (isRunning(instanceId)) throw new Error('Stop the instance before changing mods.')
     return toggleManagedMod(instanceId, source, projectId, enabled)
   })
   handle('customMods:remove', (instanceId: string, source: 'modrinth' | 'curseforge', projectId: string) => {
+    assertCurseForgeSourceAllowed(source)
     if (isRunning(instanceId)) throw new Error('Stop the instance before removing mods.')
     return removeManagedMod(instanceId, source, projectId)
   })
@@ -682,7 +709,10 @@ function registerIpcHandlers(): void {
 
   // Browse
   handle('browse:modrinth', (params: BrowseParams) => searchModrinth(params))
-  handle('browse:curseforge', (params: BrowseParams) => searchCurseForge(params))
+  handle('browse:curseforge', (params: BrowseParams) => {
+    assertCurseForgeEnabled()
+    return searchCurseForge(params)
+  })
   handle('browse:ftb', (params: BrowseParams) => searchFtb(params))
   handle('browse:ftb-legacy', (params: BrowseParams, category: string) => searchFtbLegacy(params, category))
   handle('browse:atlauncher', (params: BrowseParams, category: string) => searchAtlauncher(params, category))
@@ -696,6 +726,7 @@ function registerIpcHandlers(): void {
     if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbVersions(inst.externalId)
     if (inst.source === 'atlauncher') return fetchAtlVersions(inst.externalId)
     if (inst.source === 'technic') return fetchTechnicVersions(inst.externalId)
+    assertCurseForgeEnabled()
     return fetchCurseForgeVersions(inst.externalId)
   })
 
@@ -705,6 +736,7 @@ function registerIpcHandlers(): void {
     if (inst.source === 'modrinth') return fetchModrinthMods(inst.externalId, inst.packVersionId)
     if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbMods(inst.externalId, inst.packVersionId)
     if (inst.source === 'atlauncher' || inst.source === 'technic') return []
+    assertCurseForgeEnabled()
     return fetchCurseFormMods(inst.externalId, inst.packVersionId)
   })
 
@@ -714,6 +746,7 @@ function registerIpcHandlers(): void {
     if (inst.source === 'modrinth') return fetchModrinthChangelog(inst.externalId)
     if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbChangelog(inst.externalId)
     if (inst.source === 'atlauncher' || inst.source === 'technic') return []
+    assertCurseForgeEnabled()
     return fetchCurseForgeChangelog(inst.externalId)
   })
 
@@ -724,6 +757,7 @@ function registerIpcHandlers(): void {
     if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbPackOverview(inst.externalId)
     if (inst.source === 'atlauncher') return fetchAtlPackOverview(inst.externalId)
     if (inst.source === 'technic') return fetchTechnicPackOverview(inst.externalId)
+    assertCurseForgeEnabled()
     return fetchCurseForgePackOverview(inst.externalId)
   })
 
@@ -736,6 +770,7 @@ function registerIpcHandlers(): void {
       const details = await getModrinthVersionDetails(versionId)
       if (details.mcVersion) mcVersion = details.mcVersion
     } else if (inst.source === 'curseforge' && inst.externalId) {
+      assertCurseForgeEnabled()
       const details = await getCurseForgeFileDetails(inst.externalId, versionId)
       if (details.mcVersion) mcVersion = details.mcVersion
     } else if ((inst.source === 'ftb' || inst.source === 'ftb-legacy') && inst.externalId) {
@@ -808,11 +843,13 @@ function registerIpcHandlers(): void {
     }
   })
 
-  handle('modpack:missingCurseForgeFiles', (instanceId: string) =>
-    listMissingCurseForgeFiles(instanceId)
-  )
+  handle('modpack:missingCurseForgeFiles', (instanceId: string) => {
+    assertCurseForgeEnabled()
+    return listMissingCurseForgeFiles(instanceId)
+  })
 
   handle('modpack:enrichCurseForgeImport', async (instanceId: string) => {
+    assertCurseForgeEnabled()
     const instance = listInstances().find((candidate) => candidate.id === instanceId)
     if (!instance || instance.source !== 'manual') return instance
     const marker = readMarker(instanceId)
@@ -852,6 +889,7 @@ function registerIpcHandlers(): void {
 }
 
 app.whenReady().then(() => {
+  installSessionRequestGuard(session.defaultSession.webRequest)
   // Apply custom instances directory before any instance operations
   const { instancesDir: customDir, friendCode, presenceSecret, discordRpc, discordClientId } = getSettings()
   if (customDir) setCustomInstancesDir(customDir)
