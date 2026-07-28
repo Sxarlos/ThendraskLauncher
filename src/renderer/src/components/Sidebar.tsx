@@ -98,6 +98,8 @@ export default function Sidebar(): JSX.Element {
   const setPage          = useApp((s) => s.setPage)
   const gregTechHubEnabled = useApp((s) => s.gregTechHubEnabled)
   const installingCount  = useApp((s) => s.installingCount)
+  const importProgress   = useApp((s) => s.importProgress)
+  const setImportProgress = useApp((s) => s.setImportProgress)
   const updateInfo       = useApp((s) => s.updateInfo)
   const updateDownload   = useApp((s) => s.updateDownload)
   const setUpdateDownload = useApp((s) => s.setUpdateDownload)
@@ -107,6 +109,15 @@ export default function Sidebar(): JSX.Element {
   useEffect(() => {
     window.api.app.getVersion().then(setAppVersion).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!importProgress || importProgress.status === 'active') return
+    const timer = setTimeout(
+      () => setImportProgress(null),
+      importProgress.status === 'error' ? 7000 : 5000
+    )
+    return () => clearTimeout(timer)
+  }, [importProgress, setImportProgress])
 
   // Manual download (auto-download opted out in Settings) or retry after a
   // failure. Success arrives via the 'update:ready' event.
@@ -331,6 +342,90 @@ export default function Sidebar(): JSX.Element {
                   </button>
                 )}
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modpack import progress */}
+      {importProgress && (
+        <div className="px-2 pb-2 shrink-0" role="status" aria-live="polite">
+          <div
+            className="rounded-xl overflow-hidden"
+            title={collapsed ? importProgress.message : undefined}
+            style={{
+              padding: collapsed ? '9px 0' : '10px',
+              background: 'var(--surface-1)',
+              border: '1px solid var(--border-soft)'
+            }}
+          >
+            <div
+              className="flex items-center"
+              style={{
+                gap: collapsed ? 0 : 8,
+                justifyContent: collapsed ? 'center' : 'flex-start'
+              }}
+            >
+              <div
+                className="w-5 h-5 rounded-md grid place-items-center shrink-0 text-xs font-bold"
+                style={{
+                  color: importProgress.status === 'error'
+                    ? 'var(--danger-soft)'
+                    : importProgress.status === 'partial'
+                      ? '#fb923c'
+                      : 'var(--accent)'
+                }}
+              >
+                {importProgress.status === 'active' ? (
+                  <span
+                    className="w-3.5 h-3.5 rounded-full border-2"
+                    style={{
+                      borderColor: 'rgba(var(--accent-rgb),0.25)',
+                      borderTopColor: 'var(--accent)',
+                      animation: 'spin 0.8s linear infinite'
+                    }}
+                  />
+                ) : importProgress.status === 'error' ? '!' : '✓'}
+              </div>
+
+              {!collapsed && (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--text-faint)' }}>
+                      {importProgress.status === 'active' ? 'Importing' : 'Import'}
+                    </div>
+                    <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-soft)' }} title={importProgress.message}>
+                      {importProgress.message}
+                    </div>
+                  </div>
+                  {typeof importProgress.percent === 'number' && (
+                    <span className="text-[10px] font-bold tabular-nums shrink-0" style={{ color: 'var(--accent)' }}>
+                      {Math.round(importProgress.percent)}%
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+
+            {!collapsed && (
+              <div className="h-1 rounded-full overflow-hidden mt-2.5" style={{ background: 'var(--surface-3)' }}>
+                <div
+                  className="h-full rounded-full transition-[width] duration-300"
+                  style={{
+                    width: typeof importProgress.percent === 'number'
+                      ? `${Math.max(0, Math.min(100, importProgress.percent))}%`
+                      : '100%',
+                    background: importProgress.status === 'error'
+                      ? 'var(--danger-soft)'
+                      : importProgress.status === 'partial'
+                        ? '#fb923c'
+                        : 'var(--accent-strong)',
+                    animation: typeof importProgress.percent === 'number'
+                      ? undefined
+                      : 'pulse 1.2s ease-in-out infinite'
+                  }}
+                />
+              </div>
             )}
           </div>
         </div>

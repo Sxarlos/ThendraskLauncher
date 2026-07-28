@@ -21,6 +21,9 @@ import type {
   SavedSkin,
   ModInstallResult,
   ModSearchResult,
+  ModpackImportProgress,
+  ModpackImportResult,
+  MissingCurseForgeFile,
   ModpackResult,
   MojangVersion,
   PackMod,
@@ -145,8 +148,17 @@ const api = {
       ipcRenderer.invoke('modpack:mods', instanceId),
     switchVersion: (instanceId: string, versionId: string): Promise<Instance | undefined> =>
       ipcRenderer.invoke('modpack:switchVersion', instanceId, versionId),
-    importFile: (filePath: string): Promise<Instance | undefined> =>
-      ipcRenderer.invoke('modpack:importFile', filePath)
+    importFile: (filePath: string): Promise<ModpackImportResult> =>
+      ipcRenderer.invoke('modpack:importFile', filePath),
+    missingCurseForgeFiles: (instanceId: string): Promise<MissingCurseForgeFile[]> =>
+      ipcRenderer.invoke('modpack:missingCurseForgeFiles', instanceId),
+    enrichCurseForgeImport: (instanceId: string): Promise<Instance | undefined> =>
+      ipcRenderer.invoke('modpack:enrichCurseForgeImport', instanceId),
+    onImportProgress: (cb: (progress: ModpackImportProgress) => void): (() => void) => {
+      const listener = (_event: unknown, progress: ModpackImportProgress): void => cb(progress)
+      ipcRenderer.on('modpack:importProgress', listener)
+      return () => ipcRenderer.removeListener('modpack:importProgress', listener)
+    }
   },
   instance: {
     savedServers: (instanceId: string): Promise<{ name: string; ip: string }[]> =>
@@ -155,8 +167,28 @@ const api = {
       ipcRenderer.invoke('instance:openDir', instanceId),
     addMod: (instanceId: string, sourcePath: string): Promise<string> =>
       ipcRenderer.invoke('instance:addMod', instanceId, sourcePath),
+    importMissingCurseForgeMod: (
+      instanceId: string,
+      sourcePath: string,
+      projectId: number,
+      fileId: number,
+      expectedFileName?: string
+    ): Promise<MissingCurseForgeFile[]> =>
+      ipcRenderer.invoke(
+        'instance:importMissingCurseForgeMod',
+        instanceId,
+        sourcePath,
+        projectId,
+        fileId,
+        expectedFileName
+      ),
     listLocalMods: (instanceId: string): Promise<LocalMod[]> =>
       ipcRenderer.invoke('instance:listLocalMods', instanceId),
+    identifyLocalMods: (
+      instanceId: string,
+      fileNames: string[]
+    ): Promise<Record<string, Partial<LocalMod>>> =>
+      ipcRenderer.invoke('instance:identifyLocalMods', instanceId, fileNames),
     removeMod: (instanceId: string, fileName: string): Promise<void> =>
       ipcRenderer.invoke('instance:removeMod', instanceId, fileName),
     toggleLocalMod: (instanceId: string, fileName: string, enabled: boolean): Promise<LocalMod> =>

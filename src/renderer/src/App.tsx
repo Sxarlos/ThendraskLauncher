@@ -82,6 +82,7 @@ export default function App(): JSX.Element {
   const setUpdateInfo = useApp((s) => s.setUpdateInfo)
   const setUpdateDownload = useApp((s) => s.setUpdateDownload)
   const setUpdateCheckStatus = useApp((s) => s.setUpdateCheckStatus)
+  const setImportProgress = useApp((s) => s.setImportProgress)
   const clearAllLogs = useApp((s) => s.clearAllLogs)
   const Current = PAGES[page]
 
@@ -129,6 +130,9 @@ export default function App(): JSX.Element {
       setProgress(p)
     })
     const unsubLog = window.api.launch.onLog((e) => addLog(e.instanceId, e.line))
+    const unsubImportProgress = window.api.modpack.onImportProgress((progress) => {
+      setImportProgress({ ...progress, status: progress.status ?? 'active' })
+    })
     const unsubChecking = window.api.update.onChecking(() => setUpdateCheckStatus('checking'))
     const unsubUpToDate = window.api.update.onUpToDate(() => setUpdateCheckStatus('up-to-date'))
     const unsubUpdate = window.api.update.onAvailable((info) => {
@@ -160,10 +164,10 @@ export default function App(): JSX.Element {
     return () => {
       cancelled = true
       clearTimeout(preloadTimer)
-      unsubProgress(); unsubLog(); unsubChecking(); unsubUpToDate()
+      unsubProgress(); unsubLog(); unsubImportProgress(); unsubChecking(); unsubUpToDate()
       unsubUpdate(); unsubDownload(); unsubReady(); unsubUpdateError()
     }
-  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setGregTechHubEnabled, setProgress, addLog, clearLogs, setError, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus])
+  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setGregTechHubEnabled, setProgress, addLog, clearLogs, setError, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus, setImportProgress])
 
   useEffect(() => {
     const unsubIdle = window.api.window.onIdle(() => {
