@@ -4,7 +4,7 @@
 
 A custom Minecraft launcher built with Electron and React. It is **just an interface**: it downloads modpacks and spawns the official game; it does not modify Minecraft itself.
 
-> Not affiliated with Mojang or Microsoft.
+> Not affiliated with Mojang, Microsoft, or any modpack catalogue provider.
 
 > **Windows** builds are stable. **macOS and Linux** builds are now available as **public betas**. See [Platform support](#platform-support) below.
 
@@ -13,12 +13,19 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 ## Features
 
 - **Microsoft account login:** secure OAuth via `msmc`. Only the refresh token is stored, encrypted with the OS keychain (`safeStorage`). If secure storage is unavailable, the launcher refuses to persist the token rather than falling back to plaintext. Your password is never seen or stored.
-- **Modpack browser:** search and install modpacks from Modrinth, CurseForge, FTB, FTB Legacy, ATLauncher, and Technic Launcher. Modrinth and CurseForge support sort (Popular / Updated / Newest) and category filters.
-- **Custom modpack builder:** create a Fabric, Forge, NeoForge, or Quilt instance, search compatible client mods on Modrinth or CurseForge, install required dependencies automatically, and enable, disable, remove, or update mods in-app.
+- **Modpack browser:** search and install modpacks from Modrinth, CurseForge, and FTB. Modrinth supports sort (Popular / Updated / Newest) and category filters.
+- **Custom modpack builder:** create a Fabric, Forge, NeoForge, or Quilt instance, search compatible client mods on Modrinth, install required dependencies automatically, and enable, disable, remove, or update mods in-app.
+
+> **CurseForge integration uses the Thendrask relay.** The approved project API key stays on the hosted relay and is never included in the desktop app. CurseForge project distribution restrictions are respected.
+
+> **ATLauncher and Technic catalogue integrations are unavailable in public
+> builds** pending explicit provider permission. Public builds do not browse or
+> install packs from those catalogues.
+
 - **Instance management:** create vanilla or modded instances for any Minecraft version. Each instance has its own isolated `.minecraft` folder.
 - **Launch:** downloads the game version and assets on first run via `minecraft-launcher-core`. Progress and live game logs stream onto the instance card.
 - **Server monitor:** add servers to watch; the launcher pings them and shows live player counts and status.
-- **Friends list:** add friends by code and see if they're online and what they're playing. Requires a [self-hosted relay](relay/README.md).
+- **Friends list:** add friends by code and see if they're online and what they're playing. Uses the same [hosted relay](relay/README.md) as CurseForge.
 - **Discord Rich Presence:** shows what instance you're playing in Discord, with a button linking to thendrask.org.
 - **In-app updates:** the launcher self-updates via `electron-updater`, checking GitHub Releases and downloading new versions without leaving the app (Windows & Linux apply automatically; macOS pending code-signing).
 - **No Chat Restrictions:** optionally injects the No Chat Restrictions mod into all modded instances (required in some regions for unsigned-chat servers).
@@ -92,9 +99,9 @@ npm run build     # production build → ./out
 npm run package   # build + package installer
 ```
 
-## Friends / Presence Relay
+## Friends and CurseForge Relay
 
-The friends feature requires a small relay server that you self-host. Presence writes use a private per-install credential, and the relay applies body limits, field validation, capacity limits, and rate limiting. See [`relay/README.md`](relay/README.md) for setup instructions. Once deployed, paste the URL into **Settings → API Keys → Presence Relay URL**.
+Friends and CurseForge use one small relay service. Presence writes use a private per-install credential; CurseForge requests use the project API key stored only in the relay's environment. The relay applies endpoint allowlisting, body limits, field validation, caching, capacity limits, and rate limiting. See [`relay/README.md`](relay/README.md) for setup instructions. Once deployed, paste the URL into **Settings → Connections → Combined Relay URL**.
 
 ## In-app Updates
 

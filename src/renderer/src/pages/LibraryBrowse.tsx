@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { BrowseParams, ModpackResult } from '@shared/types'
+import { availableModpackProviders } from '../../../shared/features'
 import { useApp } from '../store'
 /* ════════════════════════════════════════════════
    BROWSE tab
 ════════════════════════════════════════════════ */
 
 type Source = 'modrinth' | 'curseforge' | 'ftb' | 'ftb-legacy' | 'atlauncher' | 'technic'
+const AVAILABLE_SOURCES = new Set<Source>(availableModpackProviders())
 type FtbLegacyCat = 'public' | '3rdparty' | 'private'
 type AtlCat = 'public' | 'private'
 type LoaderFilter = 'all' | 'fabric' | 'forge' | 'quilt' | 'neoforge'
@@ -391,7 +393,9 @@ export default function BrowseModpacks(): JSX.Element {
               { id: 'ftb-legacy',  label: 'FTB Legacy',   activeStyle: { background: 'rgba(251,146,60,0.15)', color: '#fb923c', boxShadow: 'inset 0 1px 0 rgba(251,146,60,0.1)' } },
               { id: 'atlauncher',  label: 'ATLauncher',   activeStyle: { background: 'rgba(99,102,241,0.15)', color: '#818cf8', boxShadow: 'inset 0 1px 0 rgba(99,102,241,0.1)' } },
               { id: 'technic',     label: 'Technic',       activeStyle: { background: 'rgba(220,38,38,0.15)', color: '#f87171', boxShadow: 'inset 0 1px 0 rgba(220,38,38,0.1)' } },
-            ] as { id: Source; label: string; activeStyle: CSSProperties }[]).map((s) => (
+            ] as { id: Source; label: string; activeStyle: CSSProperties }[])
+              .filter((provider) => AVAILABLE_SOURCES.has(provider.id))
+              .map((s) => (
               <button
                 key={s.id}
                 onClick={() => setSource(s.id)}

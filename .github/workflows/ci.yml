@@ -14,11 +14,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev
 
       - name: Typecheck
         run: npm run typecheck
@@ -30,4 +33,7 @@ jobs:
         run: npm test
 
       - name: Build
+        env:
+          CURSEFORGE_ENABLED: 'true'
+          RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npm run build

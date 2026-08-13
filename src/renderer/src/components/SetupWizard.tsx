@@ -1,12 +1,21 @@
 ﻿import { useEffect, useState } from 'react'
 import type { Account, AppSettings } from '@shared/types'
+import { CURSEFORGE_ENABLED } from '../../../shared/features'
 import { useApp } from '../store'
 
 /* ── Step type ───────────────────────────────────────────── */
 
 type Step = 'welcome' | 'account' | 'curseforge' | 'friends' | 'performance' | 'features' | 'done'
-const STEP_ORDER: Step[] = ['welcome', 'account', 'curseforge', 'friends', 'performance', 'features', 'done']
-const PROGRESS_STEPS: Step[] = ['account', 'curseforge', 'friends', 'performance', 'features', 'done']
+const STEP_ORDER: Step[] = [
+  'welcome',
+  'account',
+  ...(CURSEFORGE_ENABLED ? ['curseforge' as const] : []),
+  'friends',
+  'performance',
+  'features',
+  'done'
+]
+const PROGRESS_STEPS: Step[] = STEP_ORDER.filter((step) => step !== 'welcome')
 
 /* ── Step indicator ──────────────────────────────────────── */
 
@@ -50,7 +59,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
       <div>
         <h1 className="text-2xl font-black text-white mb-2">Welcome to Thendrask Launcher</h1>
         <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)', maxWidth: 340 }}>
-          Let's get you set up in a couple of quick steps - signing in and optionally connecting CurseForge.
+          Let's get you set up in a couple of quick steps.
         </p>
       </div>
 
@@ -188,54 +197,19 @@ function AccountStep({ onNext }: { onNext: () => void }): JSX.Element {
 type TestState = 'idle' | 'testing' | 'ok' | 'fail'
 
 function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
-  const [key, setKey] = useState('')
-  const [keyLoaded, setKeyLoaded] = useState(false)
-  const [showKey, setShowKey] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [testState, setTestState] = useState<TestState>('idle')
   const [error, setError] = useState<string | null>(null)
 
-  // Pre-load saved key so users can see/verify what's already stored
-  useEffect(() => {
-    window.api.settings.get().then((s) => {
-      setKey(s.curseforgeApiKey ?? '')
-      setKeyLoaded(true)
-    }).catch(() => setKeyLoaded(true))
-  }, [])
-
-  const trimmed = key.trim()
-
-  const saveAndContinue = async (): Promise<void> => {
-    if (!trimmed) { onNext(); return }
-    setBusy(true)
-    setError(null)
-    try {
-      await window.api.settings.set({ curseforgeApiKey: trimmed })
-      onNext()
-    } catch {
-      setError('Failed to save key - try again')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const testKey = async (): Promise<void> => {
-    if (!trimmed) return
     setTestState('testing')
     setError(null)
     try {
-      // Save first, then trigger a lightweight search to confirm the key works
-      await window.api.settings.set({ curseforgeApiKey: trimmed })
       await window.api.browse.curseforge({ limit: 1 })
       setTestState('ok')
     } catch (e) {
       setTestState('fail')
       const msg = e instanceof Error ? e.message : String(e)
-      if (msg.includes('403') || msg.includes('401')) {
-        setError('Key rejected by CurseForge - make sure you copied the full key from the API Keys section of the console.')
-      } else {
-        setError(`Test failed: ${msg}`)
-      }
+      setError(`Connection failed: ${msg}`)
     }
   }
 
@@ -246,7 +220,7 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
       <div className="text-center">
         <h2 className="text-xl font-black text-white mb-1.5">CurseForge Access</h2>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          Optional - required to browse &amp; install CurseForge modpacks.
+          CurseForge access is securely provided by the Thendrask relay.
         </p>
       </div>
 
@@ -255,73 +229,13 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
         className="rounded-xl p-4 flex flex-col gap-3"
         style={{ background: 'var(--surface-2)', border: '1px solid var(--border-soft)' }}
       >
-        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-dim)' }}>How to get your API key</p>
-        {([
-          ['1', 'Open the CurseForge console (button below)'],
-          ['2', 'Sign in or create a free account'],
-          ['3', 'Click "API Keys" in the left sidebar'],
-          ['4', 'Copy the key - it starts with $2a$10$'],
-        ] as [string, string][]).map(([n, text]) => (
-          <div key={n} className="flex items-start gap-3">
-            <span
-              className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
-              style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }}
-            >
-              {n}
-            </span>
-            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{text}</span>
-          </div>
-        ))}
-
-        <button
-          onClick={() => window.open('https://console.curseforge.com/', '_blank')}
-          className="mt-1 w-full py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-all"
-          style={{ background: 'rgba(var(--accent-rgb),0.08)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.15)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(var(--accent-rgb),0.08)' }}
-        >
-          Open CurseForge Console
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-            <polyline points="15 3 21 3 21 9"/>
-            <line x1="10" y1="14" x2="21" y2="3"/>
-          </svg>
-        </button>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          You do not need to create or enter an API key. The launcher asks the relay for CurseForge data, and the relay keeps the project key private.
+        </p>
       </div>
 
-      {/* Key input */}
       <div className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <input
-            type={showKey ? 'text' : 'password'}
-            value={key}
-            onChange={(e) => { setKey(e.target.value); setTestState('idle'); setError(null) }}
-            placeholder={keyLoaded ? 'Paste your API key here…' : 'Loading…'}
-            disabled={!keyLoaded}
-            className="flex-1 rounded-xl px-3 py-2.5 text-sm font-mono outline-none disabled:opacity-50"
-            style={{
-              background: 'var(--surface-2)',
-              border: `1px solid ${testState === 'ok' ? 'rgba(var(--accent-rgb),0.4)' : testState === 'fail' ? 'rgba(var(--danger-rgb),0.4)' : 'var(--border-soft)'}`,
-              color: 'var(--text-strong)',
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.5)')}
-            onBlur={(e) => (e.currentTarget.style.borderColor =
-              testState === 'ok' ? 'rgba(var(--accent-rgb),0.4)' :
-              testState === 'fail' ? 'rgba(var(--danger-rgb),0.4)' : 'var(--border-soft)')}
-          />
-          {/* Show/hide toggle */}
-          <button
-            onClick={() => setShowKey((s) => !s)}
-            className="px-3 rounded-xl text-sm transition-colors"
-            style={{ background: 'var(--surface-2)', color: 'var(--text-dim)', border: '1px solid var(--border-soft)' }}
-            title={showKey ? 'Hide key' : 'Show key'}
-          >
-            {showKey ? '🙈' : '👁'}
-          </button>
-        </div>
-
-        {/* Test button */}
-        {trimmed && testState !== 'ok' && (
+        {testState !== 'ok' && (
           <button
             onClick={testKey}
             disabled={testState === 'testing'}
@@ -342,23 +256,17 @@ function CurseForgeStep({ onNext }: { onNext: () => void }): JSX.Element {
         {error && (
           <p className="text-xs leading-relaxed" style={{ color: 'var(--danger)' }}>{error}</p>
         )}
-        {testState === 'fail' && (
-          <p className="text-xs leading-relaxed" style={{ color: 'var(--text-faint)' }}>
-            Tip: new CurseForge API keys can take a few minutes to activate after creation. If you just made your key, wait 2–3 minutes then try again.
-          </p>
-        )}
       </div>
 
       <div className="flex flex-col gap-2 pt-1">
         <button
-          onClick={saveAndContinue}
-          disabled={busy}
-          className="w-full py-3 rounded-xl font-bold text-sm text-black transition-all disabled:opacity-60"
+          onClick={onNext}
+          className="w-full py-3 rounded-xl font-bold text-sm text-black transition-all"
           style={{ background: 'var(--accent-strong)' }}
-          onMouseEnter={(e) => { if (!busy) e.currentTarget.style.background = 'var(--accent)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--accent-strong)' }}
         >
-          {trimmed ? 'Save & Continue' : 'Skip for now →'}
+          Continue
         </button>
       </div>
     </div>
@@ -670,7 +578,7 @@ export default function SetupWizard({ onComplete }: { onComplete: () => void }):
 
         {step === 'welcome'    && <WelcomeStep onNext={next} />}
         {step === 'account'    && <AccountStep onNext={next} />}
-        {step === 'curseforge' && <CurseForgeStep onNext={next} />}
+        {CURSEFORGE_ENABLED && step === 'curseforge' && <CurseForgeStep onNext={next} />}
         {step === 'friends'    && <FriendsStep onNext={next} />}
         {step === 'performance' && <PerformanceStep onNext={next} />}
         {step === 'features'   && <FeaturesStep onNext={next} />}

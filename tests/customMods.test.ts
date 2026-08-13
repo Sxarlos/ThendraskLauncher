@@ -17,7 +17,7 @@ vi.mock('../src/main/snapshots', () => ({
 }))
 
 vi.mock('../src/main/settings', () => ({
-  getSettings: () => ({ curseforgeApiKey: 'test-api-key' })
+  getSettings: () => ({ relayUrl: 'https://relay.example' })
 }))
 
 import { installCompatibleMod, searchCompatibleMods } from '../src/main/customMods'
@@ -80,26 +80,12 @@ describe('custom modpack management', () => {
     expect(readdirSync(join(gameDir, 'mods')).sort()).toEqual(['dependency.jar', 'root.jar'])
   })
 
-  it('installs a compatible CurseForge mod using the configured API key', async () => {
-    const bytes = Buffer.from('curseforge-mod')
-    const hash = createHash('sha1').update(bytes).digest('hex')
-    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      const url = String(input)
-      if (url.includes('/mods/123/files')) return json({ data: [{
-        id: 456, modId: 123, displayName: 'CF Mod', fileName: 'cf-mod.jar',
-        downloadUrl: 'https://files/cf-mod.jar', hashes: [{ value: hash, algo: 1 }], dependencies: []
-      }] })
-      if (url.endsWith('/mods/123')) return json({ data: { name: 'CF Mod', logo: { thumbnailUrl: 'https://icons/cf.png' } } })
-      if (url === 'https://files/cf-mod.jar') return new Response(bytes)
-      return new Response('missing', { status: 404 })
-    })
+  it('rejects CurseForge installation without making a request', async () => {
+    const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await installCompatibleMod('instance', '123', 'curseforge')
-
-    expect(result.addedCount).toBe(1)
-    expect(result.installed[0]).toMatchObject({ source: 'curseforge', projectId: '123', displayName: 'CF Mod' })
-    const apiCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/mods/123/files'))
-    expect((apiCall?.[1]?.headers as Record<string, string>)['x-api-key']).toBe('test-api-key')
+    await expect(installCompatibleMod('instance', '123', 'curseforge'))
+      .rejects.toMatchObject({ code: 'CURSEFORGE_DISABLED' })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

@@ -6,6 +6,7 @@ import { createHash } from 'crypto'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import AdmZip from 'adm-zip'
+import { validateArchiveEntries } from './archiveSafety'
 import { fetchRequiredJavaMajor } from './mojang'
 import type { JavaInstall } from '@shared/types'
 
@@ -303,6 +304,7 @@ export async function ensureJava(
 
   if (pkg.isZip) {
     const zip = new AdmZip(archivePath)
+    validateArchiveEntries(zip.getEntries(), 'Java runtime')
     zip.extractAllTo(managedDir, true)
   } else {
     // .tar.gz on macOS / Linux

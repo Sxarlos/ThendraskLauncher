@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import electronUpdater from 'electron-updater'
 import { getSettings } from './settings'
 import { runningInstanceIds } from './launcher'
+import { assertCurseForgeUrlAllowed } from './curseforgePolicy'
 import type { UpdateInfo } from '@shared/types'
 
 // ── AUTO-UPDATE (electron-updater) ──────────────────────────────────────────
@@ -174,6 +175,7 @@ export async function checkForUpdate(notify = false): Promise<UpdateInfo | null>
 }
 
 export function openDownloadUrl(url: string): void {
+  assertCurseForgeUrlAllowed(url)
   if (!/^https:\/\//.test(url)) throw new Error('Refusing to open non-https download URL.')
   shell.openExternal(url)
 }

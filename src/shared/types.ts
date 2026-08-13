@@ -58,6 +58,33 @@ export interface PackMod {
   optional: boolean
   serverOnly: boolean
   iconUrl?: string
+  source?: 'modrinth' | 'curseforge'
+  projectId?: string
+  fileName?: string
+  externalUrl?: string
+}
+
+/** A CurseForge manifest file that could not legally be fetched by this launcher. */
+export interface MissingCurseForgeFile {
+  projectId: number
+  fileId: number
+  displayName: string
+  fileName?: string
+  /** Official CurseForge page where the user can manually download this file. */
+  filePageUrl?: string
+  /** Local JAR name after the user has completed the manual import. */
+  importedFileName?: string
+}
+
+export interface ModpackImportResult {
+  instance: Instance
+  missingFiles: MissingCurseForgeFile[]
+}
+
+export interface ModpackImportProgress {
+  message: string
+  percent?: number
+  status?: 'active' | 'complete' | 'partial' | 'error'
 }
 
 /** A saved server entry the user wants to monitor. */
@@ -109,7 +136,6 @@ export interface AppSettings {
   /** Curated Minecraft control bindings applied to every instance at launch.
    *  Keys are action ids (e.g. "key.forward"), values are MC key names (e.g. "key.keyboard.w"). */
   defaultControls?: Record<string, string>
-  curseforgeApiKey?: string
   friendCode?: string   // this user's own relay code (auto-generated)
   presenceSecret?: string // private write credential for this user's relay presence
   relayUrl?: string     // URL of the hosted presence relay
@@ -255,6 +281,7 @@ export interface LocalMod {
   versionId?: string
   displayName?: string
   iconUrl?: string
+  externalUrl?: string
 }
 
 export interface ModInstallResult {

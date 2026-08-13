@@ -1,7 +1,7 @@
 {
-  "name": "thendrask-presence-relay",
+  "name": "thendrask-relay",
   "version": "1.0.0",
-  "description": "Presence relay for Thendrask Launcher friend codes",
+  "description": "Friends presence and CurseForge API relay for Thendrask Launcher",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

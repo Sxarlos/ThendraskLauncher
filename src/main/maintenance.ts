@@ -8,12 +8,8 @@ import { createSnapshot } from './snapshots'
 import { invalidateMarker } from './modpack'
 import { detectAllJavas } from './java'
 import { safeJoin } from './safePath'
+import { validateArchiveEntries } from './archiveSafety'
 import type { Instance, LoaderType } from '@shared/types'
-
-const MAX_BACKUP_ENTRIES = 100_000
-const MAX_BACKUP_EXPANDED_BYTES = 20 * 1024 * 1024 * 1024
-const MAX_BACKUP_ENTRY_BYTES = 256 * 1024 * 1024
-const MAX_COMPRESSION_RATIO = 1_000
 
 function sizeOf(path: string): number {
   if (!existsSync(path)) return 0
@@ -114,18 +110,7 @@ export function importInstanceBackup(filePath: string): Instance {
   if (extname(filePath).toLowerCase() !== '.zip') throw new Error('Backup must be a .zip file.')
   const zip = new AdmZip(filePath)
   const entries = zip.getEntries()
-  const expandedBytes = entries.reduce((total, entry) => total + Number(entry.header.size ?? 0), 0)
-  if (entries.length > MAX_BACKUP_ENTRIES || expandedBytes > MAX_BACKUP_EXPANDED_BYTES) {
-    throw new Error('Backup is too large to import safely.')
-  }
-  for (const entry of entries) {
-    const size = Number(entry.header.size ?? 0)
-    const compressedSize = Number(entry.header.compressedSize ?? 0)
-    if (size > MAX_BACKUP_ENTRY_BYTES) throw new Error(`Backup entry is too large: ${entry.entryName}`)
-    if (compressedSize > 0 && size / compressedSize > MAX_COMPRESSION_RATIO) {
-      throw new Error(`Backup entry has an unsafe compression ratio: ${entry.entryName}`)
-    }
-  }
+  validateArchiveEntries(entries, 'Backup')
   const manifestEntry = zip.getEntry('thendrask-backup.json')
   if (!manifestEntry) throw new Error('This is not a Thendrask portable backup.')
   const manifest = JSON.parse(manifestEntry.getData().toString('utf-8')) as {

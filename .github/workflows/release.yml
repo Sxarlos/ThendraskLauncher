@@ -21,7 +21,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Validate release tag
@@ -72,6 +72,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -82,6 +85,9 @@ jobs:
         run: npm test
 
       - name: Build
+        env:
+          CURSEFORGE_ENABLED: 'true'
+          RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npm run build
 
   # Determines which OSes the release job's matrix builds on. Platform policy:
@@ -120,13 +126,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build
+        env:
+          CURSEFORGE_ENABLED: 'true'
+          RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npx electron-vite build
 
       # electron-builder reads the "publish" config in package.json (GitHub
@@ -150,6 +159,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CURSEFORGE_ENABLED: 'true'
+          RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npx electron-builder --publish always
 
       - name: Package and publish (prerelease)
@@ -158,6 +169,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           EP_PRE_RELEASE: 'true'
+          CURSEFORGE_ENABLED: 'true'
+          RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npx electron-builder --publish always
 
       # Legacy launcher versions (<= 0.3.25) ship a hand-rolled updater that,

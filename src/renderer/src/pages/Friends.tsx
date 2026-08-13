@@ -2,6 +2,9 @@
 import type { AppSettings, Friend, FriendPresence } from '@shared/types'
 import { normalizeFriendCode, formatFriendCode } from '@shared/friendCode'
 
+import { useApp } from '../store'
+import { ipcError } from '../lib/ipcError'
+
 function timeSince(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000)
   if (s < 60) return 'just now'
@@ -27,7 +30,7 @@ function OwnCard({ settings }: { settings: AppSettings }): JSX.Element {
   const [idle, setIdle] = useState(false)
 
   useEffect(() => {
-    window.api.presence.own().then(setStatus)
+    window.api.presence.own().then(setStatus).catch(() => setStatus({ online: false }))
     const unsubIdle = window.api.window.onIdle(() => setIdle(true))
     const unsubActive = window.api.window.onActive(() => setIdle(false))
     return () => { unsubIdle(); unsubActive() }
@@ -260,6 +263,7 @@ function FriendCard({
 
 /* ── Add friend modal ──────────────────────────────────── */
 function AddModal({ onAdd }: { onAdd: (f: Friend[]) => void; onClose: () => void }): JSX.Element {
+  const setError = useApp((s) => s.setError)
   const [name, setName] = useState('')
   const [rawCode, setRawCode] = useState('')
 
@@ -279,9 +283,13 @@ function AddModal({ onAdd }: { onAdd: (f: Friend[]) => void; onClose: () => void
 
   const add = async (): Promise<void> => {
     if (!canAdd || !bare) return
-    const code = formatFriendCode(bare)
-    const list = await window.api.friends.add({ name: name.trim(), code })
-    onAdd(list)
+    try {
+      const code = formatFriendCode(bare)
+      const list = await window.api.friends.add({ name: name.trim(), code })
+      onAdd(list)
+    } catch (err) {
+      setError(ipcError(err))
+    }
   }
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
@@ -384,20 +392,29 @@ function NoRelayBanner(): JSX.Element {
 
 /* ── Friends page ──────────────────────────────────────── */
 export default function Friends(): JSX.Element {
+  const setError = useApp((s) => s.setError)
   const [friends, setFriends] = useState<Friend[]>([])
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [showAdd, setShowAdd] = useState(false)
 
   useEffect(() => {
-    window.api.friends.list().then(setFriends)
-    window.api.settings.get().then(setSettings)
-  }, [])
+    Promise.all([window.api.friends.list(), window.api.settings.get()])
+      .then(([nextFriends, nextSettings]) => {
+        setFriends(nextFriends)
+        setSettings(nextSettings)
+      })
+      .catch((err) => setError(ipcError(err)))
+  }, [setError])
 
   const hasRelay = Boolean(settings?.relayUrl)
 
   const remove = async (id: string): Promise<void> => {
-    const list = await window.api.friends.remove(id)
-    setFriends(list)
+    try {
+      const list = await window.api.friends.remove(id)
+      setFriends(list)
+    } catch (err) {
+      setError(ipcError(err))
+    }
   }
 
   return (

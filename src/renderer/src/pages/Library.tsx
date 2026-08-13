@@ -1,6 +1,7 @@
 import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
-import type { Instance, InstanceSnapshot, InstanceStorageInfo, LocalMod, ModSearchResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
+import type { Instance, InstanceSnapshot, InstanceStorageInfo, LocalMod, MissingCurseForgeFile, ModSearchResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
+import { CURSEFORGE_ENABLED } from '../../../shared/features'
 import { activeAccount, useApp } from '../store'
 import { ipcError } from '../lib/ipcError'
 import BrowseModpacks from './LibraryBrowse'
@@ -88,10 +89,14 @@ function ModGroup({ label, mods }: { label: string; mods: PackMod[] }): JSX.Elem
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {mods.map((mod, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-3 p-3 rounded-xl"
+          <button
+            key={mod.projectId ?? `${mod.name}:${i}`}
+            type="button"
+            onClick={() => mod.externalUrl && window.api.shell.openExternal(mod.externalUrl)}
+            disabled={!mod.externalUrl}
+            className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors disabled:cursor-default"
             style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
+            title={mod.externalUrl ? `Open ${mod.name} on ${mod.source === 'curseforge' ? 'CurseForge' : 'Modrinth'}` : undefined}
           >
             <div
               className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-xl"
@@ -128,7 +133,10 @@ function ModGroup({ label, mods }: { label: string; mods: PackMod[] }): JSX.Elem
                 </div>
               )}
             </div>
-          </div>
+            {mod.externalUrl && (
+              <span className="text-xs shrink-0" style={{ color: 'var(--text-faint)' }} aria-hidden="true">↗</span>
+            )}
+          </button>
         ))}
       </div>
     </div>
@@ -1202,6 +1210,122 @@ function fmtBytes(b: number): string {
   return `${b} B`
 }
 
+function MissingCurseForgeChecklist({
+  instanceId,
+  files,
+  onFilesChanged
+}: {
+  instanceId: string
+  files: MissingCurseForgeFile[]
+  onFilesChanged: (files: MissingCurseForgeFile[]) => void
+}): JSX.Element {
+  const [importingKey, setImportingKey] = useState<string | null>(null)
+  const [rowError, setRowError] = useState<{ key: string; message: string } | null>(null)
+
+  const importJar = async (file: MissingCurseForgeFile): Promise<void> => {
+    const key = `${file.projectId}:${file.fileId}`
+    const sourcePath = await window.api.dialog.pickFile([{ name: 'Mod JAR', extensions: ['jar'] }])
+    if (!sourcePath) return
+    setImportingKey(key)
+    setRowError(null)
+    try {
+      const updated = await window.api.instance.importMissingCurseForgeMod(
+        instanceId,
+        sourcePath,
+        file.projectId,
+        file.fileId,
+        file.fileName
+      )
+      onFilesChanged(updated)
+    } catch (error) {
+      setRowError({ key, message: ipcError(error) })
+    } finally {
+      setImportingKey(null)
+    }
+  }
+
+  if (!files.length) {
+    return (
+      <div
+        className="rounded-2xl px-5 py-10 text-center"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
+      >
+        <div className="text-3xl mb-2" style={{ color: '#4ade80' }}>✓</div>
+        <p className="text-sm font-semibold" style={{ color: 'var(--text-bright)' }}>No manual files are required</p>
+        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>CurseForge allowed the whole pack to be downloaded automatically.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {files.map((file) => {
+        const key = `${file.projectId}:${file.fileId}`
+        const imported = !!file.importedFileName
+        const importing = importingKey === key
+        return (
+          <div
+            key={key}
+            className="rounded-xl px-3 py-3"
+            style={{
+              background: imported ? 'rgba(74,222,128,0.07)' : 'var(--surface-2)',
+              border: `1px solid ${imported ? 'rgba(74,222,128,0.32)' : 'var(--border-soft)'}`
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-sm font-black"
+                style={{
+                  background: imported ? 'rgba(74,222,128,0.17)' : 'var(--surface)',
+                  color: imported ? '#4ade80' : 'var(--text-faint)',
+                  border: `1px solid ${imported ? 'rgba(74,222,128,0.3)' : 'var(--border-soft)'}`
+                }}
+                aria-label={imported ? 'Imported' : 'Waiting for import'}
+              >
+                {imported ? '✓' : '↓'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold truncate" style={{ color: 'var(--text-bright)' }} title={file.displayName}>
+                  {file.displayName}
+                </div>
+                <div className="text-[10px] mt-1 truncate" style={{ color: imported ? '#4ade80' : 'var(--text-muted)' }} title={file.fileName}>
+                  {imported
+                    ? `Imported as ${file.importedFileName}`
+                    : file.fileName ?? `CurseForge project ${file.projectId} · file ${file.fileId}`}
+                </div>
+              </div>
+              <button
+                onClick={() => file.filePageUrl && window.api.shell.openExternal(file.filePageUrl)}
+                disabled={!file.filePageUrl}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 disabled:opacity-40"
+                style={{ background: 'var(--surface)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.25)' }}
+                title={file.filePageUrl ? 'Open the official CurseForge file page' : 'CurseForge page unavailable'}
+              >
+                Download
+              </button>
+              <button
+                onClick={() => void importJar(file)}
+                disabled={importing || imported}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 disabled:opacity-55"
+                style={{
+                  background: imported ? 'rgba(74,222,128,0.15)' : 'var(--accent-strong)',
+                  color: imported ? '#4ade80' : '#000',
+                  border: imported ? '1px solid rgba(74,222,128,0.28)' : '1px solid transparent'
+                }}
+              >
+                {imported ? '✓ Imported' : importing ? 'Importing…' : 'Import JAR'}
+              </button>
+            </div>
+            {rowError?.key === key && (
+              <p className="text-[11px] mt-2 ml-10" style={{ color: 'var(--danger-soft)' }}>{rowError.message}</p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function InstanceDetailPanel({
   instance,
   onBack
@@ -1209,12 +1333,13 @@ function InstanceDetailPanel({
   instance: Instance
   onBack: () => void
 }): JSX.Element {
-  const [detailTab, setDetailTab] = useState<'overview' | 'changelog' | 'mods' | 'versions' | 'console' | 'settings'>(
-    instance.externalId && instance.source !== 'manual' ? 'overview' : instance.loader !== 'vanilla' ? 'mods' : 'settings'
+  const sourceAvailable = instance.source !== 'curseforge' || CURSEFORGE_ENABLED
+  const [detailTab, setDetailTab] = useState<'overview' | 'changelog' | 'mods' | 'manual' | 'versions' | 'console' | 'settings'>(
+    instance.externalId && instance.source !== 'manual' && sourceAvailable ? 'overview' : instance.loader !== 'vanilla' ? 'mods' : 'settings'
   )
   const [versions, setVersions] = useState<PackVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(
-    () => !!instance.externalId && instance.source !== 'manual'
+    () => !!instance.externalId && instance.source !== 'manual' && sourceAvailable
   )
   const [versionsError, setVersionsError] = useState<string | null>(null)
   const [mods, setMods] = useState<PackMod[]>([])
@@ -1238,6 +1363,8 @@ function InstanceDetailPanel({
   const [changelogLoading, setChangelogLoading] = useState(false)
   const [changelogError, setChangelogError] = useState<string | null>(null)
   const [changelogLoaded, setChangelogLoaded] = useState(false)
+  const [missingCurseForgeFiles, setMissingCurseForgeFiles] = useState<MissingCurseForgeFile[]>([])
+  const identifiedLocalModNames = useRef(new Set<string>())
 
   const refreshInstances = useApp((s) => s.refreshInstances)
   const accounts = useApp((s) => s.accounts)
@@ -1248,7 +1375,24 @@ function InstanceDetailPanel({
   const signedIn = !!activeAccount(accounts)
   const busy = progress && ['preparing', 'downloading', 'launching'].includes(progress.state)
   const running = progress?.state === 'running'
-  const hasModSource = !!instance.externalId && instance.source !== 'manual'
+  const hasModSource = !!instance.externalId && instance.source !== 'manual' && sourceAvailable
+  const remainingManualFiles = missingCurseForgeFiles.filter((file) => !file.importedFileName).length
+  const packFileNames = new Set(
+    mods.map((mod) => mod.fileName?.toLowerCase()).filter((name): name is string => !!name)
+  )
+  const packProjectIds = new Set(
+    mods.map((mod) => mod.projectId).filter((id): id is string => !!id)
+  )
+  const localAdditions = localMods.filter(
+    (mod) => !hasModSource
+      || (modsLoaded && (!!modsError
+        || !packFileNames.has(mod.name.replace(/\.disabled$/i, '').toLowerCase())))
+  )
+  const managedAdditions = managedMods.filter(
+    (mod) => !hasModSource
+      || (modsLoaded && (!!modsError || !mod.projectId || !packProjectIds.has(mod.projectId)))
+  )
+  const uniqueModCount = mods.length + localAdditions.length + managedAdditions.length
 
   const latestVersion = versions[0]
   const hasUpdate =
@@ -1274,6 +1418,19 @@ function InstanceDetailPanel({
     }, 0)
     return () => clearTimeout(initialLoad)
   }, [instance.id, hasModSource])
+
+  useEffect(() => {
+    if (!CURSEFORGE_ENABLED) return
+    window.api.modpack.missingCurseForgeFiles(instance.id)
+      .then(async (files) => {
+        setMissingCurseForgeFiles(files)
+        if (files.length && instance.source === 'manual') {
+          const enriched = await window.api.modpack.enrichCurseForgeImport(instance.id)
+          if (enriched?.source === 'curseforge') await refreshInstances()
+        }
+      })
+      .catch(() => setMissingCurseForgeFiles([]))
+  }, [instance.id, instance.source, refreshInstances])
 
   // Fetch changelog when Changelog tab is first opened
   useEffect(() => {
@@ -1315,6 +1472,22 @@ function InstanceDetailPanel({
     })
       .catch(() => {})
   }, [detailTab, instance.id])
+
+  useEffect(() => {
+    if (detailTab !== 'mods' || !modsLoaded) return
+    const unresolved = localAdditions
+      .filter((mod) => !mod.externalUrl && !identifiedLocalModNames.current.has(mod.name))
+      .map((mod) => mod.name)
+    if (!unresolved.length) return
+    unresolved.forEach((name) => identifiedLocalModNames.current.add(name))
+    window.api.instance.identifyLocalMods(instance.id, unresolved)
+      .then((identified) => {
+        setLocalMods((current) => current.map((mod) => (
+          identified[mod.name] ? { ...mod, ...identified[mod.name] } : mod
+        )))
+      })
+      .catch(() => {})
+  }, [detailTab, instance.id, localAdditions, modsLoaded])
 
   // Fetch mods when Mods tab is first opened
   useEffect(() => {
@@ -1620,10 +1793,10 @@ function InstanceDetailPanel({
               />
             )}
             {t === 'mods' ? 'Mods' : 'Versions'}
-            {t === 'mods' && (managedMods.length + localMods.length + mods.length) > 0 && (
+            {t === 'mods' && uniqueModCount > 0 && (
               <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
                 style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }}>
-                {managedMods.length + localMods.length + mods.length}
+                {uniqueModCount}
               </span>
             )}
             {t === 'versions' && !versionsLoading && versions.length > 0 && (
@@ -1634,6 +1807,28 @@ function InstanceDetailPanel({
             )}
           </button>
         ))}
+        {CURSEFORGE_ENABLED && missingCurseForgeFiles.length > 0 && (
+          <button
+            onClick={() => setDetailTab('manual')}
+            className="relative px-4 py-2.5 text-sm font-medium transition-colors duration-150"
+            style={{ color: detailTab === 'manual' ? 'var(--text-strong)' : 'var(--text-muted)' }}
+          >
+            {detailTab === 'manual' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full"
+                style={{ background: 'var(--accent-strong)', boxShadow: '0 0 8px rgba(var(--accent-rgb),0.5)' }} />
+            )}
+            Manual files
+            <span
+              className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+              style={{
+                background: remainingManualFiles ? 'rgba(251,146,60,0.15)' : 'rgba(74,222,128,0.15)',
+                color: remainingManualFiles ? '#fb923c' : '#4ade80'
+              }}
+            >
+              {remainingManualFiles}
+            </span>
+          </button>
+        )}
         <button
           onClick={() => setDetailTab('console')}
           className="relative px-4 py-2.5 text-sm font-medium transition-colors duration-150"
@@ -1693,6 +1888,27 @@ function InstanceDetailPanel({
           />
         ) : detailTab === 'console' ? (
           <ConsoleTabContent logs={logs} running={running ?? false} />
+        ) : detailTab === 'manual' ? (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-bold" style={{ color: 'var(--text-bright)' }}>
+                Manual CurseForge files
+              </h3>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                Download each restricted file from CurseForge, then import its JAR here. Completed files stay checked for this instance.
+              </p>
+            </div>
+            {remainingManualFiles === 0 && (
+              <div className="rounded-xl px-4 py-3 text-xs font-semibold" style={{ background: 'rgba(74,222,128,0.09)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.24)' }}>
+                ✓ All manual files have been imported.
+              </div>
+            )}
+            <MissingCurseForgeChecklist
+              instanceId={instance.id}
+              files={missingCurseForgeFiles}
+              onFilesChanged={setMissingCurseForgeFiles}
+            />
+          </div>
         ) : detailTab === 'mods' ? (
           <div className="space-y-5">
             {/* Mods tab toolbar */}
@@ -1701,7 +1917,7 @@ function InstanceDetailPanel({
                 {hasModSource ? 'Pack mods and additions' : 'Custom modpack builder'}
               </span>
               <div className="flex gap-2">
-                {managedMods.length > 0 && <button onClick={updateCustomMods} disabled={updatingCustomMods || running} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}>{updatingCustomMods ? 'Updating…' : 'Update all'}</button>}
+                {managedAdditions.length > 0 && <button onClick={updateCustomMods} disabled={updatingCustomMods || running} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}>{updatingCustomMods ? 'Updating…' : 'Update all'}</button>}
                 <button onClick={addMods} disabled={addingMod || running} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50" style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 1v10M1 6h10"/></svg>
                   {addingMod ? 'Adding…' : 'Add local JAR'}
@@ -1711,7 +1927,7 @@ function InstanceDetailPanel({
 
             <div className="rounded-2xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
               <div className="flex gap-1 mb-3">
-                {(['modrinth', 'curseforge'] as const).map((source) => <button
+                {(['modrinth', ...(CURSEFORGE_ENABLED ? ['curseforge' as const] : [])] as const).map((source) => <button
                   key={source}
                   onClick={() => { setModSource(source); setModResults([]) }}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold"
@@ -1738,6 +1954,7 @@ function InstanceDetailPanel({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {modResults.map((result) => {
                   const installed = managedMods.some((mod) => (mod.source ?? 'modrinth') === result.source && mod.projectId === result.projectId)
+                    || mods.some((mod) => mod.source === result.source && mod.projectId === result.projectId)
                   return <div key={result.projectId} className="flex gap-3 p-3 rounded-xl" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
                     <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--surface-2)' }}>{result.iconUrl ? <img src={result.iconUrl} alt="" className="w-full h-full object-cover" /> : '🔧'}</div>
                     <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate" style={{ color: 'var(--text-bright)' }}>{result.title}</div><div className="text-[11px] line-clamp-2" style={{ color: 'var(--text-muted)' }}>{result.description}</div></div>
@@ -1747,11 +1964,11 @@ function InstanceDetailPanel({
               </div>
             )}
 
-            {managedMods.length > 0 && (
+            {managedAdditions.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Managed mods ({managedMods.length})</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Managed mods ({managedAdditions.length})</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {managedMods.map((mod) => <div key={mod.projectId} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', opacity: mod.enabled ? 1 : 0.6 }}>
+                  {managedAdditions.map((mod) => <div key={mod.projectId} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', opacity: mod.enabled ? 1 : 0.6 }}>
                     <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--surface-2)' }}>{mod.iconUrl ? <img src={mod.iconUrl} alt="" className="w-full h-full object-cover" /> : '🔧'}</div>
                     <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate" style={{ color: 'var(--text-bright)' }}>{mod.displayName ?? mod.name.replace(/\.jar(?:\.disabled)?$/i, '')}</div><div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{fmtBytes(mod.size)} · {mod.enabled ? 'Enabled' : 'Disabled'} · {(mod.source ?? 'modrinth') === 'modrinth' ? 'Modrinth' : 'CurseForge'}</div></div>
                     <button onClick={() => void toggleManaged(mod)} disabled={running} className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-50" style={{ color: 'var(--accent)' }}>{mod.enabled ? 'Disable' : 'Enable'}</button>
@@ -1787,7 +2004,7 @@ function InstanceDetailPanel({
             {/* Pack mods list */}
             {hasModSource ? (
               <ModsTabContent mods={mods} loading={modsLoading} loaded={modsLoaded} error={modsError} />
-            ) : managedMods.length === 0 && localMods.length === 0 && modResults.length === 0 ? (
+            ) : managedAdditions.length === 0 && localAdditions.length === 0 && modResults.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center" style={{ color: 'var(--text-dim)' }}>
                 <div className="text-4xl mb-4">🔧</div>
                 <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Start building your modpack</p>
@@ -1796,35 +2013,45 @@ function InstanceDetailPanel({
             ) : null}
 
             {/* Local / manually added mods */}
-            {localMods.length > 0 && (
+            {localAdditions.length > 0 && (
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
-                  Local mods ({localMods.length})
+                  Local mods ({localAdditions.length})
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {localMods.map((mod) => (
+                  {localAdditions.map((mod) => (
                     <div
                       key={mod.name}
                       className="flex items-center gap-3 p-3 rounded-xl group"
                       style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
+                      role={mod.externalUrl ? 'link' : undefined}
+                      tabIndex={mod.externalUrl ? 0 : undefined}
+                      onClick={() => mod.externalUrl && window.api.shell.openExternal(mod.externalUrl)}
+                      onKeyDown={(event) => {
+                        if (mod.externalUrl && (event.key === 'Enter' || event.key === ' ')) {
+                          window.api.shell.openExternal(mod.externalUrl)
+                        }
+                      }}
+                      title={mod.externalUrl ? `Open ${mod.displayName ?? mod.name} on Modrinth` : undefined}
                     >
                       <div
                         className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-lg"
                         style={{ background: 'var(--surface-2)' }}
                       >
-                        🔧
+                        {mod.iconUrl ? <img src={mod.iconUrl} alt="" className="w-full h-full rounded-lg object-cover" /> : '🔧'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate" style={{ color: 'var(--text-bright)' }}>
-                          {mod.name.replace(/\.jar$/i, '')}
+                          {mod.displayName ?? mod.name.replace(/\.jar$/i, '')}
                         </div>
                       <div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
-                          {fmtBytes(mod.size)} · {mod.enabled ? 'Enabled' : 'Disabled'}
+                          {fmtBytes(mod.size)} · {mod.enabled ? 'Enabled' : 'Disabled'}{mod.source === 'modrinth' ? ' · Modrinth' : ''}
                       </div>
                       </div>
-                      <button onClick={() => void toggleLocalMod(mod)} disabled={running} className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-50" style={{ color: 'var(--accent)' }}>{mod.enabled ? 'Disable' : 'Enable'}</button>
+                      {mod.externalUrl && <span className="text-xs" style={{ color: 'var(--text-faint)' }}>↗</span>}
+                      <button onClick={(event) => { event.stopPropagation(); void toggleLocalMod(mod) }} disabled={running} className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-50" style={{ color: 'var(--accent)' }}>{mod.enabled ? 'Disable' : 'Enable'}</button>
                       <button
-                        onClick={() => removeMod(mod.name)}
+                        onClick={(event) => { event.stopPropagation(); removeMod(mod.name) }}
                         className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg"
                         style={{ color: 'var(--danger-soft)' }}
                         title="Remove mod"
@@ -1869,30 +2096,55 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'browse',    label: 'Browse Modpacks' }
 ]
 
+interface MissingImportReport {
+  instanceId: string
+  instanceName: string
+  files: MissingCurseForgeFile[]
+}
+
 export default function Library(): JSX.Element {
   const [tab, setTab] = useState<Tab>('instances')
   const instances = useApp((s) => s.instances)
   const [showNew, setShowNew] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [missingImport, setMissingImport] = useState<MissingImportReport | null>(null)
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null)
   const pendingLibraryInstanceId = useApp((s) => s.pendingLibraryInstanceId)
   const setPendingLibraryInstanceId = useApp((s) => s.setPendingLibraryInstanceId)
   const refreshInstances = useApp((s) => s.refreshInstances)
   const setError = useApp((s) => s.setError)
+  const setImportProgress = useApp((s) => s.setImportProgress)
 
   const importPack = useCallback(async (): Promise<void> => {
     const filePath = await window.api.dialog.pickFile([{ name: 'Modpack', extensions: ['mrpack', 'zip'] }])
     if (!filePath) return
     setImporting(true)
+    setImportProgress({ status: 'active', message: 'Starting modpack import…', percent: 0 })
     try {
-      await (window.api as any).modpack?.importFile?.(filePath)
+      const result = await window.api.modpack.importFile(filePath)
       await refreshInstances()
+      if (result.missingFiles.length) {
+        setImportProgress({
+          status: 'partial',
+          message: `Import complete · ${result.missingFiles.length} manual file${result.missingFiles.length === 1 ? '' : 's'} needed`,
+          percent: 100
+        })
+        setMissingImport({
+          instanceId: result.instance.id,
+          instanceName: result.instance.name,
+          files: result.missingFiles
+        })
+      } else {
+        setImportProgress({ status: 'complete', message: 'Modpack import complete', percent: 100 })
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Import failed.')
+      const message = ipcError(e)
+      setImportProgress({ status: 'error', message: 'Import failed', percent: undefined })
+      setError(message)
     } finally {
       setImporting(false)
     }
-  }, [refreshInstances, setError])
+  }, [refreshInstances, setError, setImportProgress])
 
   const importBackup = useCallback(async (): Promise<void> => {
     const filePath = await window.api.dialog.pickFile([{ name: 'Thendrask backup', extensions: ['zip'] }])
@@ -1981,7 +2233,7 @@ export default function Library(): JSX.Element {
                 style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}
                 onMouseEnter={(e) => { if (!importing) { e.currentTarget.style.background = 'var(--surface-3)'; e.currentTarget.style.color = 'var(--text-bright)' } }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-soft)' }}
-                title="Import a .mrpack or CurseForge zip"
+                title="Import a Modrinth .mrpack or Prism/MultiMC zip"
               >
                 {importing ? 'Importing…' : '↑ Import'}
               </button>
@@ -2031,6 +2283,86 @@ export default function Library(): JSX.Element {
           <BrowseModpacks />
         )}
       </div>
+
+      {missingImport && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: 'rgba(0,0,0,0.82)' }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="missing-mods-title"
+        >
+          <div
+            className="w-full max-w-2xl max-h-[calc(100vh-48px)] rounded-2xl overflow-hidden flex flex-col"
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border-strong)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.55)'
+            }}
+          >
+            <div className="p-5 pb-4 shrink-0" style={{ borderBottom: '1px solid var(--border-soft)' }}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: '#fb923c' }}>
+                    Partial CurseForge import
+                  </div>
+                  <h2 id="missing-mods-title" className="text-lg font-black" style={{ color: 'var(--text-bright)' }}>
+                    {missingImport.files.filter((file) => !file.importedFileName).length === 0
+                      ? 'All manual mods have been imported'
+                      : `${missingImport.files.filter((file) => !file.importedFileName).length} of ${missingImport.files.length} blocked mods still need attention`}
+                  </h2>
+                  <p className="text-xs mt-1.5 leading-5 max-w-xl" style={{ color: 'var(--text-muted)' }}>
+                    {missingImport.instanceName} was created with everything CurseForge allowed Thendrask to download.
+                    Use Download to open the official file page, then Import JAR after you save it.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setMissingImport(null)}
+                  className="shrink-0 w-9 h-9 rounded-lg text-lg"
+                  style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}
+                  aria-label="Close missing mods report"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 flex-1 min-h-0 overflow-y-auto">
+              <MissingCurseForgeChecklist
+                instanceId={missingImport.instanceId}
+                files={missingImport.files}
+                onFilesChanged={(files) => setMissingImport((current) =>
+                  current ? { ...current, files } : current
+                )}
+              />
+            </div>
+
+            <div
+              className="px-5 py-4 flex justify-end gap-3 shrink-0"
+              style={{ background: 'var(--bg-inset)', borderTop: '1px solid var(--border-soft)' }}
+            >
+              <button
+                onClick={() => setMissingImport(null)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedInstanceId(missingImport.instanceId)
+                  setTab('instances')
+                  setMissingImport(null)
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-black"
+                style={{ background: 'var(--accent-strong)' }}
+              >
+                Open imported instance
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

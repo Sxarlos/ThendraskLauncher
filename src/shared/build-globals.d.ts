@@ -1,0 +1,2 @@
+declare const __CURSEFORGE_ENABLED__: boolean
+declare const __RESTRICTED_CATALOGS_ENABLED__: boolean
