@@ -89,8 +89,20 @@ import {
   installSessionRequestGuard
 } from './curseforgePolicy'
 
+// Development runners and parent terminals can close their output pipes while
+// Electron is still alive. Node emits EPIPE on the stream in that case; without
+// a listener, even a harmless console message crashes the main process.
+function tolerateClosedOutputPipe(stream: NodeJS.WriteStream): void {
+  stream.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code !== 'EPIPE') throw error
+  })
+}
+
+tolerateClosedOutputPipe(process.stdout)
+tolerateClosedOutputPipe(process.stderr)
+
 installMainFetchGuard()
-if (!CURSEFORGE_ENABLED) migrateStoredCurseForgeKeys()
+migrateStoredCurseForgeKeys()
 
 // Lite mode also strips GPU-accelerated rendering to remove the GPU process
 // entirely (~60-150 MB). This only takes effect if applied before the app is
@@ -854,11 +866,8 @@ function registerIpcHandlers(): void {
     if (!instance || instance.source !== 'manual') return instance
     const marker = readMarker(instanceId)
     if (!marker?.missingCurseForgeFiles?.length) return instance
-    const apiKey = getSettings().curseforgeApiKey
-    if (!apiKey) return instance
     const savedImport = marker.curseForgeImport
     const identity = await findCurseForgePackIdentity(
-      apiKey,
       savedImport?.name ?? instance.name,
       savedImport?.version,
       savedImport?.sourceFileName

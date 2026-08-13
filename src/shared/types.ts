@@ -136,7 +136,6 @@ export interface AppSettings {
   /** Curated Minecraft control bindings applied to every instance at launch.
    *  Keys are action ids (e.g. "key.forward"), values are MC key names (e.g. "key.keyboard.w"). */
   defaultControls?: Record<string, string>
-  curseforgeApiKey?: string
   friendCode?: string   // this user's own relay code (auto-generated)
   presenceSecret?: string // private write credential for this user's relay presence
   relayUrl?: string     // URL of the hosted presence relay

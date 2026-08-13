@@ -1,5 +1,6 @@
 const express = require('express')
 const { isValidCode, presenceBody } = require('./validation')
+const { isAllowedCurseForgeRequest, validCurseForgeBody } = require('./curseforge')
 const app = express()
 app.set('trust proxy', 1)
 
@@ -8,7 +9,7 @@ app.use(express.json({ limit: '4kb' }))
 // CORS: allow the Electron renderer and any future web client
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') return res.sendStatus(204)
   next()
@@ -24,6 +25,11 @@ const rateLimits = new Map()
 const MAX_PEERS = 10_000
 const RATE_WINDOW_MS = 60_000
 const RATE_LIMIT = 120
+const CURSEFORGE_BASE = 'https://api.curseforge.com'
+const CURSEFORGE_TIMEOUT_MS = 12_000
+const CURSEFORGE_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+const CURSEFORGE_CACHE_TTL_MS = 60_000
+const curseForgeCache = new Map()
 
 app.use((req, res, next) => {
   const key = req.ip
@@ -47,7 +53,76 @@ setInterval(() => {
   for (const [ip, entry] of rateLimits) {
     if (entry.startedAt < Date.now() - RATE_WINDOW_MS) rateLimits.delete(ip)
   }
+  for (const [key, entry] of curseForgeCache) {
+    if (entry.expiresAt < Date.now()) curseForgeCache.delete(key)
+  }
 }, 60_000)
+
+// Authenticated CurseForge API proxy. The API key stays on this server; the
+// launcher can only reach the small, validated endpoint set it actually uses.
+app.use('/curseforge', async (req, res) => {
+  const apiKey = process.env.CURSEFORGE_API_KEY
+  if (!apiKey) return res.status(503).json({ error: 'curseforge_not_configured' })
+
+  const requestUrl = new URL(req.originalUrl, 'https://relay.invalid')
+  const pathname = requestUrl.pathname.slice('/curseforge'.length)
+  if (!isAllowedCurseForgeRequest(req.method, pathname, requestUrl.searchParams)) {
+    return res.status(404).json({ error: 'curseforge_route_not_allowed' })
+  }
+  if (req.method === 'POST' && !validCurseForgeBody(pathname, req.body)) {
+    return res.status(400).json({ error: 'invalid_curseforge_request' })
+  }
+
+  const cacheKey = `${pathname}${requestUrl.search}`
+  const cached = req.method === 'GET' ? curseForgeCache.get(cacheKey) : null
+  if (cached && cached.expiresAt > Date.now()) {
+    res.setHeader('Content-Type', cached.contentType)
+    res.setHeader('X-Relay-Cache', 'HIT')
+    return res.status(cached.status).send(cached.body)
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), CURSEFORGE_TIMEOUT_MS)
+  try {
+    const upstream = await fetch(`${CURSEFORGE_BASE}${pathname}${requestUrl.search}`, {
+      method: req.method,
+      headers: {
+        'x-api-key': apiKey,
+        Accept: 'application/json',
+        ...(req.method === 'POST' ? { 'Content-Type': 'application/json' } : {})
+      },
+      body: req.method === 'POST' ? JSON.stringify(req.body) : undefined,
+      signal: controller.signal
+    })
+    const declaredLength = Number(upstream.headers.get('content-length') ?? 0)
+    if (declaredLength > CURSEFORGE_MAX_RESPONSE_BYTES) {
+      return res.status(502).json({ error: 'curseforge_response_too_large' })
+    }
+    const body = Buffer.from(await upstream.arrayBuffer())
+    if (body.length > CURSEFORGE_MAX_RESPONSE_BYTES) {
+      return res.status(502).json({ error: 'curseforge_response_too_large' })
+    }
+    const contentType = upstream.headers.get('content-type') || 'application/json'
+    if (req.method === 'GET' && upstream.ok) {
+      if (curseForgeCache.size >= 250) curseForgeCache.delete(curseForgeCache.keys().next().value)
+      curseForgeCache.set(cacheKey, {
+        status: upstream.status,
+        contentType,
+        body,
+        expiresAt: Date.now() + CURSEFORGE_CACHE_TTL_MS
+      })
+    }
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('X-Relay-Cache', 'MISS')
+    return res.status(upstream.status).send(body)
+  } catch (error) {
+    if (error?.name === 'AbortError') return res.status(504).json({ error: 'curseforge_timeout' })
+    console.error('[relay] CurseForge request failed:', error)
+    return res.status(502).json({ error: 'curseforge_unavailable' })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
 
 // PUT /presence/:code: register or refresh presence
 app.put('/presence/:code', (req, res) => {
@@ -77,6 +152,10 @@ app.get('/presence/:code', (req, res) => {
 })
 
 // GET /health: uptime check
-app.get('/health', (_req, res) => res.json({ ok: true, peers: store.size }))
+app.get('/health', (_req, res) => res.json({
+  ok: true,
+  peers: store.size,
+  curseforge: Boolean(process.env.CURSEFORGE_API_KEY)
+}))
 
 app.listen(PORT, () => console.log(`[relay] Listening on :${PORT}`))

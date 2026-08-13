@@ -3,7 +3,6 @@ import { promisify } from 'util'
 import { existsSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { AppSettings } from '@shared/types'
-import { CURSEFORGE_ENABLED } from '../shared/features'
 import { dataDir, readJson, writeJson } from './persist'
 
 const execFileAsync = promisify(execFile)
@@ -111,9 +110,9 @@ export function getSettings(): AppSettings {
 }
 
 export function setSettings(patch: Partial<AppSettings>): AppSettings {
-  if (!CURSEFORGE_ENABLED && 'curseforgeApiKey' in patch) delete patch.curseforgeApiKey
+  if ('curseforgeApiKey' in patch) delete (patch as Record<string, unknown>).curseforgeApiKey
   const next = { ...getSettings(), ...patch }
-  if (!CURSEFORGE_ENABLED) delete next.curseforgeApiKey
+  delete (next as Record<string, unknown>).curseforgeApiKey
   writeJson(FILE, next)
   return next
 }
