@@ -14,7 +14,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -34,6 +34,6 @@ jobs:
 
       - name: Build
         env:
-          CURSEFORGE_ENABLED: 'false'
+          CURSEFORGE_ENABLED: 'true'
           RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npm run build

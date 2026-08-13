@@ -7,6 +7,31 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.8-beta.5] - 2026-08-13
+
+### Added
+
+- Restored CurseForge browsing, searching, installation, updates, dependency
+  resolution, and API-assisted imports in public builds through the combined
+  Thendrask relay.
+
+### Changed
+
+- CurseForge now uses the approved project API key held by the relay, so users
+  no longer need to enter or store their own key in the launcher.
+- Combined friends presence and CurseForge access behind the hosted
+  `relay.sxarlos.store` endpoint.
+- Updated CI and release builds to Node.js 22 and enabled CurseForge in the
+  packaged public installers.
+
+### Security
+
+- Added strict relay path and request allowlists, rate limits, caching,
+  upstream timeouts, and response-size limits for CurseForge traffic.
+- Removed the legacy local API-key setting and added migration cleanup for
+  keys stored by earlier builds.
+- Updated vulnerable transitive dependencies identified by the runtime audit.
+
 ## [0.5.8-beta.4] - 2026-07-28
 
 ### Changed
