@@ -11,7 +11,6 @@ describe('disabled CurseForge implementation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(getCurseForgeDownloadUrl(
-      'api-key',
       123,
       456,
       'https://edge.forgecdn.net/files/mod.jar'
@@ -24,7 +23,6 @@ describe('disabled CurseForge implementation', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(findCurseForgePackIdentity(
-      'api-key',
       'Example Pack',
       '1.0.0',
       'example.zip'

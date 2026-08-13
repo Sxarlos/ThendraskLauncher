@@ -17,7 +17,7 @@ vi.mock('../src/main/snapshots', () => ({
 }))
 
 vi.mock('../src/main/settings', () => ({
-  getSettings: () => ({ curseforgeApiKey: 'test-api-key' })
+  getSettings: () => ({ relayUrl: 'https://relay.example' })
 }))
 
 import { installCompatibleMod, searchCompatibleMods } from '../src/main/customMods'

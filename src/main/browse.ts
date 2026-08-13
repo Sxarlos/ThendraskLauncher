@@ -1,9 +1,9 @@
 import AdmZip from 'adm-zip'
 import { validateArchiveEntries } from './archiveSafety'
 import type { BrowseParams, ModpackResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
-import { getSettings } from './settings'
 import { assertCurseForgeEnabled } from './curseforgePolicy'
 import { assertRestrictedCatalogsEnabled } from './catalogPolicy'
+import { curseForgeFetch } from './curseforgeApi'
 
 const CF_BASE = 'https://api.curseforge.com/v1'
 const MR_BASE = 'https://api.modrinth.com/v2'
@@ -38,28 +38,13 @@ async function mrGet(path: string, params: Record<string, string>): Promise<any>
 
 async function cfGet(path: string, params: Record<string, string | number>): Promise<any> {
   assertCurseForgeEnabled()
-  const key = (getSettings().curseforgeApiKey ?? '').trim()
-  if (!key) throw new Error('NO_CF_KEY')
-
   const url = new URL(CF_BASE + path)
   for (const [k, v] of Object.entries(params)) {
     if (v !== '' && v !== undefined) url.searchParams.set(k, String(v))
   }
-  const res = await fetch(url.toString(), {
-    headers: {
-      'x-api-key': key,
-      Accept: 'application/json'
-    }
-  })
+  const res = await curseForgeFetch(url)
   if (!res.ok) {
-    if (res.status === 403 || res.status === 401) {
-      throw new Error(
-        'CurseForge key rejected (403). Common causes: ' +
-        '(1) wrong key: go to console.curseforge.com → API Keys and copy the full key starting with $2a$10$; ' +
-        '(2) new keys can take a few minutes to activate after creation; ' +
-        '(3) go to Settings → API Keys in Thendrask Launcher and re-paste the key.'
-      )
-    }
+    if (res.status === 503) throw new Error('CurseForge is not configured on the Thendrask relay.')
     throw new Error(`CurseForge ${res.status}: ${res.statusText}`)
   }
   return res.json()
@@ -153,17 +138,13 @@ export async function fetchCurseForgePackOverview(modId: string): Promise<PackOv
 
 async function cfPost(path: string, body: unknown): Promise<any> {
   assertCurseForgeEnabled()
-  const key = (getSettings().curseforgeApiKey ?? '').trim()
-  if (!key) throw new Error('NO_CF_KEY')
-  const res = await fetch(CF_BASE + path, {
+  const res = await curseForgeFetch(CF_BASE + path, {
     method: 'POST',
-    headers: { 'x-api-key': key, 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body)
   })
   if (!res.ok) {
-    if (res.status === 403 || res.status === 401) {
-      throw new Error('CurseForge API key is invalid or not authorised. Go to Settings → CurseForge and re-enter your key from console.curseforge.com → API Keys.')
-    }
+    if (res.status === 503) throw new Error('CurseForge is not configured on the Thendrask relay.')
     throw new Error(`CurseForge ${res.status}: ${res.statusText}`)
   }
   return res.json()

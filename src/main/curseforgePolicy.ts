@@ -156,9 +156,6 @@ export function assertCurseForgeIpcAllowed(channel: string, args: unknown[]): vo
   if (channel === 'instances:create') {
     assertCurseForgeSourceAllowed((args[0] as { source?: unknown } | undefined)?.source)
   }
-  if (channel === 'settings:set' && Object.prototype.hasOwnProperty.call(args[0] ?? {}, 'curseforgeApiKey')) {
-    assertCurseForgeEnabled()
-  }
   if (channel === 'customMods:search' || channel === 'customMods:install') {
     assertCurseForgeSourceAllowed(args[2])
   }

@@ -5,9 +5,9 @@ import type { LocalMod, ModInstallResult, ModSearchResult } from '@shared/types'
 import { getInstance, instanceGameDir } from './instances'
 import { safeJoin } from './safePath'
 import { createSnapshot, restoreSnapshot } from './snapshots'
-import { getSettings } from './settings'
 import { CURSEFORGE_ENABLED } from '../shared/features'
 import { assertCurseForgeEnabled, assertCurseForgeSourceAllowed } from './curseforgePolicy'
+import { curseForgeFetch } from './curseforgeApi'
 
 const API = 'https://api.modrinth.com/v2'
 const CF_API = 'https://api.curseforge.com/v1'
@@ -105,16 +105,9 @@ function curseForgeLoader(loader: string): number {
   return value
 }
 
-function curseForgeHeaders(): Record<string, string> {
-  assertCurseForgeEnabled()
-  const key = getSettings().curseforgeApiKey
-  if (!key) throw new Error('Add a CurseForge API key in Settings before browsing CurseForge mods.')
-  return { 'x-api-key': key, Accept: 'application/json' }
-}
-
 async function cfJson<T>(url: string): Promise<T> {
   assertCurseForgeEnabled()
-  const response = await fetch(url, { headers: curseForgeHeaders() })
+  const response = await curseForgeFetch(url)
   if (!response.ok) throw new Error(`CurseForge returned HTTP ${response.status}`)
   return response.json() as Promise<T>
 }

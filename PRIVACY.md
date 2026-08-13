@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Last updated: July 2026**
+**Last updated: August 2026**
 
 Thendrask Launcher is a free and open source Minecraft launcher. This policy describes what data the app handles and where it goes.
 
@@ -20,7 +20,7 @@ No account credentials or tokens are ever transmitted to Thendrask Launcher or a
 
 ## CurseForge API keys from older versions
 
-Older versions of Thendrask Launcher may have stored a user-provided CurseForge API key locally in plaintext in `settings.json`, a backup, or a temporary/legacy settings copy. Current builds temporarily disable CurseForge integration and run a one-time local migration that removes `curseforgeApiKey` from those settings copies without creating another backup containing the key. The key is not transmitted as part of this migration.
+Older versions of Thendrask Launcher may have stored a user-provided CurseForge API key locally in plaintext in `settings.json`, a backup, or a temporary/legacy settings copy. Current builds use the hosted Thendrask relay for CurseForge access and run a one-time local migration that removes `curseforgeApiKey` from those settings copies without creating another backup containing the key. The old key is not transmitted as part of this migration.
 
 ---
 
@@ -59,8 +59,8 @@ Public builds do not browse or install content from ATLauncher or Technic.
 Their catalogue integrations are disabled unless a distributor makes a
 separate build after obtaining any permission required by those providers.
 
-### Relay server (optional, self-configured)
-The friends feature optionally uses a relay server to share your in-game presence with friends. The relay URL is configured by you in Settings. Thendrask Launcher does not operate a default relay server. The data sent to your configured relay is limited to your current game presence (instance name, status).
+### Thendrask relay
+The launcher uses its configured relay for friend presence and CurseForge API requests. Presence data is limited to your current game presence (instance name and status). CurseForge requests contain the search filters, project IDs, and file IDs needed to browse or install the content you requested. The relay adds the project API key server-side; that key is never sent to the launcher.
 
 ---
 

@@ -18,7 +18,6 @@ describe('CurseForge disabled policy', () => {
     ['customMods:toggle', ['instance', 'curseforge', '123', true]],
     ['customMods:remove', ['instance', 'curseforge', '123']],
     ['instances:create', [{ source: 'curseforge' }]],
-    ['settings:set', [{ curseforgeApiKey: 'obviously-fake-key' }]],
     ['instance:importMissingCurseForgeMod', ['instance', 1, 2]],
     ['modpack:missingCurseForgeFiles', ['instance']],
     ['modpack:enrichCurseForgeImport', ['instance']],

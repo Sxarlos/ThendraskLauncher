@@ -9,11 +9,11 @@ import { spawn } from 'child_process'
 import { createHash } from 'crypto'
 import AdmZip from 'adm-zip'
 import { instanceGameDir } from './instances'
-import { getSettings } from './settings'
 import { safeJoin } from './safePath'
 import { validateArchiveEntries } from './archiveSafety'
 import type { MissingCurseForgeFile } from '@shared/types'
 import { assertCurseForgeEnabled } from './curseforgePolicy'
+import { curseForgeFetch } from './curseforgeApi'
 import { assertRestrictedCatalogsEnabled } from './catalogPolicy'
 import {
   PRISM_PROFILE_FILE,
@@ -479,23 +479,19 @@ async function downloadToFile(url: string, destPath: string): Promise<void> {
  * authenticated download-url endpoint before treating the file as restricted.
  */
 export async function getCurseForgeDownloadUrl(
-  apiKey: string,
   modId: number,
   fileId: number,
   advertisedUrl?: string | null
 ): Promise<string | null> {
   assertCurseForgeEnabled()
   if (advertisedUrl) return advertisedUrl
-  const res = await fetch(`${CF_BASE}/mods/${modId}/files/${fileId}/download-url`, {
-    headers: { 'x-api-key': apiKey, Accept: 'application/json' }
-  })
+  const res = await curseForgeFetch(`${CF_BASE}/mods/${modId}/files/${fileId}/download-url`)
   if (!res.ok) return null
   const data = (await res.json() as { data?: unknown }).data
   return typeof data === 'string' && data ? data : null
 }
 
 async function addCurseForgeFilePageUrls(
-  apiKey: string,
   files: MissingCurseForgeFile[]
 ): Promise<MissingCurseForgeFile[]> {
   if (!files.length) return files
@@ -504,10 +500,9 @@ async function addCurseForgeFilePageUrls(
 
   try {
     for (let i = 0; i < projectIds.length; i += 50) {
-      const res = await fetch(`${CF_BASE}/mods`, {
+      const res = await curseForgeFetch(`${CF_BASE}/mods`, {
         method: 'POST',
         headers: {
-          'x-api-key': apiKey,
           Accept: 'application/json',
           'Content-Type': 'application/json'
         },
@@ -573,7 +568,6 @@ function curseForgeManifestImage(zip: AdmZip, imagePath: unknown): string | unde
 }
 
 export async function findCurseForgePackIdentity(
-  apiKey: string,
   packName: string,
   packVersion?: string,
   sourceFileName?: string
@@ -584,8 +578,6 @@ export async function findCurseForgePackIdentity(
   const broadName = fullName.split(/[:\-–—]/, 1)[0].trim()
   const queries = [...new Set([fullName, broadName].filter(Boolean))]
   const projectsById = new Map<number, any>()
-  const headers = { 'x-api-key': apiKey, Accept: 'application/json' }
-
   try {
     for (const query of queries) {
       const params = new URLSearchParams({
@@ -594,7 +586,7 @@ export async function findCurseForgePackIdentity(
         searchFilter: query,
         pageSize: '20'
       })
-      const res = await fetch(`${CF_BASE}/mods/search?${params}`, { headers })
+      const res = await curseForgeFetch(`${CF_BASE}/mods/search?${params}`)
       if (!res.ok) continue
       const projects = ((await res.json() as any).data as any[]) ?? []
       for (const project of projects) projectsById.set(Number(project.id), project)
@@ -613,7 +605,7 @@ export async function findCurseForgePackIdentity(
     const project = candidates[0]
     let matchedFileId: string | undefined
     if (packVersion || sourceFileName) {
-      const filesRes = await fetch(`${CF_BASE}/mods/${project.id}/files?pageSize=50`, { headers })
+      const filesRes = await curseForgeFetch(`${CF_BASE}/mods/${project.id}/files?pageSize=50`)
       if (!filesRes.ok) return null
       const files = ((await filesRes.json() as any).data as any[]) ?? []
       const expectedFileName = sourceFileName?.toLowerCase()
@@ -1040,13 +1032,6 @@ export async function importLocalPack(
   if (cfEntry) {
     assertCurseForgeEnabled()
     // ── CurseForge format ────────────────────────────────────────────────────
-    const cfKey = getSettings().curseforgeApiKey
-    if (!cfKey) {
-      throw new Error(
-        'A CurseForge API key is required to import this pack. Add it in Settings → API Keys.'
-      )
-    }
-
     const manifest = JSON.parse(cfEntry.getData().toString('utf8'))
     const loaderEntry: string | undefined = manifest.minecraft?.modLoaders?.[0]?.id
     let loaderType = 'vanilla'
@@ -1064,13 +1049,11 @@ export async function importLocalPack(
     const embeddedIconUrl = curseForgeManifestImage(zip, manifest.image)
     onProgress('Matching CurseForge project…', 2)
     const curseForgeIdentity = await findCurseForgePackIdentity(
-      cfKey,
       name,
       packVersion,
       basename(filePath)
     )
 
-    const cfH = { 'x-api-key': cfKey, Accept: 'application/json' }
     const modEntries: Array<{ projectID: number; fileID: number; required: boolean }> =
       (manifest.files ?? []).filter((m: any) => m.required)
     const modsDir = join(gameDir, 'mods')
@@ -1089,9 +1072,9 @@ export async function importLocalPack(
 
     for (let i = 0; i < modEntries.length; i += BATCH) {
       const batch = modEntries.slice(i, i + BATCH)
-      const res = await fetch(`${CF_BASE}/mods/files`, {
+      const res = await curseForgeFetch(`${CF_BASE}/mods/files`, {
         method: 'POST',
-        headers: { ...cfH, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileIds: batch.map((m) => m.fileID) })
       })
       if (!res.ok) throw new Error(`CurseForge ${res.status}`)
@@ -1107,7 +1090,6 @@ export async function importLocalPack(
         const downloadUrl = isBundled
           ? null
           : await getCurseForgeDownloadUrl(
-              cfKey,
               Number(file.modId ?? manifestEntry?.projectID),
               Number(file.id),
               file.downloadUrl
@@ -1156,7 +1138,7 @@ export async function importLocalPack(
       if ((i + 1) % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve))
     }
 
-    const missingFiles = await addCurseForgeFilePageUrls(cfKey, unavailable)
+    const missingFiles = await addCurseForgeFilePageUrls(unavailable)
     injectServersDat(gameDir)
     const marker: PackMarker = {
       packVersionId: curseForgeIdentity?.packVersionId,
@@ -1353,19 +1335,15 @@ export async function installCfPack(
 ): Promise<PackMarker> {
   assertCurseForgeEnabled()
   const gameDir = instanceGameDir(instanceId)
-  const cfKey = getSettings().curseforgeApiKey
-  if (!cfKey) throw new Error('A CurseForge API key is required. Add it in Settings → API Keys.')
-
-  const cfH = { 'x-api-key': cfKey, Accept: 'application/json' }
 
   onProgress('Fetching modpack info…')
   let fileData: any
   if (fileId) {
-    const res = await fetch(`${CF_BASE}/mods/${modId}/files/${fileId}`, { headers: cfH })
+    const res = await curseForgeFetch(`${CF_BASE}/mods/${modId}/files/${fileId}`)
     if (!res.ok) throw new Error(`CurseForge ${res.status}`)
     fileData = (await res.json() as any).data
   } else {
-    const res = await fetch(`${CF_BASE}/mods/${modId}/files?pageSize=1&sortField=1&sortOrder=desc`, { headers: cfH })
+    const res = await curseForgeFetch(`${CF_BASE}/mods/${modId}/files?pageSize=1&sortField=1&sortOrder=desc`)
     if (!res.ok) throw new Error(`CurseForge ${res.status}`)
     fileData = (await res.json() as any).data?.[0]
   }
@@ -1417,9 +1395,9 @@ export async function installCfPack(
 
   for (let i = 0; i < modEntries.length; i += BATCH) {
     const batch = modEntries.slice(i, i + BATCH)
-    const res = await fetch(`${CF_BASE}/mods/files`, {
+    const res = await curseForgeFetch(`${CF_BASE}/mods/files`, {
       method: 'POST',
-      headers: { ...cfH, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fileIds: batch.map((m) => m.fileID) })
     })
     if (!res.ok) throw new Error(`CurseForge ${res.status}`)
