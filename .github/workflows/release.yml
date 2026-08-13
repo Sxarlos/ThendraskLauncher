@@ -21,7 +21,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Validate release tag
@@ -86,7 +86,7 @@ jobs:
 
       - name: Build
         env:
-          CURSEFORGE_ENABLED: 'false'
+          CURSEFORGE_ENABLED: 'true'
           RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npm run build
 
@@ -126,7 +126,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -134,7 +134,7 @@ jobs:
 
       - name: Build
         env:
-          CURSEFORGE_ENABLED: 'false'
+          CURSEFORGE_ENABLED: 'true'
           RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npx electron-vite build
 
@@ -159,7 +159,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          CURSEFORGE_ENABLED: 'false'
+          CURSEFORGE_ENABLED: 'true'
           RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npx electron-builder --publish always
 
@@ -169,7 +169,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           EP_PRE_RELEASE: 'true'
-          CURSEFORGE_ENABLED: 'false'
+          CURSEFORGE_ENABLED: 'true'
           RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npx electron-builder --publish always
 
