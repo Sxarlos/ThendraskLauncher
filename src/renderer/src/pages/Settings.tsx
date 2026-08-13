@@ -3,7 +3,7 @@ import type { AppSettings, DefaultGameSettings, JavaInstall, ThemeId } from '@sh
 import { normalizeThemeId, useApp } from '../store'
 import { CURATED_ACTIONS, codeToMcKey, friendlyKeyName, mouseButtonToMcKey } from '../lib/mcControls'
 
-type SettingsTab = 'general' | 'appearance' | 'apikeys'
+type SettingsTab = 'general' | 'appearance' | 'connections'
 
 const THEMES: { id: ThemeId; name: string; desc: string; swatch: string; base: string }[] = [
   { id: 'thendrask', name: 'Thendrask', desc: 'Classic dark green',  swatch: '#22c55e', base: '#111318' },
@@ -967,18 +967,10 @@ function AppearanceTab({ settings, onChange }: { settings: AppSettings; onChange
   )
 }
 
-/* ── API Keys tab ──────────────────────────────────────── */
-function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (patch: Partial<AppSettings>) => void }): JSX.Element {
-  const [cfKey, setCfKey] = useState(settings.curseforgeApiKey ?? '')
-  const [cfSaved, setCfSaved] = useState(false)
+/* ── Connections tab ───────────────────────────────────── */
+function ConnectionsTab({ settings, onChange }: { settings: AppSettings; onChange: (patch: Partial<AppSettings>) => void }): JSX.Element {
   const [relayUrl, setRelayUrl] = useState(settings.relayUrl ?? '')
   const [relaySaved, setRelaySaved] = useState(false)
-
-  const saveCf = (): void => {
-    onChange({ curseforgeApiKey: cfKey.trim() || undefined })
-    setCfSaved(true)
-    setTimeout(() => setCfSaved(false), 2000)
-  }
 
   const saveRelay = (): void => {
     onChange({ relayUrl: relayUrl.trim() || undefined })
@@ -988,46 +980,11 @@ function ApiKeysTab({ settings, onChange }: { settings: AppSettings; onChange: (
 
   return (
     <div>
-      <SectionHeader>CurseForge</SectionHeader>
+      <SectionHeader>Thendrask Relay</SectionHeader>
       <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
-        <div className="text-sm font-medium mb-1" style={{ color: 'var(--text-bright)' }}>CurseForge API Key</div>
+        <div className="text-sm font-medium mb-1" style={{ color: 'var(--text-bright)' }}>Combined Relay URL</div>
         <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
-          Required to browse CurseForge modpacks. Get a key at console.curseforge.com.
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="password"
-            value={cfKey}
-            onChange={(e) => setCfKey(e.target.value)}
-            placeholder="$2a$10$…"
-            className="flex-1 px-3 py-2 rounded-xl text-sm outline-none font-mono"
-            style={{
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-bright)',
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = 'rgba(var(--accent-rgb),0.5)')}
-            onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
-          />
-          <button
-            onClick={saveCf}
-            className="px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-            style={{
-              background: cfSaved ? 'rgba(var(--accent-rgb),0.15)' : 'var(--accent-strong)',
-              color: cfSaved ? 'var(--accent)' : '#000',
-            }}
-          >
-            {cfSaved ? 'Saved ✓' : 'Save'}
-          </button>
-        </div>
-      </div>
-
-      <SectionHeader>Friends</SectionHeader>
-      <div className="py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
-        <div className="text-sm font-medium mb-1" style={{ color: 'var(--text-bright)' }}>Presence Relay URL</div>
-        <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
-          URL of the hosted relay server that powers the friend list across different networks.
-          Leave blank to disable friend presence.
+          URL of the hosted service that powers friend presence and securely connects to CurseForge.
         </p>
         <div className="flex gap-2">
           <input
@@ -1083,7 +1040,7 @@ export default function Settings(): JSX.Element {
   const TABS: { id: SettingsTab; label: string }[] = [
     { id: 'general',    label: 'General' },
     { id: 'appearance', label: 'Appearance' },
-    { id: 'apikeys',    label: 'API Keys' },
+    { id: 'connections', label: 'Connections' },
   ]
 
   return (
@@ -1124,7 +1081,7 @@ export default function Settings(): JSX.Element {
           <>
             {tab === 'general'    && <GeneralTab    settings={settings} onChange={handleChange} />}
             {tab === 'appearance' && <AppearanceTab settings={settings} onChange={handleChange} />}
-            {tab === 'apikeys'    && <ApiKeysTab    settings={settings} onChange={handleChange} />}
+            {tab === 'connections' && <ConnectionsTab settings={settings} onChange={handleChange} />}
           </>
         )}
       </div>

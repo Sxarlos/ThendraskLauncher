@@ -1,0 +1,10 @@
+{
+  "name": "request",
+  "version": "3.0.0-thendrask.1",
+  "description": "Minimal native-fetch compatibility layer for minecraft-launcher-core",
+  "main": "index.js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

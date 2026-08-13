@@ -7,11 +7,47 @@ import UpdateToast from './components/UpdateToast'
 import Home from './pages/Home'
 import { useApp } from './store'
 
-const Library = lazy(() => import('./pages/Library'))
-const GregTech = lazy(() => import('./pages/GregTech'))
-const Servers = lazy(() => import('./pages/Servers'))
-const Friends = lazy(() => import('./pages/Friends'))
-const Settings = lazy(() => import('./pages/Settings'))
+const loadLibrary = () => import('./pages/Library')
+const loadGregTech = () => import('./pages/GregTech')
+const loadServers = () => import('./pages/Servers')
+const loadFriends = () => import('./pages/Friends')
+const loadSettings = () => import('./pages/Settings')
+
+const Library = lazy(loadLibrary)
+const GregTech = lazy(loadGregTech)
+const Servers = lazy(loadServers)
+const Friends = lazy(loadFriends)
+const Settings = lazy(loadSettings)
+
+function preloadPages(): void {
+  // Imports are cached by the module loader. Fetch the tab chunks while the
+  // startup splash is still visible so the first navigation never suspends.
+  void Promise.allSettled([
+    loadLibrary(),
+    loadGregTech(),
+    loadServers(),
+    loadFriends(),
+    loadSettings()
+  ])
+}
+
+function PageFallback(): JSX.Element {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ background: 'var(--bg)' }}
+      aria-label="Loading page"
+    >
+      <div
+        className="w-5 h-5 rounded-full animate-spin"
+        style={{
+          border: '2px solid var(--border)',
+          borderTopColor: 'var(--accent-strong)'
+        }}
+      />
+    </div>
+  )
+}
 
 const PAGES = {
   home: Home,
@@ -46,6 +82,7 @@ export default function App(): JSX.Element {
   const setUpdateInfo = useApp((s) => s.setUpdateInfo)
   const setUpdateDownload = useApp((s) => s.setUpdateDownload)
   const setUpdateCheckStatus = useApp((s) => s.setUpdateCheckStatus)
+  const setImportProgress = useApp((s) => s.setImportProgress)
   const clearAllLogs = useApp((s) => s.clearAllLogs)
   const Current = PAGES[page]
 
@@ -53,20 +90,49 @@ export default function App(): JSX.Element {
   const [showWizard, setShowWizard] = useState(false)
 
   useEffect(() => {
-    Promise.all([loadTheme(), loadLiteMode(), refreshAccounts(), refreshInstances()])
-      .then(async () => {
-        const settings = await window.api.settings.get()
-        setGregTechHubEnabled(!!settings.gregTechHubEnabled)
-        if (!settings.setupComplete) setShowWizard(true)
+    let cancelled = false
+    const preloadTimer = window.setTimeout(preloadPages, 250)
+
+    const initialize = async (): Promise<void> => {
+      const results = await Promise.allSettled([
+        loadTheme(),
+        loadLiteMode(),
+        refreshAccounts(),
+        refreshInstances(),
+        window.api.settings.get()
+      ])
+      if (cancelled) return
+
+      const settingsResult = results[4]
+      if (settingsResult.status === 'fulfilled') {
+        setGregTechHubEnabled(!!settingsResult.value.gregTechHubEnabled)
+        if (!settingsResult.value.setupComplete) setShowWizard(true)
+      }
+
+      const failedSections = ['theme', 'performance settings', 'accounts', 'instances', 'settings']
+        .filter((_, index) => results[index]?.status === 'rejected')
+      if (failedSections.length > 0) {
+        setError(`Some launcher data could not be loaded: ${failedSections.join(', ')}. You can continue, but affected features may need a reload.`)
+      }
+
+      setAppReady(true)
+    }
+
+    void initialize().catch((err) => {
+      if (!cancelled) {
+        setError(err instanceof Error ? err.message : 'Launcher startup failed.')
         setAppReady(true)
-      })
-      .catch(() => setAppReady(true))
+      }
+    })
 
     const unsubProgress = window.api.launch.onProgress((p) => {
       if (p.state === 'preparing') clearLogs(p.instanceId)
       setProgress(p)
     })
     const unsubLog = window.api.launch.onLog((e) => addLog(e.instanceId, e.line))
+    const unsubImportProgress = window.api.modpack.onImportProgress((progress) => {
+      setImportProgress({ ...progress, status: progress.status ?? 'active' })
+    })
     const unsubChecking = window.api.update.onChecking(() => setUpdateCheckStatus('checking'))
     const unsubUpToDate = window.api.update.onUpToDate(() => setUpdateCheckStatus('up-to-date'))
     const unsubUpdate = window.api.update.onAvailable((info) => {
@@ -96,10 +162,12 @@ export default function App(): JSX.Element {
     })
 
     return () => {
-      unsubProgress(); unsubLog(); unsubChecking(); unsubUpToDate()
+      cancelled = true
+      clearTimeout(preloadTimer)
+      unsubProgress(); unsubLog(); unsubImportProgress(); unsubChecking(); unsubUpToDate()
       unsubUpdate(); unsubDownload(); unsubReady(); unsubUpdateError()
     }
-  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setGregTechHubEnabled, setProgress, addLog, clearLogs, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus])
+  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setGregTechHubEnabled, setProgress, addLog, clearLogs, setError, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus, setImportProgress])
 
   useEffect(() => {
     const unsubIdle = window.api.window.onIdle(() => {
@@ -128,9 +196,12 @@ export default function App(): JSX.Element {
           </div>
         )}
 
-        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <Suspense fallback={<div className="flex-1 skeleton" aria-label="Loading page" />}>
-            <Current />
+        <main
+          className="relative isolate flex-1 min-h-0 overflow-hidden flex flex-col"
+          style={{ background: 'var(--bg)' }}
+        >
+          <Suspense fallback={<PageFallback />}>
+            <Current key={page} />
           </Suspense>
         </main>
       </div>

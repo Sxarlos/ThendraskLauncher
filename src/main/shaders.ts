@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 const MR_BASE = 'https://api.modrinth.com/v2'
-const UA = 'EnderLauncher/0.1.8'
+const UA = 'Thendrask-Launcher/0.5.8'
 
 async function mrGet(path: string): Promise<unknown> {
   const res = await net.fetch(MR_BASE + path, { headers: { 'User-Agent': UA } })
