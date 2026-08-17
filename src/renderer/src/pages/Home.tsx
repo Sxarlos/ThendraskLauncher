@@ -5,6 +5,7 @@ import { useApp, activeAccount } from '../store'
 import { ipcError } from '../lib/ipcError'
 import { formatPlayTime } from '../lib/formatPlayTime'
 import NEWS from '../lib/news'
+import { CURSEFORGE_ENABLED } from '../../../shared/features'
 
 /* ── Screenshot slideshow background ─────────────────────── */
 
@@ -269,6 +270,10 @@ export default function Home(): JSX.Element {
     servers: { name: string; ip: string }[]
   } | null>(null)
   const [serverPickerInstanceId, setServerPickerInstanceId] = useState<string | null>(null)
+  const [liveScreenshotResult, setLiveScreenshotResult] = useState<{
+    instanceId: string
+    urls: string[]
+  } | null>(null)
 
   const dismissNews = (id: string): void => {
     setDismissedNews((prev) => {
@@ -312,14 +317,21 @@ export default function Home(): JSX.Element {
   const featuredId = featured?.id
   const featuredExternalId = featured?.externalId
   const featuredSource = featured?.source
-  const featuredScreenshotCount = featured?.screenshotUrls?.length ?? 0
+  const liveFeaturedScreenshots =
+    liveScreenshotResult && liveScreenshotResult.instanceId === featuredId
+      ? liveScreenshotResult.urls
+      : []
+  const featuredScreenshotCount =
+    (featured?.screenshotUrls?.length ?? 0) + liveFeaturedScreenshots.length
   const savedServers =
     savedServerResult && savedServerResult.instanceId === featuredId
       ? savedServerResult.servers
       : []
   const serverPickerOpen = serverPickerInstanceId === featuredId
 
-  // Lazily fetch screenshots for the featured instance if not yet stored
+  // Lazily fetch screenshots for the featured instance. CurseForge gallery
+  // URLs stay in renderer memory; other providers retain their existing
+  // persisted-gallery behaviour.
   useEffect(() => {
     window.api.app.getVersion().then((v) => {
       localStorage.setItem(VERSION_KEY, v)
@@ -330,9 +342,18 @@ export default function Home(): JSX.Element {
   useEffect(() => {
     if (!featuredId || featuredScreenshotCount > 0) return
     if (!featuredExternalId || featuredSource === 'manual') return
+    let cancelled = false
     window.api.instances.fetchScreenshots(featuredId)
-      .then((urls) => { if (urls?.length) void refreshInstances() })
+      .then((urls) => {
+        if (cancelled || !urls?.length) return
+        if (featuredSource === 'curseforge') {
+          setLiveScreenshotResult({ instanceId: featuredId, urls })
+        } else {
+          void refreshInstances()
+        }
+      })
       .catch(() => { /* silent - just won't have screenshots */ })
+    return () => { cancelled = true }
   }, [featuredExternalId, featuredId, featuredScreenshotCount, featuredSource, refreshInstances])
 
   useEffect(() => {
@@ -351,7 +372,9 @@ export default function Home(): JSX.Element {
   const busy     = !!prog && ['preparing', 'downloading', 'launching'].includes(prog.state)
   const running  = prog?.state === 'running'
   const hasBg    = !!featured?.iconUrl
-  const screenshots = featured?.screenshotUrls ?? []
+  const screenshots = featured?.screenshotUrls?.length
+    ? featured.screenshotUrls
+    : liveFeaturedScreenshots
 
   const play = async (serverAddress?: string): Promise<void> => {
     if (!featured) return
@@ -775,7 +798,9 @@ export default function Home(): JSX.Element {
               </svg>
             }
             title="Browse Modpacks"
-            desc="Find and install modpacks from Modrinth, FTB, ATLauncher & Technic"
+            desc={CURSEFORGE_ENABLED
+              ? 'Find and install modpacks from Modrinth and CurseForge'
+              : 'Find and install modpacks from Modrinth'}
           />
           <QuickCard
             onClick={() => setPage('library')}

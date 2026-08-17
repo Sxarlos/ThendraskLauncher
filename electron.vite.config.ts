@@ -3,10 +3,8 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 const curseForgeEnabled = process.env.CURSEFORGE_ENABLED === 'true'
-const restrictedCatalogsEnabled = process.env.RESTRICTED_CATALOGS_ENABLED === 'true'
 const featureDefines = {
-  __CURSEFORGE_ENABLED__: JSON.stringify(curseForgeEnabled),
-  __RESTRICTED_CATALOGS_ENABLED__: JSON.stringify(restrictedCatalogsEnabled)
+  __CURSEFORGE_ENABLED__: JSON.stringify(curseForgeEnabled)
 }
 
 export default defineConfig({

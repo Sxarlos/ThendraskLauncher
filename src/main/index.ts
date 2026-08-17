@@ -2,7 +2,7 @@
 app.commandLine.appendSwitch('js-flags', '--expose-gc')
 
 import { app, shell, BrowserWindow, ipcMain, nativeImage, dialog, Tray, Menu, session } from 'electron'
-import { join, basename } from 'path'
+import { join, basename, extname } from 'path'
 import { existsSync, mkdirSync, copyFileSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from 'fs'
 import { createHash } from 'crypto'
 import { listAccounts, loginInteractive, removeAccount, setActive, getMinecraftProfile, setActiveCape, previewSkin, uploadSkin, listSavedSkins, saveSkin, deleteSavedSkin, uploadSavedSkin } from './accounts'
@@ -11,6 +11,7 @@ import {
   listInstances,
   removeInstance,
   updateInstance,
+  removePersistedCurseForgeScreenshots,
   instanceGameDir,
   type CreateInstanceInput
 } from './instances'
@@ -22,38 +23,26 @@ import { listServers, addServer, removeServer, pingServer } from './servers'
 import {
   searchModrinth,
   searchCurseForge,
-  searchFtb,
-  searchFtbLegacy,
-  searchAtlauncher,
-  searchTechnic,
   fetchModrinthScreenshots,
   fetchCurseForgeScreenshots,
-  fetchFtbScreenshots,
   fetchModrinthVersions,
   fetchCurseForgeVersions,
-  fetchFtbVersions,
-  fetchAtlVersions,
-  fetchTechnicVersions,
   fetchModrinthMods,
   fetchCurseFormMods,
-  fetchFtbMods,
   getModrinthVersionDetails,
   getCurseForgeFileDetails,
-  getFtbVersionDetails,
   fetchModrinthPackOverview,
   fetchCurseForgePackOverview,
-  fetchFtbPackOverview,
-  fetchAtlPackOverview,
-  fetchTechnicPackOverview,
   fetchModrinthChangelog,
-  fetchCurseForgeChangelog,
-  fetchFtbChangelog
+  fetchCurseForgeChangelog
 } from './browse'
 import {
   importLocalPack,
   listLoaderVersions,
   listMissingCurseForgeFiles,
   markCurseForgeFileImported,
+  verifyMissingCurseForgeFile,
+  curseForgeInstallPath,
   findCurseForgePackIdentity,
   readMarker
 } from './modpack'
@@ -330,21 +319,23 @@ function handleWithEvent<T>(
   })
 }
 
-async function fetchAndStoreScreenshots(
+async function fetchInstanceScreenshots(
   instanceId: string,
-  source: 'modrinth' | 'curseforge' | 'ftb',
+  source: 'modrinth' | 'curseforge',
   externalId: string
 ): Promise<string[]> {
   try {
-    let urls: string[]
+    let urls: string[] = []
     if (source === 'modrinth') {
       urls = await fetchModrinthScreenshots(externalId)
     } else if (source === 'curseforge') {
       urls = await fetchCurseForgeScreenshots(externalId)
-    } else {
-      urls = await fetchFtbScreenshots(externalId)
     }
-    if (urls.length > 0) updateInstance(instanceId, { screenshotUrls: urls })
+    // CurseForge gallery data is deliberately live-only. Other providers keep
+    // their existing persisted gallery behaviour.
+    if (source !== 'curseforge' && urls.length > 0) {
+      updateInstance(instanceId, { screenshotUrls: urls })
+    }
     return urls
   } catch (err) {
     console.error('[screenshots]', (err as Error).message)
@@ -383,15 +374,13 @@ function registerIpcHandlers(): void {
           versions = await fetchModrinthVersions(input.externalId)
         } else if (input.source === 'curseforge') {
           versions = await fetchCurseForgeVersions(input.externalId)
-        } else if (input.source === 'ftb') {
-          versions = await fetchFtbVersions(input.externalId)
         }
         if (versions?.length) input.packVersionId = versions[0].id
       } catch (_) {}
     }
     const inst = createInstance(input)
-    if (input.externalId && input.source && input.source !== 'manual') {
-      void fetchAndStoreScreenshots(inst.id, input.source as 'modrinth' | 'curseforge' | 'ftb', input.externalId)
+    if (input.externalId && input.source && input.source !== 'manual' && input.source !== 'curseforge') {
+      void fetchInstanceScreenshots(inst.id, input.source, input.externalId)
     }
     return inst
   })
@@ -431,7 +420,7 @@ function registerIpcHandlers(): void {
     const inst = listInstances().find((i) => i.id === id)
     if (!inst?.externalId || !inst.source || inst.source === 'manual') return null
     assertCurseForgeSourceAllowed(inst.source)
-    return fetchAndStoreScreenshots(id, inst.source as 'modrinth' | 'curseforge' | 'ftb', inst.externalId)
+    return fetchInstanceScreenshots(id, inst.source, inst.externalId)
   })
 
   // Launch
@@ -514,7 +503,7 @@ function registerIpcHandlers(): void {
 
   handle(
     'instance:importMissingCurseForgeMod',
-    (
+    async (
       instanceId: string,
       sourcePath: string,
       projectId: number,
@@ -523,16 +512,22 @@ function registerIpcHandlers(): void {
     ) => {
       assertCurseForgeEnabled()
       if (isRunning(instanceId)) throw new Error('Stop the instance before adding mods.')
-      if (!existsSync(sourcePath) || !statSync(sourcePath).isFile() || !sourcePath.toLowerCase().endsWith('.jar')) {
-        throw new Error('Select a valid mod JAR file.')
+      const extension = extname(sourcePath).toLowerCase()
+      if (!existsSync(sourcePath) || !statSync(sourcePath).isFile() || !['.jar', '.zip'].includes(extension)) {
+        throw new Error('Select a valid mod JAR or ZIP file.')
       }
       const selectedFileName = basename(sourcePath)
-      if (expectedFileName && selectedFileName.toLowerCase() !== expectedFileName.toLowerCase()) {
-        throw new Error(`Select ${expectedFileName}. You chose ${selectedFileName}.`)
+      const missingFile = await verifyMissingCurseForgeFile(instanceId, Number(projectId), Number(fileId), sourcePath)
+      const requiredFileName = missingFile.fileName ?? expectedFileName
+      if (requiredFileName && selectedFileName.toLowerCase() !== requiredFileName.toLowerCase()) {
+        throw new Error(`Select ${requiredFileName}. You chose ${selectedFileName}.`)
       }
-      const modsDir = join(instanceGameDir(instanceId), 'mods')
-      mkdirSync(modsDir, { recursive: true })
-      copyFileSync(sourcePath, join(modsDir, selectedFileName))
+      const destination = curseForgeInstallPath(
+        instanceId,
+        selectedFileName,
+        missingFile.installDirectory
+      )
+      copyFileSync(sourcePath, destination)
       return markCurseForgeFileImported(
         instanceId,
         Number(projectId),
@@ -725,19 +720,11 @@ function registerIpcHandlers(): void {
     assertCurseForgeEnabled()
     return searchCurseForge(params)
   })
-  handle('browse:ftb', (params: BrowseParams) => searchFtb(params))
-  handle('browse:ftb-legacy', (params: BrowseParams, category: string) => searchFtbLegacy(params, category))
-  handle('browse:atlauncher', (params: BrowseParams, category: string) => searchAtlauncher(params, category))
-  handle('browse:technic', (params: BrowseParams) => searchTechnic(params))
-
   // Modpack detail (versions, mods, switch)
   handle('modpack:versions', async (instanceId: string) => {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
     if (inst.source === 'modrinth') return fetchModrinthVersions(inst.externalId)
-    if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbVersions(inst.externalId)
-    if (inst.source === 'atlauncher') return fetchAtlVersions(inst.externalId)
-    if (inst.source === 'technic') return fetchTechnicVersions(inst.externalId)
     assertCurseForgeEnabled()
     return fetchCurseForgeVersions(inst.externalId)
   })
@@ -746,8 +733,6 @@ function registerIpcHandlers(): void {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
     if (inst.source === 'modrinth') return fetchModrinthMods(inst.externalId, inst.packVersionId)
-    if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbMods(inst.externalId, inst.packVersionId)
-    if (inst.source === 'atlauncher' || inst.source === 'technic') return []
     assertCurseForgeEnabled()
     return fetchCurseFormMods(inst.externalId, inst.packVersionId)
   })
@@ -756,8 +741,6 @@ function registerIpcHandlers(): void {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return []
     if (inst.source === 'modrinth') return fetchModrinthChangelog(inst.externalId)
-    if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbChangelog(inst.externalId)
-    if (inst.source === 'atlauncher' || inst.source === 'technic') return []
     assertCurseForgeEnabled()
     return fetchCurseForgeChangelog(inst.externalId)
   })
@@ -766,9 +749,6 @@ function registerIpcHandlers(): void {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst?.externalId || inst.source === 'manual' || !inst.source) return null
     if (inst.source === 'modrinth') return fetchModrinthPackOverview(inst.externalId)
-    if (inst.source === 'ftb' || inst.source === 'ftb-legacy') return fetchFtbPackOverview(inst.externalId)
-    if (inst.source === 'atlauncher') return fetchAtlPackOverview(inst.externalId)
-    if (inst.source === 'technic') return fetchTechnicPackOverview(inst.externalId)
     assertCurseForgeEnabled()
     return fetchCurseForgePackOverview(inst.externalId)
   })
@@ -785,11 +765,7 @@ function registerIpcHandlers(): void {
       assertCurseForgeEnabled()
       const details = await getCurseForgeFileDetails(inst.externalId, versionId)
       if (details.mcVersion) mcVersion = details.mcVersion
-    } else if ((inst.source === 'ftb' || inst.source === 'ftb-legacy') && inst.externalId) {
-      const details = await getFtbVersionDetails(inst.externalId, versionId)
-      if (details.mcVersion) mcVersion = details.mcVersion
     }
-    // ATLauncher: versionId is the version string; mcVersion stays as-is
 
     return updateInstance(instanceId, { mcVersion, packVersionId: versionId })
   })
@@ -830,7 +806,7 @@ function registerIpcHandlers(): void {
         source: result.source,
         externalId: result.externalId,
         packVersionId: result.packVersionId,
-        screenshotUrls: result.screenshotUrls
+        screenshotUrls: result.source === 'curseforge' ? undefined : result.screenshotUrls
       })
       if (!instance) throw new Error('Imported instance could not be saved.')
       const missingFiles = result.missingFiles ?? []
@@ -878,9 +854,7 @@ function registerIpcHandlers(): void {
       externalId: identity.externalId,
       packVersionId: identity.packVersionId,
       iconUrl: identity.iconUrl ?? instance.iconUrl,
-      screenshotUrls: identity.screenshotUrls?.length
-        ? identity.screenshotUrls
-        : instance.screenshotUrls
+      screenshotUrls: undefined
     })
   })
 
@@ -902,6 +876,7 @@ app.whenReady().then(() => {
   // Apply custom instances directory before any instance operations
   const { instancesDir: customDir, friendCode, presenceSecret, discordRpc, discordClientId } = getSettings()
   if (customDir) setCustomInstancesDir(customDir)
+  removePersistedCurseForgeScreenshots()
   initDiscord(discordClientId, !!discordRpc)
 
   // Auto-generate a friend code for this user on first run

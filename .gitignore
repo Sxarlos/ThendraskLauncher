@@ -7,3 +7,5 @@ dist/
 .env.local
 .claude/
 *.tsbuildinfo
+outputs/
+pending-provider-modules/
