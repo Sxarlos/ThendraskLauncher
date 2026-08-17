@@ -7,6 +7,8 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.8-beta.6] - 2026-08-17
+
 ### Changed
 
 - Added a central provider module registry for approved integrations. Public
