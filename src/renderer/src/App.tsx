@@ -84,6 +84,8 @@ export default function App(): JSX.Element {
   const setUpdateCheckStatus = useApp((s) => s.setUpdateCheckStatus)
   const setImportProgress = useApp((s) => s.setImportProgress)
   const clearAllLogs = useApp((s) => s.clearAllLogs)
+  const setPage = useApp((s) => s.setPage)
+  const setPendingLibraryInstanceId = useApp((s) => s.setPendingLibraryInstanceId)
   const Current = PAGES[page]
 
   const [appReady, setAppReady] = useState(false)
@@ -128,6 +130,10 @@ export default function App(): JSX.Element {
     const unsubProgress = window.api.launch.onProgress((p) => {
       if (p.state === 'preparing') clearLogs(p.instanceId)
       setProgress(p)
+      if (p.action === 'manual-files-required') {
+        setPendingLibraryInstanceId(p.instanceId)
+        setPage('library')
+      }
     })
     const unsubLog = window.api.launch.onLog((e) => addLog(e.instanceId, e.line))
     const unsubImportProgress = window.api.modpack.onImportProgress((progress) => {
@@ -167,7 +173,7 @@ export default function App(): JSX.Element {
       unsubProgress(); unsubLog(); unsubImportProgress(); unsubChecking(); unsubUpToDate()
       unsubUpdate(); unsubDownload(); unsubReady(); unsubUpdateError()
     }
-  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setGregTechHubEnabled, setProgress, addLog, clearLogs, setError, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus, setImportProgress])
+  }, [loadTheme, loadLiteMode, refreshAccounts, refreshInstances, setGregTechHubEnabled, setProgress, addLog, clearLogs, setError, setUpdateInfo, setUpdateDownload, setUpdateCheckStatus, setImportProgress, setPage, setPendingLibraryInstanceId])
 
   useEffect(() => {
     const unsubIdle = window.api.window.onIdle(() => {

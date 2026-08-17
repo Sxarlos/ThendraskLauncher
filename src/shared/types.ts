@@ -28,7 +28,7 @@ export interface Instance {
   mcVersion: string
   loader: LoaderType
   loaderVersion?: string
-  source?: 'manual' | 'modrinth' | 'curseforge' | 'ftb' | 'ftb-legacy' | 'atlauncher' | 'technic'
+  source?: 'manual' | 'modrinth' | 'curseforge'
   externalId?: string        // Modrinth project_id or CurseForge mod id
   packVersionId?: string     // Specific version ID from Modrinth/CurseForge
   iconUrl?: string
@@ -70,9 +70,13 @@ export interface MissingCurseForgeFile {
   fileId: number
   displayName: string
   fileName?: string
+  /** Checksums supplied by CurseForge for validating a manual local file. */
+  hashes?: { sha1?: string; md5?: string }
   /** Official CurseForge page where the user can manually download this file. */
   filePageUrl?: string
-  /** Local JAR name after the user has completed the manual import. */
+  /** Instance-relative directory selected from the CurseForge project class. */
+  installDirectory?: 'mods' | 'resourcepacks' | 'shaderpacks' | 'config/paxi/datapacks'
+  /** Local file name after the user has completed the manual import. */
   importedFileName?: string
 }
 
@@ -189,7 +193,7 @@ export interface ModpackResult {
   categories: string[]
   mcVersions: string[]
   loaders: string[]
-  source: 'modrinth' | 'curseforge' | 'ftb' | 'ftb-legacy' | 'atlauncher' | 'technic'
+  source: 'modrinth' | 'curseforge'
   externalUrl?: string
   author?: string
 }
@@ -362,4 +366,5 @@ export interface LaunchProgress {
   state: LaunchState
   message?: string
   percent?: number
+  action?: 'manual-files-required'
 }

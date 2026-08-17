@@ -1,7 +1,7 @@
 import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import type { Instance, InstanceSnapshot, InstanceStorageInfo, LocalMod, MissingCurseForgeFile, ModSearchResult, PackMod, PackOverview, PackVersion, VersionChangelog } from '@shared/types'
-import { CURSEFORGE_ENABLED } from '../../../shared/features'
+import { CURSEFORGE_ENABLED, isModpackProviderEnabled } from '../../../shared/features'
 import { activeAccount, useApp } from '../store'
 import { ipcError } from '../lib/ipcError'
 import BrowseModpacks from './LibraryBrowse'
@@ -646,7 +646,7 @@ function OverviewTabContent({
           onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-3)'; e.currentTarget.style.color = 'var(--text-bright)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-soft)' }}
         >
-          View on {instance.source === 'modrinth' ? 'Modrinth' : instance.source === 'ftb' || instance.source === 'ftb-legacy' ? 'FTB' : instance.source === 'atlauncher' ? 'ATLauncher' : instance.source === 'technic' ? 'Technic' : 'CurseForge'}
+          View on {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
           </svg>
@@ -1222,9 +1222,13 @@ function MissingCurseForgeChecklist({
   const [importingKey, setImportingKey] = useState<string | null>(null)
   const [rowError, setRowError] = useState<{ key: string; message: string } | null>(null)
 
-  const importJar = async (file: MissingCurseForgeFile): Promise<void> => {
+  const importFile = async (file: MissingCurseForgeFile): Promise<void> => {
     const key = `${file.projectId}:${file.fileId}`
-    const sourcePath = await window.api.dialog.pickFile([{ name: 'Mod JAR', extensions: ['jar'] }])
+    const expectedExtension = file.fileName?.toLowerCase().endsWith('.zip') ? 'zip' : 'jar'
+    const sourcePath = await window.api.dialog.pickFile([{
+      name: expectedExtension === 'zip' ? 'Mod ZIP' : 'Mod JAR',
+      extensions: [expectedExtension]
+    }])
     if (!sourcePath) return
     setImportingKey(key)
     setRowError(null)
@@ -1290,8 +1294,8 @@ function MissingCurseForgeChecklist({
                 </div>
                 <div className="text-[10px] mt-1 truncate" style={{ color: imported ? '#4ade80' : 'var(--text-muted)' }} title={file.fileName}>
                   {imported
-                    ? `Imported as ${file.importedFileName}`
-                    : file.fileName ?? `CurseForge project ${file.projectId} · file ${file.fileId}`}
+                    ? `Imported to ${file.installDirectory ?? 'mods'}/${file.importedFileName}`
+                    : `${file.fileName ?? `CurseForge project ${file.projectId} · file ${file.fileId}`} · ${file.installDirectory ?? 'mods'}`}
                 </div>
               </div>
               <button
@@ -1304,7 +1308,7 @@ function MissingCurseForgeChecklist({
                 Download
               </button>
               <button
-                onClick={() => void importJar(file)}
+                onClick={() => void importFile(file)}
                 disabled={importing || imported}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 disabled:opacity-55"
                 style={{
@@ -1313,7 +1317,7 @@ function MissingCurseForgeChecklist({
                   border: imported ? '1px solid rgba(74,222,128,0.28)' : '1px solid transparent'
                 }}
               >
-                {imported ? '✓ Imported' : importing ? 'Importing…' : 'Import JAR'}
+                {imported ? '✓ Imported' : importing ? 'Importing…' : `Import ${file.fileName?.toLowerCase().endsWith('.zip') ? 'ZIP' : 'JAR'}`}
               </button>
             </div>
             {rowError?.key === key && (
@@ -1333,7 +1337,9 @@ function InstanceDetailPanel({
   instance: Instance
   onBack: () => void
 }): JSX.Element {
-  const sourceAvailable = instance.source !== 'curseforge' || CURSEFORGE_ENABLED
+  const sourceAvailable = !instance.source
+    || instance.source === 'manual'
+    || isModpackProviderEnabled(instance.source)
   const [detailTab, setDetailTab] = useState<'overview' | 'changelog' | 'mods' | 'manual' | 'versions' | 'console' | 'settings'>(
     instance.externalId && instance.source !== 'manual' && sourceAvailable ? 'overview' : instance.loader !== 'vanilla' ? 'mods' : 'settings'
   )
@@ -1424,13 +1430,17 @@ function InstanceDetailPanel({
     window.api.modpack.missingCurseForgeFiles(instance.id)
       .then(async (files) => {
         setMissingCurseForgeFiles(files)
+        if (files.some((file) => !file.importedFileName)) setDetailTab('manual')
         if (files.length && instance.source === 'manual') {
           const enriched = await window.api.modpack.enrichCurseForgeImport(instance.id)
           if (enriched?.source === 'curseforge') await refreshInstances()
         }
       })
       .catch(() => setMissingCurseForgeFiles([]))
-  }, [instance.id, instance.source, refreshInstances])
+  // The first request can finish before a newly selected pack has completed
+  // installing. Re-read the marker when launch reports that manual files are
+  // required so an already-mounted detail panel does not keep an empty list.
+  }, [instance.id, instance.source, progress?.action, refreshInstances])
 
   // Fetch changelog when Changelog tab is first opened
   useEffect(() => {
@@ -1686,18 +1696,10 @@ function InstanceDetailPanel({
                   style={
                     instance.source === 'modrinth'
                       ? { background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }
-                      : instance.source === 'ftb'
-                      ? { background: 'rgba(239,68,68,0.12)', color: '#f87171' }
-                      : instance.source === 'ftb-legacy'
-                      ? { background: 'rgba(251,146,60,0.12)', color: '#fb923c' }
-                      : instance.source === 'atlauncher'
-                      ? { background: 'rgba(99,102,241,0.12)', color: '#818cf8' }
-                      : instance.source === 'technic'
-                      ? { background: 'rgba(220,38,38,0.12)', color: '#f87171' }
                       : { background: 'rgba(249,115,22,0.12)', color: '#fb923c' }
                   }
                 >
-                  {instance.source === 'modrinth' ? 'Modrinth' : instance.source === 'ftb' || instance.source === 'ftb-legacy' ? 'FTB' : instance.source === 'atlauncher' ? 'ATLauncher' : instance.source === 'technic' ? 'Technic' : 'CurseForge'}
+                  {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}
                 </span>
               )}
             </div>
@@ -1895,7 +1897,7 @@ function InstanceDetailPanel({
                 Manual CurseForge files
               </h3>
               <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                Download each restricted file from CurseForge, then import its JAR here. Completed files stay checked for this instance.
+                Download each restricted file from CurseForge, then import the required JAR or ZIP here. Completed files stay checked for this instance.
               </p>
             </div>
             {remainingManualFiles === 0 && (
@@ -2313,7 +2315,7 @@ export default function Library(): JSX.Element {
                   </h2>
                   <p className="text-xs mt-1.5 leading-5 max-w-xl" style={{ color: 'var(--text-muted)' }}>
                     {missingImport.instanceName} was created with everything CurseForge allowed Thendrask to download.
-                    Use Download to open the official file page, then Import JAR after you save it.
+                    Use Download to open the official file page, then import the required JAR or ZIP after you save it.
                   </p>
                 </div>
                 <button

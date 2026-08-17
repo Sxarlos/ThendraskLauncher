@@ -14,7 +14,6 @@ import { validateArchiveEntries } from './archiveSafety'
 import type { MissingCurseForgeFile } from '@shared/types'
 import { assertCurseForgeEnabled } from './curseforgePolicy'
 import { curseForgeFetch } from './curseforgeApi'
-import { assertRestrictedCatalogsEnabled } from './catalogPolicy'
 import {
   PRISM_PROFILE_FILE,
   findPrismIconDataUrl,
@@ -28,6 +27,51 @@ import {
 const MR_BASE = 'https://api.modrinth.com/v2'
 const CF_BASE = 'https://api.curseforge.com/v1'
 const UA = 'thendrask-launcher (github.com/Sxarlos/ThendraskLauncher)'
+
+type CurseForgeInstallDirectory = NonNullable<MissingCurseForgeFile['installDirectory']>
+
+/** Map Minecraft's CurseForge project classes to their runtime directories. */
+export function curseForgeInstallDirectory(classId: number | undefined): CurseForgeInstallDirectory {
+  if (classId === 12) return 'resourcepacks'
+  if (classId === 6552) return 'shaderpacks'
+  if (classId === 6945) return 'config/paxi/datapacks'
+  return 'mods'
+}
+
+async function fetchCurseForgeProjects(projectIds: number[]): Promise<Map<number, any>> {
+  const projectsById = new Map<number, any>()
+  const uniqueIds = [...new Set(projectIds.filter(Number.isSafeInteger))]
+  for (let i = 0; i < uniqueIds.length; i += 50) {
+    const res = await curseForgeFetch(`${CF_BASE}/mods`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modIds: uniqueIds.slice(i, i + 50) })
+    })
+    if (!res.ok) throw new Error(`CurseForge ${res.status} while classifying pack files`)
+    const projects = ((await res.json() as any).data as any[]) ?? []
+    for (const project of projects) projectsById.set(Number(project.id), project)
+  }
+  return projectsById
+}
+
+function curseForgeDestination(
+  gameDir: string,
+  fileName: string,
+  installDirectory: CurseForgeInstallDirectory
+): string {
+  const dest = safeJoin(gameDir, `${installDirectory}/${fileName}`)
+  if (!dest) throw new Error(`Unsafe CurseForge file name: ${fileName}`)
+  mkdirSync(dirname(dest), { recursive: true })
+  return dest
+}
+
+export function curseForgeInstallPath(
+  instanceId: string,
+  fileName: string,
+  installDirectory: MissingCurseForgeFile['installDirectory']
+): string {
+  return curseForgeDestination(instanceGameDir(instanceId), fileName, installDirectory ?? 'mods')
+}
 
 function openValidatedZip(input: string | Buffer, label = 'Modpack'): AdmZip {
   const zip = new AdmZip(input)
@@ -44,6 +88,82 @@ function verifyPackFile(path: string, hashes?: Record<string, string>): void {
     rmSync(path, { force: true })
     throw new Error(`Checksum verification failed for ${path}`)
   }
+}
+
+function curseForgeHashes(file: any): MissingCurseForgeFile['hashes'] {
+  const hashes = Array.isArray(file?.hashes) ? file.hashes : []
+  const sha1 = hashes.find((hash: any) => Number(hash?.algo) === 1)?.value
+  const md5 = hashes.find((hash: any) => Number(hash?.algo) === 2)?.value
+  if (typeof sha1 !== 'string' && typeof md5 !== 'string') return undefined
+  return {
+    sha1: typeof sha1 === 'string' ? sha1 : undefined,
+    md5: typeof md5 === 'string' ? md5 : undefined
+  }
+}
+
+/** Validate a user-selected restricted CurseForge file without modifying it. */
+export function verifyCurseForgeManualFile(
+  path: string,
+  file: Pick<MissingCurseForgeFile, 'displayName' | 'fileName' | 'hashes'>
+): void {
+  const expected = file.hashes?.sha1 ?? file.hashes?.md5
+  const algorithm = file.hashes?.sha1 ? 'sha1' : file.hashes?.md5 ? 'md5' : null
+  if (!expected || !algorithm) return
+  const actual = createHash(algorithm).update(readFileSync(path)).digest('hex')
+  if (actual.toLowerCase() !== expected.toLowerCase()) {
+    throw new Error(
+      `${file.fileName ?? file.displayName} did not match CurseForge's ${algorithm.toUpperCase()} checksum. ` +
+      'Download the exact required file from the official CurseForge page and try again.'
+    )
+  }
+}
+
+export async function verifyMissingCurseForgeFile(
+  instanceId: string,
+  projectId: number,
+  fileId: number,
+  sourcePath: string
+): Promise<MissingCurseForgeFile> {
+  const marker = readMarker(instanceId)
+  if (!marker) throw new Error('This instance does not have modpack metadata.')
+  const match = (marker.missingCurseForgeFiles ?? [])
+    .find((file) => file.projectId === projectId && file.fileId === fileId)
+  if (!match) throw new Error('This manual file is no longer in the instance checklist.')
+
+  // Checklists created by older beta builds predate stored checksums. Refresh
+  // just this file's official metadata so those instances gain verification
+  // without forcing the user to reinstall the whole pack.
+  let markerChanged = false
+  if (!match.hashes?.sha1 && !match.hashes?.md5) {
+    try {
+      const res = await curseForgeFetch(`${CF_BASE}/mods/${projectId}/files/${fileId}`)
+      if (res.ok) {
+        const data = (await res.json() as any).data
+        match.hashes = curseForgeHashes(data)
+        match.fileName ??= typeof data?.fileName === 'string' ? data.fileName : undefined
+        markerChanged = !!match.hashes || !!match.fileName
+      }
+    } catch {
+      // Exact-filename validation remains available if metadata is temporarily
+      // unavailable or CurseForge does not supply a checksum.
+    }
+  }
+  if (!match.installDirectory) {
+    try {
+      const projectRes = await curseForgeFetch(`${CF_BASE}/mods/${projectId}`)
+      if (projectRes.ok) {
+        const project = (await projectRes.json() as any).data
+        match.installDirectory = curseForgeInstallDirectory(Number(project?.classId))
+        markerChanged = true
+      }
+    } catch {
+      // Older checklists can still fall back to mods if project metadata is
+      // temporarily unavailable.
+    }
+  }
+  if (markerChanged) writeMarker(instanceId, marker)
+  verifyCurseForgeManualFile(sourcePath, match)
+  return match
 }
 
 // ── Marker file ───────────────────────────────────────────────────────────────
@@ -499,28 +619,24 @@ async function addCurseForgeFilePageUrls(
   const projectIds = [...new Set(files.map((file) => file.projectId))]
 
   try {
-    for (let i = 0; i < projectIds.length; i += 50) {
-      const res = await curseForgeFetch(`${CF_BASE}/mods`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ modIds: projectIds.slice(i, i + 50) })
-      })
-      if (!res.ok) continue
-      const projects = ((await res.json() as any).data as any[]) ?? []
-      for (const project of projects) {
-        const websiteUrl = project.links?.websiteUrl
-        if (typeof websiteUrl !== 'string') continue
+    const projects = await fetchCurseForgeProjects(projectIds)
+    for (const project of projects.values()) {
+      const websiteUrl = project.links?.websiteUrl
+      if (typeof websiteUrl === 'string') {
         try {
           const parsed = new URL(websiteUrl)
-          if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('curseforge.com')) continue
-          siteUrlByProject.set(Number(project.id), websiteUrl.replace(/\/+$/, ''))
+          if (parsed.protocol === 'https:' && parsed.hostname.endsWith('curseforge.com')) {
+            siteUrlByProject.set(Number(project.id), websiteUrl.replace(/\/+$/, ''))
+          }
         } catch {
           // Ignore malformed project links and leave this row without a download action.
         }
       }
+    }
+    for (const file of files) {
+      file.installDirectory ??= curseForgeInstallDirectory(
+        Number(projects.get(file.projectId)?.classId)
+      )
     }
   } catch {
     // The import itself remains usable if CurseForge's project metadata is unavailable.
@@ -528,9 +644,10 @@ async function addCurseForgeFilePageUrls(
 
   return files.map((file) => {
     const projectUrl = siteUrlByProject.get(file.projectId)
+    const enriched = { ...file, installDirectory: file.installDirectory ?? 'mods' as const }
     return projectUrl
-      ? { ...file, filePageUrl: `${projectUrl}/files/${file.fileId}` }
-      : file
+      ? { ...enriched, filePageUrl: `${projectUrl}/files/${file.fileId}` }
+      : enriched
   })
 }
 
@@ -743,71 +860,6 @@ export async function installMrpack(
 
   const marker: PackMarker = {
     packVersionId: versionData.id ?? packVersionId,
-    loaderType,
-    loaderVersion
-  }
-  writeMarker(instanceId, marker)
-  return marker
-}
-
-// ── FTB pack ─────────────────────────────────────────────────────────────────
-
-const FTB_API = 'https://api.feed-the-beast.com/v1/modpacks'
-
-export async function installFtbPack(
-  instanceId: string,
-  packId: string,
-  versionId: string | undefined,
-  onProgress: (msg: string, pct?: number) => void
-): Promise<PackMarker> {
-  const gameDir = instanceGameDir(instanceId)
-
-  onProgress('Fetching modpack info…')
-
-  let resolvedVersionId: number | undefined = versionId ? parseInt(versionId, 10) : undefined
-  if (!resolvedVersionId) {
-    const packRes = await fetch(`${FTB_API}/public/modpack/${packId}`, { headers: { 'User-Agent': UA } })
-    if (!packRes.ok) throw new Error(`FTB ${packRes.status}`)
-    const pack = await packRes.json() as any
-    const versions: any[] = pack.versions ?? []
-    if (!versions.length) throw new Error('No versions available for this FTB modpack')
-    resolvedVersionId = versions[versions.length - 1].id
-  }
-
-  onProgress('Fetching version details…')
-  const verRes = await fetch(`${FTB_API}/public/modpack/${packId}/${resolvedVersionId}`, { headers: { 'User-Agent': UA } })
-  if (!verRes.ok) throw new Error(`FTB ${verRes.status}`)
-  const version = await verRes.json() as any
-
-  const targets: any[] = version.targets ?? []
-  const loaderTarget = targets.find((t: any) => t.type === 'modloader')
-  const loaderType = loaderTarget?.name?.toLowerCase() ?? 'vanilla'
-  const loaderVersion: string | undefined = loaderTarget?.version
-
-  const files: any[] = (version.files ?? []).filter((f: any) => !f.serveronly)
-
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i]
-    if (!f.url) continue
-
-    const relPath = [...String(f.path ?? '').split('/').filter(Boolean), String(f.name)].join('/')
-    const filePath = safeJoin(gameDir, relPath)
-    if (!filePath) continue
-    const fileDir = dirname(filePath)
-
-    if (!existsSync(fileDir)) mkdirSync(fileDir, { recursive: true })
-    if (!existsSync(filePath)) {
-      await downloadToFile(f.url, filePath)
-    }
-
-    const pct = Math.round(((i + 1) / files.length) * 90)
-    onProgress(`Downloading files… (${i + 1}/${files.length})`, pct)
-  }
-
-  injectServersDat(gameDir)
-
-  const marker: PackMarker = {
-    packVersionId: String(version.id ?? resolvedVersionId),
     loaderType,
     loaderVersion
   }
@@ -1056,8 +1108,9 @@ export async function importLocalPack(
 
     const modEntries: Array<{ projectID: number; fileID: number; required: boolean }> =
       (manifest.files ?? []).filter((m: any) => m.required)
-    const modsDir = join(gameDir, 'mods')
-    if (!existsSync(modsDir)) mkdirSync(modsDir, { recursive: true })
+    const curseForgeProjects = await fetchCurseForgeProjects(
+      modEntries.map((entry) => entry.projectID)
+    )
     const overridePrefix = `${manifest.overrides ?? 'overrides'}/`
     const bundledEntryNames = new Set(
       zip.getEntries()
@@ -1082,24 +1135,29 @@ export async function importLocalPack(
       const returnedIds = new Set(files.map((file) => Number(file.id)))
       for (const file of files) {
         done++
-        const dest = safeJoin(modsDir, String(file.fileName))
-        if (!dest) throw new Error(`Unsafe CurseForge file name: ${file.fileName}`)
-        const bundledPath = `${overridePrefix}mods/${String(file.fileName)}`.toLowerCase()
-        const isBundled = bundledEntryNames.has(bundledPath)
         const manifestEntry = modEntries.find((entry) => entry.fileID === file.id)
+        const projectId = Number(file.modId ?? manifestEntry?.projectID)
+        const installDirectory = curseForgeInstallDirectory(
+          Number(curseForgeProjects.get(projectId)?.classId)
+        )
+        const dest = curseForgeDestination(gameDir, String(file.fileName), installDirectory)
+        const bundledPath = `${overridePrefix}${installDirectory}/${String(file.fileName)}`.toLowerCase()
+        const isBundled = bundledEntryNames.has(bundledPath)
         const downloadUrl = isBundled
           ? null
           : await getCurseForgeDownloadUrl(
-              Number(file.modId ?? manifestEntry?.projectID),
+              projectId,
               Number(file.id),
               file.downloadUrl
             )
         if (!isBundled && !downloadUrl) {
           unavailable.push({
-            projectId: Number(file.modId ?? manifestEntry?.projectID),
+            projectId,
             fileId: Number(file.id),
             displayName: file.displayName ?? file.fileName ?? `CurseForge file ${file.id}`,
-            fileName: file.fileName ? String(file.fileName) : undefined
+            fileName: file.fileName ? String(file.fileName) : undefined,
+            hashes: curseForgeHashes(file),
+            installDirectory
           })
         } else if (!isBundled && !existsSync(dest)) {
           await downloadToFile(downloadUrl!, dest)
@@ -1114,7 +1172,10 @@ export async function importLocalPack(
         unavailable.push({
           projectId: missingMetadata.projectID,
           fileId: missingMetadata.fileID,
-          displayName: `CurseForge project ${missingMetadata.projectID}, file ${missingMetadata.fileID}`
+          displayName: `CurseForge project ${missingMetadata.projectID}, file ${missingMetadata.fileID}`,
+          installDirectory: curseForgeInstallDirectory(
+            Number(curseForgeProjects.get(missingMetadata.projectID)?.classId)
+          )
         })
       }
     }
@@ -1170,161 +1231,6 @@ export async function importLocalPack(
   )
 }
 
-// ── ATLauncher pack ───────────────────────────────────────────────────────────
-
-const ATL_CDN = 'https://download.nodecdn.net/containers/atl'
-const ATL_INST_UA = 'Sxarlos/ThendraskLauncher (github.com/Sxarlos/ThendraskLauncher)'
-
-export async function installAtlPack(
-  instanceId: string,
-  packId: string,
-  packVersionId: string | undefined,
-  onProgress: (msg: string, pct?: number) => void
-): Promise<PackMarker> {
-  assertRestrictedCatalogsEnabled()
-  const gameDir = instanceGameDir(instanceId)
-
-  onProgress('Fetching pack list…')
-  const listRes = await fetch(`${ATL_CDN}/launcher/json/packsnew.json`, {
-    headers: { 'User-Agent': ATL_INST_UA }
-  })
-  if (!listRes.ok) throw new Error(`ATLauncher pack list fetch failed: ${listRes.status}`)
-  const packs = await listRes.json() as any[]
-  const pack = packs.find((p: any) => String(p.id) === packId)
-  if (!pack) throw new Error(`ATLauncher pack ${packId} not found in pack list`)
-
-  const safeName = pack.name.replace(/[^A-Za-z0-9]/g, '')
-  const allVersions: any[] = pack.versions ?? []
-  const targetVersion = packVersionId ?? allVersions[allVersions.length - 1]?.version
-  if (!targetVersion) throw new Error('No versions available for this ATLauncher pack')
-
-  onProgress('Fetching version details…')
-  const versionUrl = `${ATL_CDN}/packs/${safeName}/versions/${targetVersion}/${safeName}.json`
-  const versionRes = await fetch(versionUrl, { headers: { 'User-Agent': ATL_INST_UA } })
-  if (!versionRes.ok) throw new Error(`ATLauncher version JSON fetch failed: ${versionRes.status}`)
-  const versionData = await versionRes.json() as any
-
-  const loaderRaw: string = (versionData.loader?.type ?? 'vanilla').toLowerCase()
-  const loaderType = loaderRaw === 'forge' ? 'forge'
-    : loaderRaw === 'fabric' ? 'fabric'
-    : loaderRaw === 'neoforge' ? 'neoforge'
-    : loaderRaw === 'quilt' ? 'quilt'
-    : 'vanilla'
-  const loaderVersion: string | undefined = versionData.loader?.version
-
-  const mods: any[] = (versionData.mods ?? []).filter(
-    (m: any) => m.type === 'mods' || m.type === 'mod'
-  )
-  const modsDir = join(gameDir, 'mods')
-  if (existsSync(modsDir)) {
-    for (const f of readdirSync(modsDir)) {
-      try { rmSync(join(modsDir, f), { force: true }) } catch { /* skip locked files */ }
-    }
-  }
-  mkdirSync(modsDir, { recursive: true })
-
-  for (let i = 0; i < mods.length; i++) {
-    const mod = mods[i]
-    if (!mod.url) throw new Error(`ATLauncher mod ${mod.name ?? i + 1} has no download URL`)
-    const fileName = mod.file ?? `${(mod.name ?? `mod_${i}`).replace(/[^A-Za-z0-9._-]/g, '_')}.jar`
-    const destPath = safeJoin(modsDir, String(fileName))
-    if (!destPath) throw new Error(`Unsafe ATLauncher file name: ${fileName}`)
-    if (!existsSync(destPath)) {
-      await downloadToFile(mod.url, destPath)
-    }
-    onProgress(`Downloading mods… (${i + 1}/${mods.length})`, Math.round(((i + 1) / mods.length) * 80))
-  }
-
-  // Download and extract config overrides
-  const configsUrl = `${ATL_CDN}/packs/${safeName}/versions/${targetVersion}/Configs.zip`
-  try {
-    onProgress('Downloading configs…', 85)
-    const configRes = await fetch(configsUrl, { headers: { 'User-Agent': ATL_INST_UA } })
-    if (configRes.ok) {
-      onProgress('Extracting configs…', 90)
-      const configBuf = Buffer.from(await configRes.arrayBuffer())
-      const configZip = openValidatedZip(configBuf, 'ATLauncher configuration')
-      configZip.extractAllTo(gameDir, true)
-    }
-  } catch { /* configs zip might not exist for all packs */ }
-
-  const marker: PackMarker = {
-    packVersionId: targetVersion,
-    loaderType,
-    loaderVersion
-  }
-  writeMarker(instanceId, marker)
-  return marker
-}
-
-// ── Technic pack ─────────────────────────────────────────────────────────────
-
-const TECHNIC_API_INST = 'https://api.technicpack.net'
-const TECHNIC_INST_UA = 'Sxarlos/ThendraskLauncher (github.com/Sxarlos/ThendraskLauncher)'
-
-export async function installTechnicPack(
-  instanceId: string,
-  slug: string,
-  packVersionId: string | undefined,
-  onProgress: (msg: string, pct?: number) => void
-): Promise<PackMarker> {
-  assertRestrictedCatalogsEnabled()
-  const gameDir = instanceGameDir(instanceId)
-
-  onProgress('Fetching modpack info…')
-  const packRes = await fetch(`${TECHNIC_API_INST}/modpack/${slug}?build=latest`, {
-    headers: { 'User-Agent': TECHNIC_INST_UA }
-  })
-  if (!packRes.ok) throw new Error(`Technic ${packRes.status}`)
-  const pack = await packRes.json() as any
-
-  const targetBuild = packVersionId ?? pack.recommended ?? pack.currentBuild
-  if (!targetBuild) throw new Error('No build available for this Technic pack')
-
-  const loaderType = pack.forge ? 'forge' : 'vanilla'
-  const rawForge: string = pack.forge ?? ''
-  const loaderVersion: string | undefined = rawForge ? rawForge.replace(/^forge-/, '') : undefined
-
-  if (pack.solder) {
-    onProgress('Fetching build details…')
-    const solderRes = await fetch(`${pack.solder}/api/modpack/${slug}/${targetBuild}`, {
-      headers: { 'User-Agent': TECHNIC_INST_UA }
-    })
-    if (!solderRes.ok) throw new Error(`Solder API ${solderRes.status}`)
-    const build = await solderRes.json() as any
-
-    const mods: any[] = build.mods ?? []
-    for (let i = 0; i < mods.length; i++) {
-      const mod = mods[i]
-      if (!mod.url) throw new Error(`Technic mod ${mod.name ?? i + 1} has no download URL`)
-      onProgress(`Downloading ${mod.name ?? `mod ${i + 1}`}…`, Math.round((i / mods.length) * 90))
-      const modRes = await fetch(mod.url)
-      if (!modRes.ok) throw new Error(`Technic mod download failed: ${modRes.status}`)
-      const buf = Buffer.from(await modRes.arrayBuffer())
-      const zip = openValidatedZip(buf, 'Technic mod')
-      zip.extractAllTo(gameDir, true)
-    }
-  } else {
-    onProgress('Downloading modpack archive…')
-    const downloadUrl = `${TECHNIC_API_INST}/modpack/${slug}/download/${targetBuild}`
-    const packZipRes = await fetch(downloadUrl, {
-      headers: { 'User-Agent': TECHNIC_INST_UA },
-      redirect: 'follow'
-    })
-    if (!packZipRes.ok) throw new Error(`Technic download ${packZipRes.status}`)
-    const buf = Buffer.from(await packZipRes.arrayBuffer())
-    onProgress('Extracting modpack…', 85)
-    const zip = openValidatedZip(buf, 'Technic configuration')
-    zip.extractAllTo(gameDir, true)
-  }
-
-  injectServersDat(gameDir)
-
-  const marker: PackMarker = { packVersionId: targetBuild, loaderType, loaderVersion }
-  writeMarker(instanceId, marker)
-  return marker
-}
-
 // ── CurseForge zip ────────────────────────────────────────────────────────────
 
 export async function installCfPack(
@@ -1348,7 +1254,10 @@ export async function installCfPack(
     fileData = (await res.json() as any).data?.[0]
   }
 
-  if (!fileData?.downloadUrl) {
+  const packDownloadUrl = fileData
+    ? await getCurseForgeDownloadUrl(Number(modId), Number(fileData.id), fileData.downloadUrl)
+    : null
+  if (!packDownloadUrl) {
     throw new Error(
       'This CurseForge pack blocks direct third-party downloads. Export it as a ZIP from the ' +
       'CurseForge app, then import that ZIP.'
@@ -1356,7 +1265,7 @@ export async function installCfPack(
   }
 
   onProgress('Downloading modpack archive…')
-  const packRes = await fetch(fileData.downloadUrl, { headers: { 'User-Agent': UA } })
+  const packRes = await fetch(packDownloadUrl, { headers: { 'User-Agent': UA } })
   if (!packRes.ok) throw new Error(`Failed to download pack: ${packRes.status}`)
   const packBuf = Buffer.from(await packRes.arrayBuffer())
 
@@ -1381,6 +1290,15 @@ export async function installCfPack(
   // version don't end up alongside the new version's mods (duplicate JARs crash NeoForge).
   const modEntries: Array<{ projectID: number; fileID: number; required: boolean }> =
     (manifest.files ?? []).filter((m: any) => m.required)
+  const curseForgeProjects = await fetchCurseForgeProjects(
+    modEntries.map((entry) => entry.projectID)
+  )
+  const overridePrefix = `${manifest.overrides ?? 'overrides'}/`
+  const bundledEntryNames = new Set(
+    zip.getEntries()
+      .filter((entry) => !entry.isDirectory)
+      .map((entry) => entry.entryName.toLowerCase())
+  )
   const modsDir = join(gameDir, 'mods')
   if (existsSync(modsDir)) {
     for (const f of readdirSync(modsDir)) {
@@ -1392,6 +1310,7 @@ export async function installCfPack(
   onProgress(`Fetching download URLs for ${modEntries.length} mods…`)
   const BATCH = 100
   let done = 0
+  const unavailable: MissingCurseForgeFile[] = []
 
   for (let i = 0; i < modEntries.length; i += BATCH) {
     const batch = modEntries.slice(i, i + BATCH)
@@ -1402,19 +1321,46 @@ export async function installCfPack(
     })
     if (!res.ok) throw new Error(`CurseForge ${res.status}`)
     const files = (await res.json() as any).data as any[] ?? []
-    if (files.length !== batch.length) throw new Error('CurseForge did not return every required mod file.')
+    const returnedIds = new Set(files.map((file) => Number(file.id)))
 
     for (const file of files) {
       done++
-      if (!file.downloadUrl) {
-        throw new Error(
-          `${file.displayName ?? file.fileName ?? `CurseForge file ${file.id}`} blocks third-party downloads. ` +
-          'Export the pack with that mod included, then import the ZIP.'
-        )
+      const manifestEntry = batch.find((entry) => entry.fileID === Number(file.id))
+      const projectId = Number(file.modId ?? manifestEntry?.projectID)
+      const installDirectory = curseForgeInstallDirectory(
+        Number(curseForgeProjects.get(projectId)?.classId)
+      )
+      const dest = curseForgeDestination(gameDir, String(file.fileName), installDirectory)
+      const bundledPath = `${overridePrefix}${installDirectory}/${String(file.fileName)}`.toLowerCase()
+      const isBundled = bundledEntryNames.has(bundledPath)
+      const downloadUrl = isBundled
+        ? null
+        : await getCurseForgeDownloadUrl(projectId, Number(file.id), file.downloadUrl)
+      if (!isBundled && !downloadUrl) {
+        unavailable.push({
+          projectId,
+          fileId: Number(file.id),
+          displayName: file.displayName ?? file.fileName ?? `CurseForge file ${file.id}`,
+          fileName: file.fileName ? String(file.fileName) : undefined,
+          hashes: curseForgeHashes(file),
+          installDirectory
+        })
+      } else if (!isBundled && !existsSync(dest)) {
+        await downloadToFile(downloadUrl!, dest)
       }
-      const dest = safeJoin(modsDir, String(file.fileName))
-      if (!dest) throw new Error(`Unsafe CurseForge file name: ${file.fileName}`)
-      if (!existsSync(dest)) await downloadToFile(file.downloadUrl, dest)
+      const pct = Math.round((done / modEntries.length) * 85)
+      onProgress(`Downloading mods… (${done}/${modEntries.length})`, pct)
+    }
+    for (const missingMetadata of batch.filter((entry) => !returnedIds.has(entry.fileID))) {
+      done++
+      unavailable.push({
+        projectId: missingMetadata.projectID,
+        fileId: missingMetadata.fileID,
+        displayName: `CurseForge project ${missingMetadata.projectID}, file ${missingMetadata.fileID}`,
+        installDirectory: curseForgeInstallDirectory(
+          Number(curseForgeProjects.get(missingMetadata.projectID)?.classId)
+        )
+      })
       const pct = Math.round((done / modEntries.length) * 85)
       onProgress(`Downloading mods… (${done}/${modEntries.length})`, pct)
     }
@@ -1422,7 +1368,6 @@ export async function installCfPack(
 
   // Extract overrides
   onProgress('Extracting config overrides…', 90)
-  const overridePrefix = `${manifest.overrides ?? 'overrides'}/`
   for (const entry of zip.getEntries()) {
     if (!entry.entryName.startsWith(overridePrefix) || entry.isDirectory) continue
     const rel = entry.entryName.slice(overridePrefix.length)
@@ -1435,10 +1380,13 @@ export async function installCfPack(
 
   injectServersDat(gameDir)
 
+  const missingFiles = await addCurseForgeFilePageUrls(unavailable)
+
   const marker: PackMarker = {
     packVersionId: String(fileData.id),
     loaderType,
-    loaderVersion
+    loaderVersion,
+    missingCurseForgeFiles: missingFiles
   }
   writeMarker(instanceId, marker)
   return marker

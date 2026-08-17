@@ -13,14 +13,33 @@ A custom Minecraft launcher built with Electron and React. It is **just an inter
 ## Features
 
 - **Microsoft account login:** secure OAuth via `msmc`. Only the refresh token is stored, encrypted with the OS keychain (`safeStorage`). If secure storage is unavailable, the launcher refuses to persist the token rather than falling back to plaintext. Your password is never seen or stored.
-- **Modpack browser:** search and install modpacks from Modrinth, CurseForge, and FTB. Modrinth supports sort (Popular / Updated / Newest) and category filters.
+- **Modpack browser:** search and install modpacks from Modrinth and, in approved builds, CurseForge. Modrinth supports sort (Popular / Updated / Newest) and category filters.
 - **Custom modpack builder:** create a Fabric, Forge, NeoForge, or Quilt instance, search compatible client mods on Modrinth, install required dependencies automatically, and enable, disable, remove, or update mods in-app.
 
 > **CurseForge integration uses the Thendrask relay.** The approved project API key stays on the hosted relay and is never included in the desktop app. CurseForge project distribution restrictions are respected.
 
-> **ATLauncher and Technic catalogue integrations are unavailable in public
-> builds** pending explicit provider permission. Public builds do not browse or
-> install packs from those catalogues.
+> **FTB, FTB Legacy, ATLauncher, and Technic integrations are not included in
+> the application source, repository, or public builds** while permission is
+> pending. Reference implementations are retained locally in a Git-ignored
+> holding directory and cannot be compiled or published accidentally.
+
+## Provider module system
+
+Modpack catalogues are registered centrally in `src/shared/features.ts`. The
+registry is the source of truth for which provider modules the renderer may
+display. Main-process IPC, preload APIs, shared source types, installers, tests,
+and release builds contain only the approved providers:
+
+- **Modrinth** — public API integration, always available.
+- **CurseForge** — approved integration, enabled in public builds; its API key
+  remains on the Thendrask relay and is never included in the desktop client.
+
+Pending providers are kept in a local, Git-ignored `pending-provider-modules/`
+holding directory with a `.disabled` extension. Adding one back requires
+documented approval, a current API review, restoration of its isolated provider
+module and IPC surface, provider-specific tests, and a clean production build.
+This prevents dormant or unapproved provider code from entering a beta simply
+because an environment variable was changed.
 
 - **Instance management:** create vanilla or modded instances for any Minecraft version. Each instance has its own isolated `.minecraft` folder.
 - **Launch:** downloads the game version and assets on first run via `minecraft-launcher-core`. Progress and live game logs stream onto the instance card.
@@ -115,7 +134,3 @@ The launcher self-updates via [electron-updater](https://www.electron.build/auto
 6. The release workflow runs typecheck, lint, tests, and a production build before packaging, then publishes the matching `CHANGELOG.md` section as the GitHub release notes. Prerelease tags build Windows, macOS, and Linux; stable tags publish the Windows stable channel.
 
 > **macOS note:** because the macOS build is currently unsigned, the update banner and download work, but Squirrel.Mac only *applies* the update once the app is code-signed. See [CODE_SIGNING.md](CODE_SIGNING.md).
-
-## Acknowledgements
-
-- [Prism Launcher](https://github.com/PrismLauncher/PrismLauncher): their open-source code was referenced to discover the ATLauncher CDN endpoint and the required User-Agent header used to fetch the pack list.
