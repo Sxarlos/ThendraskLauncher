@@ -28,8 +28,6 @@ const RATE_LIMIT = 120
 const CURSEFORGE_BASE = 'https://api.curseforge.com'
 const CURSEFORGE_TIMEOUT_MS = 12_000
 const CURSEFORGE_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
-const CURSEFORGE_CACHE_TTL_MS = 60_000
-const curseForgeCache = new Map()
 
 app.use((req, res, next) => {
   const key = req.ip
@@ -53,9 +51,6 @@ setInterval(() => {
   for (const [ip, entry] of rateLimits) {
     if (entry.startedAt < Date.now() - RATE_WINDOW_MS) rateLimits.delete(ip)
   }
-  for (const [key, entry] of curseForgeCache) {
-    if (entry.expiresAt < Date.now()) curseForgeCache.delete(key)
-  }
 }, 60_000)
 
 // Authenticated CurseForge API proxy. The API key stays on this server; the
@@ -71,14 +66,6 @@ app.use('/curseforge', async (req, res) => {
   }
   if (req.method === 'POST' && !validCurseForgeBody(pathname, req.body)) {
     return res.status(400).json({ error: 'invalid_curseforge_request' })
-  }
-
-  const cacheKey = `${pathname}${requestUrl.search}`
-  const cached = req.method === 'GET' ? curseForgeCache.get(cacheKey) : null
-  if (cached && cached.expiresAt > Date.now()) {
-    res.setHeader('Content-Type', cached.contentType)
-    res.setHeader('X-Relay-Cache', 'HIT')
-    return res.status(cached.status).send(cached.body)
   }
 
   const controller = new AbortController()
@@ -103,17 +90,8 @@ app.use('/curseforge', async (req, res) => {
       return res.status(502).json({ error: 'curseforge_response_too_large' })
     }
     const contentType = upstream.headers.get('content-type') || 'application/json'
-    if (req.method === 'GET' && upstream.ok) {
-      if (curseForgeCache.size >= 250) curseForgeCache.delete(curseForgeCache.keys().next().value)
-      curseForgeCache.set(cacheKey, {
-        status: upstream.status,
-        contentType,
-        body,
-        expiresAt: Date.now() + CURSEFORGE_CACHE_TTL_MS
-      })
-    }
     res.setHeader('Content-Type', contentType)
-    res.setHeader('X-Relay-Cache', 'MISS')
+    res.setHeader('Cache-Control', 'no-store')
     return res.status(upstream.status).send(body)
   } catch (error) {
     if (error?.name === 'AbortError') return res.status(504).json({ error: 'curseforge_timeout' })

@@ -6,35 +6,32 @@
 export const CURSEFORGE_ENABLED =
   typeof __CURSEFORGE_ENABLED__ !== 'undefined' && __CURSEFORGE_ENABLED__
 
-/**
- * ATLauncher and Technic are excluded from public builds unless the
- * distributor has obtained permission to reuse their catalogue content.
- */
-export const RESTRICTED_CATALOGS_ENABLED =
-  typeof __RESTRICTED_CATALOGS_ENABLED__ !== 'undefined'
-  && __RESTRICTED_CATALOGS_ENABLED__
-
 export type ModpackProvider =
   | 'modrinth'
   | 'curseforge'
-  | 'ftb'
-  | 'ftb-legacy'
-  | 'atlauncher'
-  | 'technic'
 
 const ALL_MODPACK_PROVIDERS: readonly ModpackProvider[] = [
   'modrinth',
-  'curseforge',
-  'ftb',
-  'ftb-legacy',
-  'atlauncher',
-  'technic'
+  'curseforge'
 ]
 
+export interface ModpackProviderModule {
+  id: ModpackProvider
+  label: string
+  enabled: boolean
+  approval: 'approved' | 'pending'
+}
+
+/** Single registry used by the UI and policy layer to expose provider modules. */
+export const MODPACK_PROVIDER_MODULES: readonly ModpackProviderModule[] = [
+  { id: 'modrinth', label: 'Modrinth', enabled: true, approval: 'approved' },
+  { id: 'curseforge', label: 'CurseForge', enabled: CURSEFORGE_ENABLED, approval: 'approved' }
+]
+
+export function isModpackProviderEnabled(provider: ModpackProvider): boolean {
+  return MODPACK_PROVIDER_MODULES.find((module) => module.id === provider)?.enabled ?? false
+}
+
 export function availableModpackProviders(): ModpackProvider[] {
-  return ALL_MODPACK_PROVIDERS.filter(
-    (provider) =>
-      (provider !== 'curseforge' || CURSEFORGE_ENABLED)
-      && (!['atlauncher', 'technic'].includes(provider) || RESTRICTED_CATALOGS_ENABLED)
-  )
+  return ALL_MODPACK_PROVIDERS.filter(isModpackProviderEnabled)
 }

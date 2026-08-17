@@ -5,8 +5,7 @@ const args = process.argv.slice(2)
 const result = spawnSync(command, args, {
   env: {
     ...process.env,
-    CURSEFORGE_ENABLED: 'true',
-    RESTRICTED_CATALOGS_ENABLED: 'false'
+    CURSEFORGE_ENABLED: 'true'
   },
   shell: process.platform === 'win32',
   stdio: 'inherit'

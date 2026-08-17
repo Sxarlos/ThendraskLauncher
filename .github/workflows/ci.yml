@@ -35,5 +35,4 @@ jobs:
       - name: Build
         env:
           CURSEFORGE_ENABLED: 'true'
-          RESTRICTED_CATALOGS_ENABLED: 'false'
         run: npm run build

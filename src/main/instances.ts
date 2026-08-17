@@ -5,9 +5,21 @@ import { instancesDir, readJson, writeJson } from './persist'
 import { isValidInstanceId, safeJoin } from './safePath'
 
 const FILE = 'instances.json'
+const APPROVED_INSTANCE_SOURCES = new Set<NonNullable<Instance['source']>>([
+  'manual',
+  'modrinth',
+  'curseforge'
+])
 
 function load(): Instance[] {
-  return readJson<Instance[]>(FILE, [])
+  type StoredInstance = Omit<Instance, 'source'> & { source?: string }
+  return readJson<StoredInstance[]>(FILE, []).map(({ source, ...instance }) => {
+    const normalizedSource = source ?? 'manual'
+    if (APPROVED_INSTANCE_SOURCES.has(normalizedSource as NonNullable<Instance['source']>)) {
+      return { ...instance, source: normalizedSource as Instance['source'] }
+    }
+    return { ...instance, source: 'manual', externalId: undefined, packVersionId: undefined }
+  })
 }
 
 function save(list: Instance[]): void {
@@ -16,6 +28,19 @@ function save(list: Instance[]): void {
 
 export function listInstances(): Instance[] {
   return load().sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0))
+}
+
+/** Remove CurseForge gallery URLs saved by older builds. CurseForge images are now fetched live only. */
+export function removePersistedCurseForgeScreenshots(): number {
+  const list = load()
+  let changed = 0
+  for (const instance of list) {
+    if (instance.source !== 'curseforge' || !instance.screenshotUrls?.length) continue
+    delete instance.screenshotUrls
+    changed++
+  }
+  if (changed > 0) save(list)
+  return changed
 }
 
 export function getInstance(id: string): Instance | undefined {

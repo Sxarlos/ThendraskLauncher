@@ -124,15 +124,7 @@ const api = {
     modrinth: (params: BrowseParams): Promise<ModpackResult[]> =>
       ipcRenderer.invoke('browse:modrinth', params),
     curseforge: (params: BrowseParams): Promise<ModpackResult[]> =>
-      ipcRenderer.invoke('browse:curseforge', params),
-    ftb: (params: BrowseParams): Promise<ModpackResult[]> =>
-      ipcRenderer.invoke('browse:ftb', params),
-    ftbLegacy: (params: BrowseParams, category: string): Promise<ModpackResult[]> =>
-      ipcRenderer.invoke('browse:ftb-legacy', params, category),
-    atlauncher: (params: BrowseParams, category: string): Promise<ModpackResult[]> =>
-      ipcRenderer.invoke('browse:atlauncher', params, category),
-    technic: (params: BrowseParams): Promise<ModpackResult[]> =>
-      ipcRenderer.invoke('browse:technic', params)
+      ipcRenderer.invoke('browse:curseforge', params)
   },
   loader: {
     versions: (loader: string, mcVersion: string): Promise<string[]> =>

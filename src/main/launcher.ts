@@ -19,9 +19,6 @@ import {
   readMarker,
   installMrpack,
   installCfPack,
-  installFtbPack,
-  installAtlPack,
-  installTechnicPack,
   resolveFabricVersion,
   resolveQuiltVersion,
   resolveForgeVersion,
@@ -178,27 +175,6 @@ async function launchReservedInstance(
             instance.packVersionId,
             (msg, pct) => setState(instanceId, 'downloading', msg, pct)
           )
-        } else if (instance.source === 'ftb' || instance.source === 'ftb-legacy') {
-          effectiveMarker = await installFtbPack(
-            instanceId,
-            instance.externalId,
-            instance.packVersionId,
-            (msg, pct) => setState(instanceId, 'downloading', msg, pct)
-          )
-        } else if (instance.source === 'atlauncher') {
-          effectiveMarker = await installAtlPack(
-            instanceId,
-            instance.externalId,
-            instance.packVersionId,
-            (msg, pct) => setState(instanceId, 'downloading', msg, pct)
-          )
-        } else if (instance.source === 'technic') {
-          effectiveMarker = await installTechnicPack(
-            instanceId,
-            instance.externalId,
-            instance.packVersionId,
-            (msg, pct) => setState(instanceId, 'downloading', msg, pct)
-          )
         }
       } catch (err) {
         console.error('[Launcher] Modpack install failed:', err)
@@ -221,6 +197,20 @@ async function launchReservedInstance(
       // Persist the installed version ID so subsequent launches skip re-downloading.
       if (effectiveMarker.packVersionId && effectiveMarker.packVersionId !== instance.packVersionId) {
         updateInstance(instanceId, { packVersionId: effectiveMarker.packVersionId })
+      }
+
+      const remainingManualFiles = (effectiveMarker.missingCurseForgeFiles ?? [])
+        .filter((file) => !file.importedFileName).length
+      if (remainingManualFiles > 0) {
+        const message =
+          `${remainingManualFiles} CurseForge file${remainingManualFiles === 1 ? '' : 's'} must be installed manually before this pack can launch.`
+        emit({
+          instanceId,
+          state: 'error',
+          message,
+          action: 'manual-files-required'
+        })
+        throw new Error(message)
       }
     }
   }

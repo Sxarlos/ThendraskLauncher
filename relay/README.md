@@ -10,6 +10,7 @@ A small Express service that powers the Thendrask Launcher friends list and keep
 - `/curseforge/v1/...` forwards only the CurseForge API operations used by the launcher. The server injects the API key; clients never receive it.
 
 Requests are rate-limited, JSON bodies are capped at 4 KB, presence fields are sanitized, and the relay holds at most 10,000 active peers.
+CurseForge API responses are forwarded without being cached and are returned with `Cache-Control: no-store`.
 
 ## Run locally
 

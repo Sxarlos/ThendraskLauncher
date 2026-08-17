@@ -7,6 +7,27 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Added a central provider module registry for approved integrations. Public
+  builds currently include only Modrinth and CurseForge.
+- Removed FTB, FTB Legacy, ATLauncher, and Technic implementation code, IPC
+  channels, and build flags from the application and public release source
+  pending provider approval. Local reference modules are excluded from Git.
+
+### Fixed
+
+- CurseForge API responses are no longer cached by the relay, and CurseForge
+  gallery screenshots are now fetched live without being saved to instance
+  records. Existing saved CurseForge screenshot URLs are removed on startup.
+- CurseForge installs now keep API-accessible files and open the manual-file
+  checklist when a pack contains mods that block third-party downloads,
+  instead of cancelling the entire installation. Manual files can now be
+  imported as either JARs or ZIPs and are checked against CurseForge's SHA-1
+  or MD5 metadata before being copied into the instance. Mods, resource packs,
+  shaders, and Paxi data packs are routed to their correct runtime directories
+  from the CurseForge project class.
+
 ## [0.5.8-beta.5] - 2026-08-13
 
 ### Added
