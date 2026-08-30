@@ -7,6 +7,16 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-08-30
+
+### Changed
+
+- Promoted the tested `0.5.8-beta.6` build to the stable Windows update
+  channel after its public beta soak period.
+- Stable `0.5.8` includes the launcher, modpack, skin, updater, Java runtime,
+  provider-safety, and reliability improvements documented in the beta
+  entries below.
+
 ## [0.5.8-beta.6] - 2026-08-17
 
 ### Changed
@@ -231,7 +241,10 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Earlier release history is available on the
 [GitHub Releases page](https://github.com/Sxarlos/ThendraskLauncher/releases).
 
-[Unreleased]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.4...HEAD
+[Unreleased]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8...HEAD
+[0.5.8]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.6...v0.5.8
+[0.5.8-beta.6]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.5...v0.5.8-beta.6
+[0.5.8-beta.5]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.4...v0.5.8-beta.5
 [0.5.8-beta.4]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.3...v0.5.8-beta.4
 [0.5.8-beta.3]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.2...v0.5.8-beta.3
 [0.5.8-beta.2]: https://github.com/Sxarlos/ThendraskLauncher/compare/v0.5.8-beta.1...v0.5.8-beta.2
