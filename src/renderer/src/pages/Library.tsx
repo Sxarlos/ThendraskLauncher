@@ -6,6 +6,9 @@ import { activeAccount, useApp } from '../store'
 import { ipcError } from '../lib/ipcError'
 import BrowseModpacks from './LibraryBrowse'
 import MyInstancesContent from './LibraryInstances'
+import PackContent from '../components/PackContent'
+import ContentFilters from '../components/ContentFilters'
+import type { ContentSearchOptions } from '@shared/types'
 import { progressLabel } from './libraryUtils'
 
 /* ════════════════════════════════════════════════
@@ -851,7 +854,7 @@ function InstanceSettingsTab({
     const trimmed = name.trim()
     if (!trimmed || trimmed === instance.name) return
     try {
-      await (window.api as any).instances?.update?.(instance.id, { name: trimmed })
+      await window.api.instances.update(instance.id, { name: trimmed })
       onUpdated()
       setNameSaved(true)
       setTimeout(() => setNameSaved(false), 2000)
@@ -863,7 +866,7 @@ function InstanceSettingsTab({
   const saveRam = async (mb: number | ''): Promise<void> => {
     const value = mb === '' ? undefined : Number(mb)
     try {
-      await (window.api as any).instances?.update?.(instance.id, { recommendedRamMb: value })
+      await window.api.instances.update(instance.id, { recommendedRamMb: value })
       onUpdated()
       setRamSaved(true)
       setTimeout(() => setRamSaved(false), 2000)
@@ -874,7 +877,7 @@ function InstanceSettingsTab({
 
   const saveJvmArgs = async (): Promise<void> => {
     try {
-      await (window.api as any).instances?.update?.(instance.id, { jvmArgs: jvmArgs.trim() || undefined })
+      await window.api.instances.update(instance.id, { jvmArgs: jvmArgs.trim() || undefined })
       onUpdated()
       setJvmSaved(true)
       setTimeout(() => setJvmSaved(false), 2000)
@@ -897,7 +900,7 @@ function InstanceSettingsTab({
   }
 
   const openDir = (): void => {
-    ;(window.api as any).instance?.openDir?.(instance.id)
+    void window.api.instance.openDir(instance.id).catch((e) => setError(ipcError(e)))
   }
 
   const runMaintenance = async (action: () => Promise<void>): Promise<void> => {
@@ -1161,6 +1164,7 @@ function InstanceSettingsTab({
                     if (!window.confirm('Restore this snapshot? Current pack files will be replaced.')) return
                     void runMaintenance(async () => {
                       await window.api.instance.restoreSnapshot(instance.id, snapshot.id)
+                      await useApp.getState().refreshInstances()
                       setMaintenanceMessage('Snapshot restored.')
                     })
                   }}
@@ -1341,8 +1345,9 @@ function InstanceDetailPanel({
     || instance.source === 'manual'
     || isModpackProviderEnabled(instance.source)
   const [detailTab, setDetailTab] = useState<'overview' | 'changelog' | 'mods' | 'manual' | 'versions' | 'console' | 'settings'>(
-    instance.externalId && instance.source !== 'manual' && sourceAvailable ? 'overview' : instance.loader !== 'vanilla' ? 'mods' : 'settings'
+    instance.externalId && instance.source !== 'manual' && sourceAvailable ? 'overview' : 'mods'
   )
+  const [contentType, setContentType] = useState<'mod' | 'resourcepack' | 'shader'>(instance.loader === 'vanilla' ? 'resourcepack' : 'mod')
   const [versions, setVersions] = useState<PackVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(
     () => !!instance.externalId && instance.source !== 'manual' && sourceAvailable
@@ -1357,8 +1362,11 @@ function InstanceDetailPanel({
   const [managedMods, setManagedMods] = useState<LocalMod[]>([])
   const [modSource, setModSource] = useState<'modrinth' | 'curseforge'>('modrinth')
   const [modQuery, setModQuery] = useState('')
+  const [modFilters, setModFilters] = useState<ContentSearchOptions>({})
   const [modResults, setModResults] = useState<ModSearchResult[]>([])
   const [modSearching, setModSearching] = useState(false)
+  const [modSearchCompleted, setModSearchCompleted] = useState(false)
+  const [modSearchRetry, setModSearchRetry] = useState(0)
   const [installingProject, setInstallingProject] = useState<string | null>(null)
   const [updatingCustomMods, setUpdatingCustomMods] = useState(false)
   const [addingMod, setAddingMod] = useState(false)
@@ -1408,16 +1416,9 @@ function InstanceDetailPanel({
   useEffect(() => {
     if (!hasModSource) return
     const initialLoad = setTimeout(() => {
-      const modpackApi = (window.api as any).modpack
-      if (!modpackApi) {
-        setVersionsError('Restart the app to enable modpack features.')
-        setVersionsLoading(false)
-        return
-      }
       setVersionsLoading(true)
       setVersionsError(null)
-      modpackApi
-        .versions(instance.id)
+      window.api.modpack.versions(instance.id)
         .then(setVersions)
         .catch((e: unknown) => setVersionsError(e instanceof Error ? e.message : 'Failed to load versions'))
         .finally(() => setVersionsLoading(false))
@@ -1448,7 +1449,7 @@ function InstanceDetailPanel({
     const loadRequest = setTimeout(() => {
       setChangelogLoading(true)
       setChangelogError(null)
-      ;((window.api as any).modpack?.changelog?.(instance.id) ?? Promise.resolve([]))
+      window.api.modpack.changelog(instance.id)
         .then((data: VersionChangelog[]) => { setChangelogs(data); setChangelogLoaded(true) })
         .catch((e: unknown) => { setChangelogError(e instanceof Error ? e.message : 'Failed to load changelog'); setChangelogLoaded(true) })
         .finally(() => setChangelogLoading(false))
@@ -1462,7 +1463,7 @@ function InstanceDetailPanel({
     const loadRequest = setTimeout(() => {
       setOverviewLoading(true)
       setOverviewError(null)
-      ;((window.api as any).modpack?.overview?.(instance.id) ?? Promise.resolve(null))
+      window.api.modpack.overview(instance.id)
         .then((data: PackOverview | null) => setOverview(data))
         .catch((e: unknown) => setOverviewError(e instanceof Error ? e.message : 'Failed to load overview'))
         .finally(() => setOverviewLoading(false))
@@ -1503,16 +1504,9 @@ function InstanceDetailPanel({
   useEffect(() => {
     if (detailTab !== 'mods' || modsLoaded || modsLoading || !hasModSource) return
     const loadRequest = setTimeout(() => {
-      const modpackApi = (window.api as any).modpack
-      if (!modpackApi) {
-        setModsError('Restart the app to enable modpack features.')
-        setModsLoaded(true)
-        return
-      }
       setModsLoading(true)
       setModsError(null)
-      modpackApi
-        .mods(instance.id)
+      window.api.modpack.mods(instance.id)
         .then((data: PackMod[]) => {
           setMods(data)
           setModsLoaded(true)
@@ -1552,13 +1546,12 @@ function InstanceDetailPanel({
   const addMods = async (): Promise<void> => {
     setAddingMod(true)
     try {
-      const paths = await (window.api as any).dialog?.pickModFiles?.() as string[] | undefined
-      if (!paths?.length) return
+      const paths = await window.api.dialog.pickModFiles()
+      if (!paths.length) return
       for (const p of paths) {
-        await (window.api as any).instance?.addMod?.(instance.id, p)
+        await window.api.instance.addMod(instance.id, p)
       }
-      const updated = await (window.api as any).instance?.listLocalMods?.(instance.id)
-      if (updated) setLocalMods(updated)
+      setLocalMods(await window.api.instance.listLocalMods(instance.id))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add mod')
     } finally {
@@ -1568,7 +1561,7 @@ function InstanceDetailPanel({
 
   const removeMod = async (fileName: string): Promise<void> => {
     try {
-      await (window.api as any).instance?.removeMod?.(instance.id, fileName)
+      await window.api.instance.removeMod(instance.id, fileName)
       setLocalMods((prev) => prev.filter((m) => m.name !== fileName))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to remove mod')
@@ -1584,23 +1577,26 @@ function InstanceDetailPanel({
     }
   }
 
-  const searchMods = async (): Promise<void> => {
-    setModSearching(true)
-    try {
-      setModResults(await window.api.customMods.search(instance.id, modQuery, modSource))
-    } catch (e) {
-      setError(ipcError(e))
-    } finally {
-      setModSearching(false)
-    }
-  }
+  useEffect(() => {
+    if (detailTab !== 'mods' || contentType !== 'mod' || instance.loader === 'vanilla') return
+    let cancelled = false
+    const timeout = setTimeout(() => {
+      setModSearching(true)
+      setModResults([])
+      setModSearchCompleted(false)
+      window.api.customMods.search(instance.id, modQuery, modSource, modFilters)
+        .then((results) => { if (!cancelled) { setModResults(results); setModSearchCompleted(true) } })
+        .catch((e) => { if (!cancelled) setError(ipcError(e)) })
+        .finally(() => { if (!cancelled) setModSearching(false) })
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timeout) }
+  }, [detailTab, contentType, instance.id, instance.loader, modQuery, modSource, modFilters, modSearchRetry, setError])
 
   const installMod = async (projectId: string, source: 'modrinth' | 'curseforge'): Promise<void> => {
     setInstallingProject(projectId)
     try {
       const result = await window.api.customMods.install(instance.id, projectId, source)
       setManagedMods(result.installed)
-      setModResults((current) => current.filter((item) => item.projectId !== projectId))
     } catch (e) {
       setError(ipcError(e))
     } finally {
@@ -1781,7 +1777,7 @@ function InstanceDetailPanel({
           </button>
         )}
 
-        {([...(instance.loader !== 'vanilla' ? ['mods'] as const : []), ...(hasModSource ? ['versions'] as const : [])]).map((t) => (
+        {(['mods', ...(hasModSource ? ['versions'] as const : [])] as const).map((t) => (
           <button
             key={t}
             onClick={() => setDetailTab(t)}
@@ -1794,7 +1790,7 @@ function InstanceDetailPanel({
                 style={{ background: 'var(--accent-strong)', boxShadow: '0 0 8px rgba(var(--accent-rgb),0.5)' }}
               />
             )}
-            {t === 'mods' ? 'Mods' : 'Versions'}
+            {t === 'mods' ? 'Content' : 'Versions'}
             {t === 'mods' && uniqueModCount > 0 && (
               <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
                 style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }}>
@@ -1913,6 +1909,19 @@ function InstanceDetailPanel({
           </div>
         ) : detailTab === 'mods' ? (
           <div className="space-y-5">
+            <div>
+              <h2 className="text-lg font-semibold">Customise your pack</h2>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Choose gameplay mods, textures, and lighting for {instance.name}.</p>
+              <div className="flex flex-wrap gap-2 mt-4" role="group" aria-label="Content type">
+                {([{ id: 'mod', label: 'Mods' }, { id: 'resourcepack', label: 'Texture packs' }, { id: 'shader', label: 'Shaders' }] as const).map((type) => <button
+                  key={type.id} aria-pressed={contentType === type.id} onClick={() => setContentType(type.id)} className="px-4 py-2 rounded-xl text-sm font-semibold"
+                  style={contentType === type.id ? { background: 'var(--accent-strong)', color: '#000' } : { background: 'var(--surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border-soft)' }}
+                >{type.label}</button>)}
+              </div>
+            </div>
+            {contentType !== 'mod' ? <PackContent key={`${instance.id}:${contentType}`} instance={instance} kind={contentType} locked={!!running || !!busy} onFindMod={(query) => { setContentType('mod'); setModSource('modrinth'); setModQuery(query); setModFilters({}); setModResults([]) }} /> : instance.loader === 'vanilla' ? (
+              <div className="rounded-2xl p-5 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text-muted)' }}>Gameplay mods need a mod loader. Create a custom modpack with Fabric, Forge, NeoForge, or Quilt. You can add texture packs to this Vanilla instance now.</div>
+            ) : <>
             {/* Mods tab toolbar */}
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
@@ -1931,7 +1940,7 @@ function InstanceDetailPanel({
               <div className="flex gap-1 mb-3">
                 {(['modrinth', ...(CURSEFORGE_ENABLED ? ['curseforge' as const] : [])] as const).map((source) => <button
                   key={source}
-                  onClick={() => { setModSource(source); setModResults([]) }}
+                  onClick={() => { setModSource(source); setModFilters({}); setModResults([]); setModSearchCompleted(false) }}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                   style={modSource === source
                     ? { background: source === 'modrinth' ? 'rgba(29,209,161,0.16)' : 'rgba(249,115,22,0.16)', color: source === 'modrinth' ? '#1dd1a1' : '#fb923c', border: `1px solid ${source === 'modrinth' ? 'rgba(29,209,161,0.3)' : 'rgba(249,115,22,0.3)'}` }
@@ -1941,16 +1950,20 @@ function InstanceDetailPanel({
               <div className="flex gap-2">
                 <input
                   value={modQuery}
-                  onChange={(e) => setModQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') void searchMods() }}
+                  onChange={(e) => { setModQuery(e.target.value); setModResults([]); setModSearchCompleted(false) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setModSearchRetry((value) => value + 1) }}
                   placeholder={`Search ${modSource === 'modrinth' ? 'Modrinth' : 'CurseForge'} ${instance.loader} mods for Minecraft ${instance.mcVersion}`}
                   className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
                   style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-bright)' }}
                 />
-                <button onClick={searchMods} disabled={modSearching || running} className="px-4 py-2 rounded-xl text-sm font-semibold text-black disabled:opacity-50" style={{ background: 'var(--accent-strong)' }}>{modSearching ? 'Searching…' : `Search ${modSource === 'modrinth' ? 'Modrinth' : 'CurseForge'}`}</button>
+                <button onClick={() => setModSearchRetry((value) => value + 1)} disabled={modSearching} className="px-4 py-2 rounded-xl text-sm font-semibold text-black disabled:opacity-50" style={{ background: 'var(--accent-strong)' }}>{modSearching ? 'Searching…' : 'Refresh results'}</button>
               </div>
               <p className="text-[11px] mt-2" style={{ color: 'var(--text-faint)' }}>Results are filtered to this Minecraft version and loader. Required dependencies are installed automatically.</p>
+              <div className="mt-3"><ContentFilters kind="mod" source={modSource} value={modFilters} onChange={(value) => { setModFilters(value); setModResults([]); setModSearchCompleted(false) }} /></div>
             </div>
+
+            {modSearching && <p role="status" className="text-sm text-muted">Finding compatible mods…</p>}
+            {!modSearching && modSearchCompleted && modResults.length === 0 && <p className="text-sm text-muted">No matching mods. Try another search or add a local JAR.</p>}
 
             {modResults.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -2069,6 +2082,7 @@ function InstanceDetailPanel({
                 </div>
               </div>
             )}
+            </>}
           </div>
         ) : (
           <VersionsTabContent
@@ -2255,7 +2269,7 @@ export default function Library(): JSX.Element {
                 onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--accent-strong)')}
               >
-                + New instance
+                + Create pack
               </button>
             </div>
           )}

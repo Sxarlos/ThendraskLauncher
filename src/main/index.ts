@@ -11,10 +11,12 @@ import {
   listInstances,
   removeInstance,
   updateInstance,
+  validateCreateInstanceInput,
   removePersistedCurseForgeScreenshots,
   instanceGameDir,
   type CreateInstanceInput
 } from './instances'
+import { resolvePackRelease } from './packRelease'
 import { isRunning, launchInstance, runningInstanceIds, onRunningChanged } from './launcher'
 import { detectJava, getSettings, migrateStoredCurseForgeKeys, setSettings } from './settings'
 import { applyControls } from './gameoptions'
@@ -29,8 +31,6 @@ import {
   fetchCurseForgeVersions,
   fetchModrinthMods,
   fetchCurseFormMods,
-  getModrinthVersionDetails,
-  getCurseForgeFileDetails,
   fetchModrinthPackOverview,
   fetchCurseForgePackOverview,
   fetchModrinthChangelog,
@@ -65,6 +65,9 @@ import {
   updateManagedMods
 } from './customMods'
 import { installGregTechAddon, listGregTechAddons } from './gregtechAddons'
+import { importPackContent, installPackContent, listPackContent, removePackContent, searchPackContent, togglePackContent } from './packContent'
+import type { ContentKind, ContentSearchOptions, ShaderEngine } from '@shared/types'
+import { fetchContentCategories } from './contentDiscovery'
 import { checkGTNHUpdate, installGTNHUpdate, installGTNHSpecialBuild, listGTNHSpecialBuilds } from './gtnhUpdates'
 import type { Friend } from '@shared/types'
 import type { AppSettings, BrowseParams, ServerEntry } from '@shared/types'
@@ -344,6 +347,7 @@ async function fetchInstanceScreenshots(
 }
 
 function registerIpcHandlers(): void {
+  const contentBusy = new Set<string>()
   handle('app:version', () => app.getVersion())
   handle('app:capabilities', () => ({ curseforge: CURSEFORGE_ENABLED }))
   handle('shell:openExternal', (url: string) => openExternalSafe(url))
@@ -365,18 +369,14 @@ function registerIpcHandlers(): void {
   // Instances
   handle('instances:list', () => listInstances())
   handle('instances:create', async (input: CreateInstanceInput) => {
+    input = validateCreateInstanceInput(input)
     assertCurseForgeSourceAllowed(input.source)
-    // Auto-populate packVersionId on first install so update tracking works
-    if (input.externalId && input.source && input.source !== 'manual' && !input.packVersionId) {
-      try {
-        let versions: Awaited<ReturnType<typeof fetchModrinthVersions>> | undefined
-        if (input.source === 'modrinth') {
-          versions = await fetchModrinthVersions(input.externalId)
-        } else if (input.source === 'curseforge') {
-          versions = await fetchCurseForgeVersions(input.externalId)
-        }
-        if (versions?.length) input.packVersionId = versions[0].id
-      } catch (_) {}
+    // Resolve the game version and loader from the same release as the archive.
+    if (input.externalId && input.source !== 'manual') {
+      const versions = input.source === 'modrinth'
+        ? await fetchModrinthVersions(input.externalId)
+        : await fetchCurseForgeVersions(input.externalId)
+      input = resolvePackRelease(input, versions)
     }
     const inst = createInstance(input)
     if (input.externalId && input.source && input.source !== 'manual' && input.source !== 'curseforge') {
@@ -424,7 +424,10 @@ function registerIpcHandlers(): void {
   })
 
   // Launch
-  handle('launch:start', (instanceId: string, serverAddress?: string) => launchInstance(instanceId, serverAddress))
+  handle('launch:start', (instanceId: string, serverAddress?: string) => {
+    if (contentBusy.has(instanceId)) throw new Error('Wait for the content change to finish before starting Minecraft.')
+    return launchInstance(instanceId, serverAddress)
+  })
   handle('instance:savedServers', (instanceId: string) => readSavedServers(instanceGameDir(instanceId)))
 
   // Mojang versions
@@ -618,10 +621,29 @@ function registerIpcHandlers(): void {
     return { name: basename(to), size: statSync(to).size, enabled }
   })
 
+  handle('content:categories', (kind: ContentKind | 'mod', source: 'modrinth' | 'curseforge') => fetchContentCategories(kind, source))
+  handle('content:search', (id: string, kind: ContentKind, query: string, engine: ShaderEngine, options?: ContentSearchOptions, source: 'modrinth' | 'curseforge' = 'modrinth') => searchPackContent(id, kind, query, engine, options, source))
+  handle('content:list', (id: string, kind: ContentKind) => listPackContent(id, kind))
+  const changeContent = async <T>(id: string, action: () => T | Promise<T>): Promise<T> => {
+    if (isRunning(id)) throw new Error('Stop Minecraft before changing pack content.')
+    if (contentBusy.has(id)) throw new Error('Wait for the current content change to finish.')
+    contentBusy.add(id)
+    try { return await action() } finally { contentBusy.delete(id) }
+  }
+  handle('content:install', (id: string, kind: ContentKind, projectId: string, engine: ShaderEngine, source: 'modrinth' | 'curseforge' = 'modrinth') =>
+    changeContent(id, () => installPackContent(id, kind, projectId, engine, source)))
+  handle('content:import', (id: string, kind: ContentKind) => changeContent(id, async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Pack ZIP', extensions: ['zip'] }] })
+    if (isRunning(id)) throw new Error('Stop Minecraft before changing pack content.')
+    return result.canceled ? listPackContent(id, kind) : importPackContent(id, kind, result.filePaths[0])
+  }))
+  handle('content:toggle', (id: string, kind: ContentKind, name: string) => changeContent(id, () => togglePackContent(id, kind, name)))
+  handle('content:remove', (id: string, kind: ContentKind, name: string) => changeContent(id, () => removePackContent(id, kind, name)))
+
   // Custom modpack builder (Modrinth)
-  handle('customMods:search', (instanceId: string, query: string, source: 'modrinth' | 'curseforge') => {
+  handle('customMods:search', (instanceId: string, query: string, source: 'modrinth' | 'curseforge', options?: ContentSearchOptions) => {
     assertCurseForgeSourceAllowed(source)
-    return searchCompatibleMods(instanceId, query, source)
+    return searchCompatibleMods(instanceId, query, source, options)
   })
   handle('customMods:list', (instanceId: string) => listManagedMods(instanceId))
   handle('customMods:install', (instanceId: string, projectId: string, source: 'modrinth' | 'curseforge') => {
@@ -757,17 +779,10 @@ function registerIpcHandlers(): void {
     const inst = listInstances().find((i) => i.id === instanceId)
     if (!inst) throw new Error('Instance not found')
 
-    let mcVersion = inst.mcVersion
-    if (inst.source === 'modrinth') {
-      const details = await getModrinthVersionDetails(versionId)
-      if (details.mcVersion) mcVersion = details.mcVersion
-    } else if (inst.source === 'curseforge' && inst.externalId) {
-      assertCurseForgeEnabled()
-      const details = await getCurseForgeFileDetails(inst.externalId, versionId)
-      if (details.mcVersion) mcVersion = details.mcVersion
-    }
-
-    return updateInstance(instanceId, { mcVersion, packVersionId: versionId })
+    if (isRunning(instanceId)) throw new Error('Stop the instance before switching pack versions.')
+    // Keep installed metadata until the new archive is installed. This also lets
+    // the pre-update snapshot capture the old Minecraft version correctly.
+    return updateInstance(instanceId, { packVersionId: versionId })
   })
 
   // Loader version listing (for the New Instance modal)

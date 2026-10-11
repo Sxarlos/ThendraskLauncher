@@ -10,7 +10,7 @@ const LOADERS: { value: LoaderType; label: string }[] = [
   { value: 'quilt',    label: 'Quilt' },
 ]
 
-export default function NewInstanceModal({ onClose }: { onClose: () => void }): JSX.Element {
+export default function NewInstanceModal({ onClose, onCreated }: { onClose: () => void; onCreated?: (id: string) => void }): JSX.Element {
   const refreshInstances = useApp((s) => s.refreshInstances)
   const setError = useApp((s) => s.setError)
 
@@ -18,7 +18,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
   const [mcVersions, setMcVersions] = useState<MojangVersion[]>([])
   const [showSnapshots, setShowSnapshots] = useState(false)
   const [mcVersion, setMcVersion] = useState('')
-  const [loader, setLoader] = useState<LoaderType>('vanilla')
+  const [loader, setLoader] = useState<LoaderType>('fabric')
   const [loaderVersionResult, setLoaderVersionResult] = useState<{
     key: string
     versions: string[]
@@ -47,7 +47,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
     if (!loaderKey) return
     const key = loaderKey
     loaderFetchRef.current = key
-    ;(window.api as any).loader?.versions?.(loader, mcVersion)
+    window.api.loader.versions(loader, mcVersion)
       .then((versions: string[]) => {
         if (loaderFetchRef.current !== key) return
         setLoaderVersionResult({ key, versions })
@@ -69,7 +69,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
   const create = async (): Promise<void> => {
     setCreating(true)
     try {
-      await window.api.instances.create({
+      const instance = await window.api.instances.create({
         name: name.trim() || `Minecraft ${defaultName}`,
         mcVersion,
         loader,
@@ -78,6 +78,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
       })
       await refreshInstances()
       onClose()
+      onCreated?.(instance.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create instance.')
     } finally {
@@ -87,8 +88,9 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-30">
-      <div className="w-[440px] bg-panel border border-border rounded-2xl p-5">
-        <h2 className="text-lg font-semibold mb-4">New instance</h2>
+      <div role="dialog" aria-modal="true" aria-labelledby="new-pack-title" className="w-[480px] max-h-[90vh] overflow-y-auto bg-panel border border-border rounded-2xl p-5">
+        <h2 id="new-pack-title" className="text-lg font-semibold mb-1">Create your own pack</h2>
+        <p className="text-xs text-muted mb-4">Choose your Minecraft version and loader, then add mods, texture packs, and shaders in Content.</p>
 
         <label className="block text-sm text-muted mb-1">Name</label>
         <input
@@ -125,6 +127,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
         </select>
 
         <label className="block text-sm text-muted mb-2">Mod loader</label>
+        <p className="text-xs text-muted mb-2">Fabric is a starting point for a custom pack. Choose the loader your mods support, or Vanilla for an unmodded game.</p>
         <div className="flex gap-2 flex-wrap mb-4">
           {LOADERS.map((l) => (
             <button
@@ -166,7 +169,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
               ))}
             </select>
             <div className="mt-3 rounded-xl px-3 py-2.5 text-xs" style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.2)', color: 'var(--text-muted)' }}>
-              This creates a custom modpack. After creation, open the instance’s <strong style={{ color: 'var(--accent)' }}>Mods</strong> tab to search compatible Modrinth mods or add local JARs.
+              Next, you’ll go straight to <strong style={{ color: 'var(--accent)' }}>Content</strong> to choose mods, texture packs, and shaders. You can also add your own JAR and ZIP files.
             </div>
           </div>
         )}
@@ -182,7 +185,7 @@ export default function NewInstanceModal({ onClose }: { onClose: () => void }): 
             disabled={creating || !mcVersion}
             className="px-4 py-2 rounded-lg bg-accent2 hover:bg-accent text-black text-sm font-medium disabled:opacity-60"
           >
-            {creating ? 'Creating…' : loader === 'vanilla' ? 'Create instance' : 'Create custom modpack'}
+            {creating ? 'Creating…' : 'Create & choose content'}
           </button>
         </div>
       </div>

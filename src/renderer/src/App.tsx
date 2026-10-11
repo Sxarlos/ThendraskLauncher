@@ -130,6 +130,9 @@ export default function App(): JSX.Element {
     const unsubProgress = window.api.launch.onProgress((p) => {
       if (p.state === 'preparing') clearLogs(p.instanceId)
       setProgress(p)
+      if (p.state === 'running' || p.state === 'error') {
+        void refreshInstances().catch(() => { /* Keep the launch status visible if metadata refresh fails. */ })
+      }
       if (p.action === 'manual-files-required') {
         setPendingLibraryInstanceId(p.instanceId)
         setPage('library')

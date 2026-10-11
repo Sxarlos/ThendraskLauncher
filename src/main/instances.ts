@@ -10,6 +10,13 @@ const APPROVED_INSTANCE_SOURCES = new Set<NonNullable<Instance['source']>>([
   'modrinth',
   'curseforge'
 ])
+const APPROVED_LOADERS = new Set<LoaderType>([
+  'vanilla',
+  'fabric',
+  'forge',
+  'quilt',
+  'neoforge'
+])
 
 function load(): Instance[] {
   type StoredInstance = Omit<Instance, 'source'> & { source?: string }
@@ -76,6 +83,68 @@ export interface CreateInstanceInput {
   externalId?: string
   packVersionId?: string
   iconUrl?: string
+}
+
+type ValidatedCreateInstanceInput = CreateInstanceInput & Required<Pick<CreateInstanceInput, 'loader' | 'source'>>
+
+function containsControlCharacter(text: string): boolean {
+  return Array.from(text).some((character) => {
+    const code = character.charCodeAt(0)
+    return code < 32 || code === 127
+  })
+}
+
+function optionalText(value: unknown, label: string, maxLength: number): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw new Error(`Invalid ${label}.`)
+  const text = value.trim()
+  if (!text || text.length > maxLength || containsControlCharacter(text)) {
+    throw new Error(`Invalid ${label}.`)
+  }
+  return text
+}
+
+/** Validate and normalize renderer/API data before it is persisted. */
+export function validateCreateInstanceInput(input: unknown): ValidatedCreateInstanceInput {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid instance details.')
+  }
+  const value = input as Record<string, unknown>
+  const name = optionalText(value.name, 'instance name', 100)
+  const mcVersion = optionalText(value.mcVersion, 'Minecraft version', 100)
+  if (!name || !mcVersion || !/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(mcVersion)) {
+    throw new Error('Invalid instance details.')
+  }
+
+  const loader = value.loader === undefined ? 'vanilla' : value.loader
+  if (typeof loader !== 'string' || !APPROVED_LOADERS.has(loader as LoaderType)) {
+    throw new Error('Invalid mod loader.')
+  }
+  const source = value.source === undefined ? 'manual' : value.source
+  if (typeof source !== 'string'
+    || !APPROVED_INSTANCE_SOURCES.has(source as NonNullable<Instance['source']>)) {
+    throw new Error('Invalid instance source.')
+  }
+
+  const iconUrl = optionalText(value.iconUrl, 'icon URL', 2048)
+  if (iconUrl) {
+    try {
+      if (new URL(iconUrl).protocol !== 'https:') throw new Error()
+    } catch {
+      throw new Error('Invalid icon URL.')
+    }
+  }
+
+  return {
+    name,
+    mcVersion,
+    loader: loader as LoaderType,
+    source: source as NonNullable<Instance['source']>,
+    loaderVersion: optionalText(value.loaderVersion, 'loader version', 200),
+    externalId: optionalText(value.externalId, 'external project ID', 200),
+    packVersionId: optionalText(value.packVersionId, 'pack version ID', 200),
+    iconUrl
+  }
 }
 
 export function createInstance(input: CreateInstanceInput): Instance {

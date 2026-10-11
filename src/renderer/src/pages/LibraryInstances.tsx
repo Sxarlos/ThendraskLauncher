@@ -239,7 +239,7 @@ export default function MyInstancesContent({
           <span className="text-5xl mb-4">🧱</span>
           <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>No instances yet</p>
           <p className="text-xs mt-2" style={{ color: 'var(--text-faint)' }}>
-            Click <span style={{ color: 'var(--text-soft)', fontWeight: 600 }}>+ New instance</span> above to get started
+            Click <span style={{ color: 'var(--text-soft)', fontWeight: 600 }}>+ Create pack</span> above to choose mods, texture packs, and shaders
           </p>
         </div>
       ) : (
@@ -250,7 +250,7 @@ export default function MyInstancesContent({
         </div>
       )}
 
-      {showNew && <NewInstanceModal onClose={() => setShowNew(false)} />}
+      {showNew && <NewInstanceModal onClose={() => setShowNew(false)} onCreated={onManage} />}
     </div>
   )
 }

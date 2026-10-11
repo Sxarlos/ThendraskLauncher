@@ -9,3 +9,6 @@ dist/
 *.tsbuildinfo
 outputs/
 pending-provider-modules/
+
+# Relay presence ownership credentials
+relay/data/

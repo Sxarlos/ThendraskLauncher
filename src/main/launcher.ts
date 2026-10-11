@@ -1,5 +1,5 @@
 import { join } from 'path'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { spawn } from 'child_process'
 import { EventEmitter } from 'events'
 import { BrowserWindow } from 'electron'
@@ -96,6 +96,9 @@ export async function launchInstance(instanceId: string, serverAddress?: string)
   launching.add(instanceId)
   try {
     await launchReservedInstance(instanceId, instance, serverAddress)
+  } catch (error) {
+    setState(instanceId, 'error', error instanceof Error ? error.message : String(error))
+    throw error
   } finally {
     launching.delete(instanceId)
   }
@@ -114,16 +117,18 @@ async function launchReservedInstance(
   if (existsSync(prismProfilePath)) {
     try {
       prismProfile = JSON.parse(readFileSync(prismProfilePath, 'utf8')) as PrismLaunchProfile
+      if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(prismProfile.versionId)) {
+        throw new Error('Invalid Prism version ID.')
+      }
       const libraries = prismProfile.versionJson.libraries as PrismLibrary[] | undefined
       if (libraries && normalizePrismLibraryPaths(libraries)) {
         // Repair profiles imported by older launcher builds as well as new imports.
         writeFileSync(prismProfilePath, JSON.stringify(prismProfile, null, 2))
-        const versionDir = join(gameDir, 'versions', prismProfile.versionId)
-        writeFileSync(
-          join(versionDir, `${prismProfile.versionId}.json`),
-          JSON.stringify(prismProfile.versionJson, null, 2)
-        )
       }
+      // Portable backups omit generated version files; rebuild from the saved profile.
+      const versionDir = join(gameDir, 'versions', prismProfile.versionId)
+      mkdirSync(versionDir, { recursive: true })
+      writeFileSync(join(versionDir, `${prismProfile.versionId}.json`), JSON.stringify(prismProfile.versionJson, null, 2))
     } catch (err) {
       throw new Error(`Imported Prism launch profile is invalid: ${(err as Error).message}`, { cause: err })
     }
@@ -192,6 +197,10 @@ async function launchReservedInstance(
     }
 
     if (effectiveMarker) {
+      if (effectiveMarker.mcVersion) instance.mcVersion = effectiveMarker.mcVersion
+      instance.loader = effectiveMarker.loaderType as Instance['loader']
+      instance.loaderVersion = effectiveMarker.loaderVersion
+      updateInstance(instanceId, { mcVersion: instance.mcVersion, loader: instance.loader, loaderVersion: instance.loaderVersion })
       resolvedLoaderType = effectiveMarker.loaderType
       resolvedLoaderVersion = effectiveMarker.loaderVersion
       // Persist the installed version ID so subsequent launches skip re-downloading.
@@ -240,45 +249,20 @@ async function launchReservedInstance(
   if (prismProfile) {
     setState(instanceId, 'preparing', 'Preparing imported Prism instance…')
   } else if (resolvedLoaderType === 'fabric') {
-    // MCLC has no built-in Fabric support, so we install the Fabric profile JSON
-    // ourselves and point version.custom at it, the same way Quilt is handled.
     const fabricVer = resolvedLoaderVersion ?? await resolveFabricVersion(instance.mcVersion)
-    if (fabricVer) {
-      setState(instanceId, 'preparing', 'Installing Fabric loader…')
-      customVersion = await installFabricLoader(instanceGameDir(instanceId), instance.mcVersion, fabricVer)
-        .catch(() => undefined)
-      if (!customVersion) {
-        setState(instanceId, 'preparing', 'Fabric loader install failed. Launching vanilla.')
-        await new Promise((r) => setTimeout(r, 1000))
-      }
-    } else {
-      setState(instanceId, 'preparing', 'Could not resolve Fabric version. Launching vanilla.')
-      await new Promise((r) => setTimeout(r, 1000))
-    }
+    if (!fabricVer) throw new Error('Could not resolve Fabric version. Launch cancelled.')
+    setState(instanceId, 'preparing', 'Installing Fabric loader...')
+    customVersion = await installFabricLoader(gameDir, instance.mcVersion, fabricVer)
   } else if (resolvedLoaderType === 'quilt') {
     const quiltVer = resolvedLoaderVersion ?? await resolveQuiltVersion(instance.mcVersion)
-    if (quiltVer) {
-      setState(instanceId, 'preparing', 'Installing Quilt loader…')
-      customVersion = await installQuiltLoader(instanceGameDir(instanceId), instance.mcVersion, quiltVer)
-        .catch(() => undefined)
-    }
+    if (!quiltVer) throw new Error('Could not resolve Quilt version. Launch cancelled.')
+    setState(instanceId, 'preparing', 'Installing Quilt loader...')
+    customVersion = await installQuiltLoader(gameDir, instance.mcVersion, quiltVer)
   } else if (resolvedLoaderType === 'forge') {
-    // MCLC handles Forge via ForgeWrapper; we just download the installer JAR
-    // and pass it as `forge:`. ForgeWrapper runs the installer and reads the
-    // resulting version profile. The JAR is cached so only downloaded once.
     const forgeVer = resolvedLoaderVersion ?? await resolveForgeVersion(instance.mcVersion)
-    if (forgeVer) {
-      setState(instanceId, 'preparing', 'Downloading Forge installer…')
-      forgeInstallerPath = await installForgeLoader(instanceGameDir(instanceId), instance.mcVersion, forgeVer)
-        .catch(() => undefined)
-      if (!forgeInstallerPath) {
-        setState(instanceId, 'preparing', 'Forge installer download failed. Launching vanilla.')
-        await new Promise((r) => setTimeout(r, 1000))
-      }
-    } else {
-      setState(instanceId, 'preparing', 'Could not resolve Forge version. Launching vanilla.')
-      await new Promise((r) => setTimeout(r, 1000))
-    }
+    if (!forgeVer) throw new Error('Could not resolve Forge version. Launch cancelled.')
+    setState(instanceId, 'preparing', 'Downloading Forge installer...')
+    forgeInstallerPath = await installForgeLoader(gameDir, instance.mcVersion, forgeVer)
   } else if (resolvedLoaderType === 'neoforge') {
     // NeoForge 20.4+ uses a new installer format incompatible with MCLC's ForgeWrapper.
     // We run the installer directly (it creates a version profile) and point MCLC at the profile.
@@ -307,8 +291,7 @@ async function launchReservedInstance(
         throw new Error(`NeoForge ${neoVer} install failed: ${reason}`, { cause: err })
       }
     } else {
-      setState(instanceId, 'preparing', 'Could not resolve NeoForge version. Launching vanilla.')
-      await new Promise((r) => setTimeout(r, 1000))
+      throw new Error('Could not resolve NeoForge version. Launch cancelled.')
     }
   }
 

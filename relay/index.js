@@ -1,4 +1,7 @@
 const express = require('express')
+const { join } = require('node:path')
+const { createClaims } = require('./claims')
+const { expirePresence, hasPresenceCapacity } = require('./presenceStore')
 const { isValidCode, presenceBody } = require('./validation')
 const { isAllowedCurseForgeRequest, validCurseForgeBody } = require('./curseforge')
 const app = express()
@@ -20,7 +23,7 @@ const TTL_MS = 90_000 // 90 s; if a client hasn't updated, it's offline
 
 // Map<code, { data: object, updatedAt: number }>
 const store = new Map()
-const claims = new Map()
+const claims = createClaims(process.env.CLAIMS_DIR || join(__dirname, 'data', 'claims'))
 const rateLimits = new Map()
 const MAX_PEERS = 10_000
 const RATE_WINDOW_MS = 60_000
@@ -44,10 +47,7 @@ app.use((req, res, next) => {
 
 // Clean up stale entries every minute
 setInterval(() => {
-  const cutoff = Date.now() - TTL_MS
-  for (const [code, entry] of store) {
-    if (entry.updatedAt < cutoff) store.delete(code)
-  }
+  expirePresence(store, Date.now(), TTL_MS)
   for (const [ip, entry] of rateLimits) {
     if (entry.startedAt < Date.now() - RATE_WINDOW_MS) rateLimits.delete(ip)
   }
@@ -108,12 +108,11 @@ app.put('/presence/:code', (req, res) => {
   if (!isValidCode(code)) return res.status(400).json({ error: 'invalid_code' })
   const secret = req.get('authorization')?.replace(/^Bearer\s+/i, '')
   if (!secret || !/^[0-9a-f]{64}$/i.test(secret)) return res.status(401).json({ error: 'missing_secret' })
-  const claimedSecret = claims.get(code)
-  if (claimedSecret && claimedSecret !== secret) return res.status(403).json({ error: 'wrong_secret' })
-  if (!claimedSecret && claims.size >= MAX_PEERS) return res.status(503).json({ error: 'capacity_reached' })
+  // Enforce capacity against live peers, including between cleanup ticks.
+  if (!hasPresenceCapacity(store, code, Date.now(), TTL_MS, MAX_PEERS)) return res.status(503).json({ error: 'capacity_reached' })
   const data = presenceBody(req.body)
   if (!data) return res.status(400).json({ error: 'invalid_presence' })
-  if (!claimedSecret) claims.set(code, secret)
+  if (!claims.authorize(code, secret)) return res.status(403).json({ error: 'wrong_secret' })
   store.set(code, { secret, data, updatedAt: Date.now() })
   res.json({ ok: true })
 })

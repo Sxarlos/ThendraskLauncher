@@ -41,6 +41,8 @@ describe('presence relay validation', () => {
 
 describe('CurseForge relay validation', () => {
   it('allows only the API routes used by the launcher', () => {
+    expect(isAllowedCurseForgeRequest('GET', '/v1/categories', new URLSearchParams('gameId=432&classId=6'))).toBe(true)
+    expect(isAllowedCurseForgeRequest('POST', '/v1/categories')).toBe(false)
     expect(isAllowedCurseForgeRequest('GET', '/v1/mods/search', new URLSearchParams('gameId=432&pageSize=20'))).toBe(true)
     expect(isAllowedCurseForgeRequest('GET', '/v1/mods/123/files/456/download-url')).toBe(true)
     expect(isAllowedCurseForgeRequest('GET', '/v1/games')).toBe(false)

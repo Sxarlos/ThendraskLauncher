@@ -9,6 +9,7 @@ import { spawn } from 'child_process'
 import { createHash } from 'crypto'
 import AdmZip from 'adm-zip'
 import { instanceGameDir } from './instances'
+import { ensurePackFile } from './packFile'
 import { safeJoin } from './safePath'
 import { validateArchiveEntries } from './archiveSafety'
 import type { MissingCurseForgeFile } from '@shared/types'
@@ -170,6 +171,7 @@ export async function verifyMissingCurseForgeFile(
 // Written after a successful install so we don't re-download on every launch.
 
 export interface PackMarker {
+  mcVersion?: string
   packVersionId?: string
   loaderType: string       // 'fabric' | 'quilt' | 'forge' | 'neoforge' | 'vanilla'
   loaderVersion?: string   // e.g. '0.16.5' for Fabric, '47.2.0' for Forge
@@ -827,16 +829,7 @@ export async function installMrpack(
 
     if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true })
 
-    if (!existsSync(destPath)) {
-      for (const url of f.downloads) {
-        try {
-          await downloadToFile(url, destPath)
-          break
-        } catch { /* try next mirror */ }
-      }
-      if (!existsSync(destPath)) throw new Error(`Failed to download required file: ${f.path}`)
-    }
-    verifyPackFile(destPath, f.hashes)
+    await ensurePackFile(destPath, f.downloads, f.hashes)
 
     const pct = Math.round(((i + 1) / clientFiles.length) * 85)
     onProgress(`Downloading files… (${i + 1}/${clientFiles.length})`, pct)
@@ -859,6 +852,7 @@ export async function installMrpack(
   injectServersDat(gameDir)
 
   const marker: PackMarker = {
+    mcVersion: deps.minecraft,
     packVersionId: versionData.id ?? packVersionId,
     loaderType,
     loaderVersion
@@ -978,6 +972,7 @@ async function importPrismPack(
   )
   const marker: PackMarker = {
     loaderType,
+    mcVersion,
     loaderVersion: loaderRef?.version ?? loaderRef?.cachedVersion
   }
   writeMarker(instanceId, marker)
@@ -1076,7 +1071,7 @@ export async function importLocalPack(
     }
 
     injectServersDat(gameDir)
-    const marker: PackMarker = { loaderType, loaderVersion }
+    const marker: PackMarker = { mcVersion, loaderType, loaderVersion }
     writeMarker(instanceId, marker)
     return { marker, name, mcVersion }
   }
@@ -1202,6 +1197,7 @@ export async function importLocalPack(
     const missingFiles = await addCurseForgeFilePageUrls(unavailable)
     injectServersDat(gameDir)
     const marker: PackMarker = {
+      mcVersion,
       packVersionId: curseForgeIdentity?.packVersionId,
       loaderType,
       loaderVersion,
@@ -1383,6 +1379,7 @@ export async function installCfPack(
   const missingFiles = await addCurseForgeFilePageUrls(unavailable)
 
   const marker: PackMarker = {
+    mcVersion: manifest.minecraft?.version,
     packVersionId: String(fileData.id),
     loaderType,
     loaderVersion,
