@@ -80,7 +80,7 @@ export async function searchModrinth(params: BrowseParams): Promise<ModpackResul
       iconUrl: h.icon_url || undefined,
       downloads: h.downloads ?? 0,
       categories: displayCats,
-      mcVersions: (h.versions ?? []).slice().sort().reverse(),
+      mcVersions: (h.versions ?? []).slice().sort((a: string, b: string) => b.localeCompare(a, 'en', { numeric: true })),
       loaders,
       source: 'modrinth',
       externalUrl: `https://modrinth.com/modpack/${h.slug}`,

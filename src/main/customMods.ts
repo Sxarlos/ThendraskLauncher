@@ -1,7 +1,8 @@
 import { createHash } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
 import { basename, join } from 'path'
-import type { LocalMod, ModInstallResult, ModSearchResult } from '@shared/types'
+import type { ContentSearchOptions, LocalMod, ModInstallResult, ModSearchResult } from '@shared/types'
+import { curseForgeSort, modrinthSort, validateContentSearch } from './contentDiscovery'
 import { getInstance, instanceGameDir } from './instances'
 import { safeJoin } from './safePath'
 import { createSnapshot, restoreSnapshot } from './snapshots'
@@ -118,7 +119,7 @@ function validateProjectId(projectId: string): void {
   }
 }
 
-async function searchModrinthMods(instanceId: string, query: string): Promise<ModSearchResult[]> {
+async function searchModrinthMods(instanceId: string, query: string, options: ContentSearchOptions): Promise<ModSearchResult[]> {
   const instance = requireModdedInstance(instanceId)
   if (typeof query !== 'string' || query.length > 200) throw new Error('Invalid mod search.')
   const facets = [
@@ -128,10 +129,11 @@ async function searchModrinthMods(instanceId: string, query: string): Promise<Mo
     ['client_side!=unsupported']
   ]
   const url = new URL(`${API}/search`)
+  if (options.category) facets.push([`categories:${options.category}`])
   url.searchParams.set('query', query.trim())
   url.searchParams.set('facets', JSON.stringify(facets))
   url.searchParams.set('limit', '30')
-  url.searchParams.set('index', 'relevance')
+  url.searchParams.set('index', modrinthSort(query, options))
   const data = await getJson<{ hits?: Array<Record<string, unknown>> }>(url.toString())
   return (data.hits ?? []).map((hit) => ({
     source: 'modrinth' as const,
@@ -144,7 +146,7 @@ async function searchModrinthMods(instanceId: string, query: string): Promise<Mo
   })).filter((result) => result.projectId)
 }
 
-async function searchCurseForgeMods(instanceId: string, query: string): Promise<ModSearchResult[]> {
+async function searchCurseForgeMods(instanceId: string, query: string, options: ContentSearchOptions): Promise<ModSearchResult[]> {
   const instance = requireModdedInstance(instanceId)
   if (typeof query !== 'string' || query.length > 200) throw new Error('Invalid mod search.')
   const url = new URL(`${CF_API}/mods/search`)
@@ -153,7 +155,11 @@ async function searchCurseForgeMods(instanceId: string, query: string): Promise<
   url.searchParams.set('gameVersion', instance.mcVersion)
   url.searchParams.set('modLoaderType', String(curseForgeLoader(instance.loader)))
   url.searchParams.set('searchFilter', query.trim())
-  url.searchParams.set('sortField', '2')
+  if (options.category) {
+    if (!/^\d+$/.test(options.category)) throw new Error('Invalid CurseForge category.')
+    url.searchParams.set('categoryId', options.category)
+  }
+  url.searchParams.set('sortField', curseForgeSort(options))
   url.searchParams.set('sortOrder', 'desc')
   url.searchParams.set('pageSize', '30')
   const result = await cfJson<{ data?: Array<Record<string, unknown>> }>(url.toString())
@@ -172,11 +178,12 @@ async function searchCurseForgeMods(instanceId: string, query: string): Promise<
   }).filter((mod) => mod.projectId)
 }
 
-export async function searchCompatibleMods(instanceId: string, query: string, source: ModSource = 'modrinth'): Promise<ModSearchResult[]> {
+export async function searchCompatibleMods(instanceId: string, query: string, source: ModSource = 'modrinth', options: ContentSearchOptions = {}): Promise<ModSearchResult[]> {
   assertCurseForgeSourceAllowed(source)
+  validateContentSearch(options)
   return source === 'curseforge'
-    ? searchCurseForgeMods(instanceId, query)
-    : searchModrinthMods(instanceId, query)
+    ? searchCurseForgeMods(instanceId, query, options)
+    : searchModrinthMods(instanceId, query, options)
 }
 
 async function compatibleVersions(instanceId: string, projectId: string): Promise<ModrinthVersion[]> {

@@ -7,6 +7,55 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.9-beta.1] - 2026-10-11
+
+### Added
+
+- Unified Content page for mods, texture packs, and shaders from Modrinth and
+  CurseForge, with provider categories, sorting, and local JAR/ZIP imports.
+- Installed texture/shader management and Modrinth shader engine filters with
+  shortcuts to find Iris or Canvas. Shader engines still require installation.
+- CurseForge categories through the relay; the key stays on the server and
+  category responses are not cached.
+
+### Changed
+
+- Custom pack creation defaults to Fabric and opens Content after creation.
+  Vanilla instances can also manage texture packs and shader ZIPs.
+- Development builds enable the same approved providers as public builds.
+
+### Fixed
+
+- Cancel launching when a required mod loader cannot be installed rather than
+  silently starting Vanilla, and show launch failures in the client.
+- Match the Minecraft version and loader to the selected modpack release.
+- Replace outdated or damaged Modrinth pack files after verifying their hashes.
+- Restore pack version and loader metadata with snapshot files, including
+  compatibility with older snapshots.
+- Rebuild generated launch profiles for imported Prism portable backups.
+- Validate instance creation details and unsupported loaders, sort Minecraft
+  versions numerically, and refresh details after launching or restoring.
+- Preserve friends relay code ownership across restarts with hashed on-disk
+  claims, and count active users when enforcing presence capacity.
+
+### Security
+
+- Updated fast-uri and ip-address to compatible patched releases; the runtime
+  dependency audit reports no known vulnerabilities.
+
+### Build
+
+- Install Electron explicitly before CI checks so parallel test workers do not
+  race to download the runtime on a fresh checkout.
+
+### Deployment
+
+- Friends relay fixes require a separate deployment of the relay files and a
+  persistent claims directory. The categories allowlist can update separately.
+- Stable clients will stay on 0.5.8 until a stable release is promoted after
+  the required 48-hour beta period.
+
+
 ## [0.5.8] - 2026-08-30
 
 ### Changed

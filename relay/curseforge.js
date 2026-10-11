@@ -1,4 +1,5 @@
 const ALLOWED_GET_PATHS = [
+  /^\/v1\/categories$/,
   /^\/v1\/mods\/search$/,
   /^\/v1\/mods\/\d+$/,
   /^\/v1\/mods\/\d+\/files$/,

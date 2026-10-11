@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import type { BrowseParams, ModpackResult } from '@shared/types'
+import type { BrowseParams, LoaderType, ModpackResult } from '@shared/types'
 import { availableModpackProviders } from '../../../shared/features'
 import { useApp } from '../store'
 /* ════════════════════════════════════════════════
@@ -35,6 +35,12 @@ const COMMON_VERSIONS = [
 ]
 
 const PAGE_SIZE = 20
+const SUPPORTED_LOADERS = new Set<LoaderType>(['vanilla', 'fabric', 'forge', 'quilt', 'neoforge'])
+
+function supportedLoader(loaders: string[]): LoaderType | null {
+  return loaders.find((loader): loader is LoaderType => SUPPORTED_LOADERS.has(loader as LoaderType))
+    ?? null
+}
 
 function fmtDownloads(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -84,9 +90,13 @@ function InstallModal({ pack, onClose }: { pack: ModpackResult; onClose: () => v
   const [busy, setBusy] = useState(false)
 
   const latestMc = pack.mcVersions[0] ?? ''
-  const loader = (pack.loaders[0] ?? 'fabric') as any
+  const loader = supportedLoader(pack.loaders)
 
   const install = async (): Promise<void> => {
+    if (!loader || !latestMc) {
+      setError('This pack does not list a supported Minecraft version and mod loader.')
+      return
+    }
     setBusy(true)
     setInstalling(1)
     try {
@@ -121,7 +131,7 @@ function InstallModal({ pack, onClose }: { pack: ModpackResult; onClose: () => v
             <h2 className="font-bold text-base text-white truncate">{pack.name}</h2>
             {pack.author && <p className="text-sm truncate" style={{ color: 'var(--text-muted)' }}>by {pack.author}</p>}
             <div className="flex gap-2 mt-1 text-xs" style={{ color: 'var(--text-faint)' }}>
-              <span className="capitalize">{loader}</span>
+              <span className="capitalize">{loader ?? 'unsupported loader'}</span>
               <span>·</span>
               <span>MC {latestMc || 'unknown'}</span>
             </div>
@@ -150,7 +160,7 @@ function InstallModal({ pack, onClose }: { pack: ModpackResult; onClose: () => v
           </button>
           <button
             onClick={install}
-            disabled={busy}
+            disabled={busy || !loader || !latestMc}
             className="px-5 py-2 rounded-xl text-sm font-semibold text-black transition-all disabled:opacity-60"
             style={{ background: 'var(--accent-strong)', boxShadow: '0 0 16px rgba(var(--accent-rgb),0.25)' }}
             onMouseEnter={(e) => { if (!busy) e.currentTarget.style.background = 'var(--accent)' }}

@@ -43,6 +43,27 @@ export interface Instance {
 }
 
 /** A specific version of a modpack from Modrinth or CurseForge. */
+export type ContentKind = 'resourcepack' | 'shader'
+export type ContentSort = 'relevance' | 'downloads' | 'updated' | 'newest' | 'follows'
+export interface ContentSearchOptions {
+  category?: string
+  sort?: ContentSort
+}
+export interface ContentCategory {
+  id: string
+  name: string
+  group: string
+}
+export type ShaderEngine = 'iris' | 'optifine' | 'canvas'
+export interface ContentFile {
+  name: string
+  enabled: boolean
+  size: number
+  projectId?: string
+  source?: 'modrinth' | 'curseforge'
+  title?: string
+}
+
 export interface PackVersion {
   id: string
   versionNumber: string
@@ -274,6 +295,7 @@ export interface ModSearchResult {
   iconUrl?: string
   author?: string
   downloads: number
+  externalUrl?: string
 }
 
 export interface LocalMod {

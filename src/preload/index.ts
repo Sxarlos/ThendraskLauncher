@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   Account,
+  ContentFile,
+  ContentCategory,
+  ContentSearchOptions,
+  ContentKind,
+  ShaderEngine,
   AppSettings,
   BrowseParams,
   Friend,
@@ -205,9 +210,18 @@ const api = {
     importBackup: (path: string): Promise<Instance> =>
       ipcRenderer.invoke('instance:importBackup', path)
   },
+  content: {
+    categories: (kind: ContentKind | 'mod', source: 'modrinth' | 'curseforge'): Promise<ContentCategory[]> => ipcRenderer.invoke('content:categories', kind, source),
+    search: (id: string, kind: ContentKind, query: string, engine: ShaderEngine, options?: ContentSearchOptions, source: 'modrinth' | 'curseforge' = 'modrinth'): Promise<ModSearchResult[]> => ipcRenderer.invoke('content:search', id, kind, query, engine, options, source),
+    list: (id: string, kind: ContentKind): Promise<ContentFile[]> => ipcRenderer.invoke('content:list', id, kind),
+    install: (id: string, kind: ContentKind, projectId: string, engine: ShaderEngine, source: 'modrinth' | 'curseforge' = 'modrinth'): Promise<ContentFile[]> => ipcRenderer.invoke('content:install', id, kind, projectId, engine, source),
+    import: (id: string, kind: ContentKind): Promise<ContentFile[]> => ipcRenderer.invoke('content:import', id, kind),
+    toggle: (id: string, kind: ContentKind, name: string): Promise<ContentFile[]> => ipcRenderer.invoke('content:toggle', id, kind, name),
+    remove: (id: string, kind: ContentKind, name: string): Promise<ContentFile[]> => ipcRenderer.invoke('content:remove', id, kind, name)
+  },
   customMods: {
-    search: (instanceId: string, query: string, source: 'modrinth' | 'curseforge'): Promise<ModSearchResult[]> =>
-      ipcRenderer.invoke('customMods:search', instanceId, query, source),
+    search: (instanceId: string, query: string, source: 'modrinth' | 'curseforge', options?: ContentSearchOptions): Promise<ModSearchResult[]> =>
+      ipcRenderer.invoke('customMods:search', instanceId, query, source, options),
     list: (instanceId: string): Promise<LocalMod[]> =>
       ipcRenderer.invoke('customMods:list', instanceId),
     install: (instanceId: string, projectId: string, source: 'modrinth' | 'curseforge'): Promise<ModInstallResult> =>
