@@ -7,6 +7,22 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-10-13
+
+### Changed
+
+- Promoted 0.5.9-beta.1 to the stable Windows update channel after the
+  required 48-hour public beta period, with no application code changes.
+- Includes unified mod, texture pack and shader browsing with Modrinth and
+  CurseForge categories, sorting and local imports, plus pack installation,
+  launch, snapshot and backup reliability fixes.
+
+### Deployment
+
+- Friends relay durability fixes still require a separate manual server
+  deployment. The CurseForge category relay fix is already live.
+
+
 ## [0.5.9-beta.1] - 2026-10-11
 
 ### Added
