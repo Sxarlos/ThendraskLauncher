@@ -7,6 +7,27 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.9-beta.2] - 2026-10-15
+
+### Changed
+
+- Add paginated browsing for mods, texture packs, and shaders on Modrinth and
+  CurseForge, with page controls and validated search offsets.
+- Separate discovery results and installed content into scrollable sections.
+
+### Fixed
+
+- Keep removal confirmation inside the launcher to avoid losing keyboard focus
+  after closing a native confirmation dialog on Windows.
+- Attach file and folder pickers to the launcher window so they stay in front.
+- Display browsing failures and allow retrying or returning to earlier pages.
+
+### Testing
+
+- This remains on the 0.5.9 version line. Users on stable 0.5.9 must install
+  this beta manually because prerelease versions sort below the stable version.
+- Enable beta updates in Settings while testing this prerelease.
+
 ## [0.5.9] - 2026-10-13
 
 ### Changed

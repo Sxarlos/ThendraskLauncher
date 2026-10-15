@@ -8,6 +8,9 @@ import BrowseModpacks from './LibraryBrowse'
 import MyInstancesContent from './LibraryInstances'
 import PackContent from '../components/PackContent'
 import ContentFilters from '../components/ContentFilters'
+import RemoveContentButton from '../components/RemoveContentButton'
+import ContentSection from '../components/ContentSection'
+import ContentPagination from '../components/ContentPagination'
 import type { ContentSearchOptions } from '@shared/types'
 import { progressLabel } from './libraryUtils'
 
@@ -1367,6 +1370,11 @@ function InstanceDetailPanel({
   const [modSearching, setModSearching] = useState(false)
   const [modSearchCompleted, setModSearchCompleted] = useState(false)
   const [modSearchRetry, setModSearchRetry] = useState(0)
+  const [modPage, setModPage] = useState({ key: '', offset: 0 })
+  const [modHasMore, setModHasMore] = useState(false)
+  const [modSearchError, setModSearchError] = useState<string | null>(null)
+  const modSearchKey = JSON.stringify([instance.id, detailTab, contentType, modQuery, modSource, modFilters])
+  const modOffset = modPage.key === modSearchKey ? modPage.offset : 0
   const [installingProject, setInstallingProject] = useState<string | null>(null)
   const [updatingCustomMods, setUpdatingCustomMods] = useState(false)
   const [addingMod, setAddingMod] = useState(false)
@@ -1583,14 +1591,19 @@ function InstanceDetailPanel({
     const timeout = setTimeout(() => {
       setModSearching(true)
       setModResults([])
+      setModSearchError(null)
       setModSearchCompleted(false)
-      window.api.customMods.search(instance.id, modQuery, modSource, modFilters)
-        .then((results) => { if (!cancelled) { setModResults(results); setModSearchCompleted(true) } })
-        .catch((e) => { if (!cancelled) setError(ipcError(e)) })
+      window.api.customMods.search(instance.id, modQuery, modSource, { ...modFilters, offset: modOffset })
+        .then((results) => { if (!cancelled) {
+          setModResults(results)
+          setModHasMore(results.length === 30 && modOffset < 9990)
+          setModSearchCompleted(true)
+        } })
+        .catch((e) => { if (!cancelled) setModSearchError(ipcError(e)) })
         .finally(() => { if (!cancelled) setModSearching(false) })
     }, 300)
     return () => { cancelled = true; clearTimeout(timeout) }
-  }, [detailTab, contentType, instance.id, instance.loader, modQuery, modSource, modFilters, modSearchRetry, setError])
+  }, [detailTab, contentType, instance.id, instance.loader, modQuery, modSource, modFilters, modSearchRetry, modOffset])
 
   const installMod = async (projectId: string, source: 'modrinth' | 'curseforge'): Promise<void> => {
     setInstallingProject(projectId)
@@ -1614,7 +1627,7 @@ function InstanceDetailPanel({
   }
 
   const removeManaged = async (mod: LocalMod): Promise<void> => {
-    if (!mod.projectId || !window.confirm(`Remove ${mod.displayName ?? mod.name}? Required libraries are kept in case another mod uses them.`)) return
+    if (!mod.projectId) return
     try {
       setManagedMods(await window.api.customMods.remove(instance.id, mod.source ?? 'modrinth', mod.projectId))
     } catch (e) {
@@ -1919,28 +1932,14 @@ function InstanceDetailPanel({
                 >{type.label}</button>)}
               </div>
             </div>
-            {contentType !== 'mod' ? <PackContent key={`${instance.id}:${contentType}`} instance={instance} kind={contentType} locked={!!running || !!busy} onFindMod={(query) => { setContentType('mod'); setModSource('modrinth'); setModQuery(query); setModFilters({}); setModResults([]) }} /> : instance.loader === 'vanilla' ? (
+            {contentType !== 'mod' ? <PackContent key={`${instance.id}:${contentType}`} instance={instance} kind={contentType} locked={!!running || !!busy} onFindMod={(query) => { setContentType('mod'); setModSource('modrinth'); setModQuery(query); setModFilters({}); setModResults([]); setModPage({ key: '', offset: 0 }); setModHasMore(false) }} /> : instance.loader === 'vanilla' ? (
               <div className="rounded-2xl p-5 text-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text-muted)' }}>Gameplay mods need a mod loader. Create a custom modpack with Fabric, Forge, NeoForge, or Quilt. You can add texture packs to this Vanilla instance now.</div>
             ) : <>
-            {/* Mods tab toolbar */}
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
-                {hasModSource ? 'Pack mods and additions' : 'Custom modpack builder'}
-              </span>
-              <div className="flex gap-2">
-                {managedAdditions.length > 0 && <button onClick={updateCustomMods} disabled={updatingCustomMods || running} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}>{updatingCustomMods ? 'Updating…' : 'Update all'}</button>}
-                <button onClick={addMods} disabled={addingMod || running} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50" style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
-                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 1v10M1 6h10"/></svg>
-                  {addingMod ? 'Adding…' : 'Add local JAR'}
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
+            <ContentSection title="Browse mods" description={`Page ${modOffset / 30 + 1} · Up to 30 results per page. Click Install to add one to this instance.`} scrollKey={`${modSearchKey}:${modOffset}`} footer={<ContentPagination page={modOffset / 30 + 1} hasNext={!modSearchError && modHasMore} loading={modSearching} onPageChange={(number) => { setModResults([]); setModSearchError(null); setModSearchCompleted(false); setModSearching(true); setModPage({ key: modSearchKey, offset: (number - 1) * 30 }) }} />} controls={<>
               <div className="flex gap-1 mb-3">
                 {(['modrinth', ...(CURSEFORGE_ENABLED ? ['curseforge' as const] : [])] as const).map((source) => <button
                   key={source}
-                  onClick={() => { setModSource(source); setModFilters({}); setModResults([]); setModSearchCompleted(false) }}
+                  onClick={() => { setModSource(source); setModFilters({}); setModResults([]); setModPage({ key: '', offset: 0 }); setModHasMore(false); setModSearching(true); setModSearchCompleted(false) }}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                   style={modSource === source
                     ? { background: source === 'modrinth' ? 'rgba(29,209,161,0.16)' : 'rgba(249,115,22,0.16)', color: source === 'modrinth' ? '#1dd1a1' : '#fb923c', border: `1px solid ${source === 'modrinth' ? 'rgba(29,209,161,0.3)' : 'rgba(249,115,22,0.3)'}` }
@@ -1950,20 +1949,21 @@ function InstanceDetailPanel({
               <div className="flex gap-2">
                 <input
                   value={modQuery}
-                  onChange={(e) => { setModQuery(e.target.value); setModResults([]); setModSearchCompleted(false) }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') setModSearchRetry((value) => value + 1) }}
+                  onChange={(e) => { setModQuery(e.target.value); setModResults([]); setModPage({ key: '', offset: 0 }); setModHasMore(false); setModSearching(true); setModSearchCompleted(false) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { setModPage({ key: '', offset: 0 }); setModSearchRetry((value) => value + 1) } }}
                   placeholder={`Search ${modSource === 'modrinth' ? 'Modrinth' : 'CurseForge'} ${instance.loader} mods for Minecraft ${instance.mcVersion}`}
                   className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
                   style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-bright)' }}
                 />
-                <button onClick={() => setModSearchRetry((value) => value + 1)} disabled={modSearching} className="px-4 py-2 rounded-xl text-sm font-semibold text-black disabled:opacity-50" style={{ background: 'var(--accent-strong)' }}>{modSearching ? 'Searching…' : 'Refresh results'}</button>
+                <button onClick={() => { setModPage({ key: '', offset: 0 }); setModSearchRetry((value) => value + 1) }} disabled={modSearching} className="px-4 py-2 rounded-xl text-sm font-semibold text-black disabled:opacity-50" style={{ background: 'var(--accent-strong)' }}>{modSearching ? 'Searching…' : 'Refresh results'}</button>
               </div>
               <p className="text-[11px] mt-2" style={{ color: 'var(--text-faint)' }}>Results are filtered to this Minecraft version and loader. Required dependencies are installed automatically.</p>
-              <div className="mt-3"><ContentFilters kind="mod" source={modSource} value={modFilters} onChange={(value) => { setModFilters(value); setModResults([]); setModSearchCompleted(false) }} /></div>
-            </div>
+              <div className="mt-3"><ContentFilters kind="mod" source={modSource} value={modFilters} onChange={(value) => { setModFilters(value); setModResults([]); setModPage({ key: '', offset: 0 }); setModHasMore(false); setModSearching(true); setModSearchCompleted(false) }} /></div>
+            </>}>
 
-            {modSearching && <p role="status" className="text-sm text-muted">Finding compatible mods…</p>}
-            {!modSearching && modSearchCompleted && modResults.length === 0 && <p className="text-sm text-muted">No matching mods. Try another search or add a local JAR.</p>}
+            {modSearching && <p role="status" className="text-sm text-muted">Loading page {modOffset / 30 + 1}…</p>}
+            {modSearchError && <div role="alert" className="text-sm"><p style={{ color: 'var(--danger-soft)' }}>{modSearchError}</p><button className="mt-2 text-xs" style={{ color: 'var(--accent)' }} onClick={() => setModSearchRetry((value) => value + 1)}>Try again</button></div>}
+            {!modSearching && modSearchCompleted && modResults.length === 0 && <p className="text-sm text-muted">{modOffset > 0 ? 'No more results on this page. Use Previous to go back.' : 'No matching mods. Try another search or add a local JAR.'}</p>}
 
             {modResults.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -1979,6 +1979,23 @@ function InstanceDetailPanel({
               </div>
             )}
 
+            </ContentSection>
+
+            <ContentSection title={`Installed mods (${uniqueModCount})`} description="Already added to this instance: pack mods, downloaded additions, and local JARs." controls={<>
+            {/* Mods tab toolbar */}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
+                {hasModSource ? 'Pack mods and additions' : 'Custom modpack builder'}
+              </span>
+              <div className="flex gap-2">
+                {managedAdditions.length > 0 && <button onClick={updateCustomMods} disabled={updatingCustomMods || running} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50" style={{ background: 'var(--surface-2)', color: 'var(--text-soft)', border: '1px solid var(--border-soft)' }}>{updatingCustomMods ? 'Updating…' : 'Update all'}</button>}
+                <button onClick={addMods} disabled={addingMod || running} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50" style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 1v10M1 6h10"/></svg>
+                  {addingMod ? 'Adding…' : 'Add local JAR'}
+                </button>
+              </div>
+            </div>
+            </>}>
             {managedAdditions.length > 0 && (
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Managed mods ({managedAdditions.length})</h3>
@@ -1987,7 +2004,7 @@ function InstanceDetailPanel({
                     <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--surface-2)' }}>{mod.iconUrl ? <img src={mod.iconUrl} alt="" className="w-full h-full object-cover" /> : '🔧'}</div>
                     <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate" style={{ color: 'var(--text-bright)' }}>{mod.displayName ?? mod.name.replace(/\.jar(?:\.disabled)?$/i, '')}</div><div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>{fmtBytes(mod.size)} · {mod.enabled ? 'Enabled' : 'Disabled'} · {(mod.source ?? 'modrinth') === 'modrinth' ? 'Modrinth' : 'CurseForge'}</div></div>
                     <button onClick={() => void toggleManaged(mod)} disabled={running} className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-50" style={{ color: 'var(--accent)' }}>{mod.enabled ? 'Disable' : 'Enable'}</button>
-                    <button onClick={() => void removeManaged(mod)} disabled={running} className="text-sm disabled:opacity-50" style={{ color: 'var(--danger-soft)' }} title="Remove mod">×</button>
+                    <RemoveContentButton disabled={!!running} message={`Remove ${mod.displayName ?? mod.name}? Required libraries are kept in case another mod uses them.`} onRemove={() => removeManaged(mod)} />
                   </div>)}
                 </div>
               </div>
@@ -2019,7 +2036,7 @@ function InstanceDetailPanel({
             {/* Pack mods list */}
             {hasModSource ? (
               <ModsTabContent mods={mods} loading={modsLoading} loaded={modsLoaded} error={modsError} />
-            ) : managedAdditions.length === 0 && localAdditions.length === 0 && modResults.length === 0 ? (
+            ) : managedAdditions.length === 0 && localAdditions.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center" style={{ color: 'var(--text-dim)' }}>
                 <div className="text-4xl mb-4">🔧</div>
                 <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Start building your modpack</p>
@@ -2082,6 +2099,7 @@ function InstanceDetailPanel({
                 </div>
               </div>
             )}
+            </ContentSection>
             </>}
           </div>
         ) : (

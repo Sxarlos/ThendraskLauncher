@@ -83,11 +83,12 @@ describe('custom modpack management', () => {
   it('combines provider categories and sorting with Minecraft and loader compatibility', async () => {
     const request = vi.fn(async (_url: string) => json({ hits: [] }))
     vi.stubGlobal('fetch', request)
-    await searchCompatibleMods('instance', '', 'modrinth', { category: 'technology', sort: 'updated' })
+    await searchCompatibleMods('instance', '', 'modrinth', { category: 'technology', sort: 'updated', offset: 30 })
     const url = new URL(String(request.mock.calls[0][0]))
     expect(JSON.parse(url.searchParams.get('facets')!)).toContainEqual(['categories:technology'])
     expect(JSON.parse(url.searchParams.get('facets')!)).toContainEqual(['categories:fabric'])
     expect(url.searchParams.get('index')).toBe('updated')
+    expect(url.searchParams.get('offset')).toBe('30')
   })
 
   it('rejects CurseForge installation without making a request', async () => {

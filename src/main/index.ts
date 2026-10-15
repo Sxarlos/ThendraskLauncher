@@ -467,19 +467,22 @@ function registerIpcHandlers(): void {
 
   // Directory picker
   handle('dialog:pickDir', async () => {
-    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+    if (!mainWindow || mainWindow.isDestroyed()) return null
+    const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] })
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
   // Single file picker
   handle('dialog:pickFile', async (_: unknown, filters: Electron.FileFilter[] = []) => {
-    const result = await dialog.showOpenDialog({ properties: ['openFile'], filters })
+    if (!mainWindow || mainWindow.isDestroyed()) return null
+    const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'], filters })
     return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 
   // Mod file picker; returns selected .jar paths
   handle('dialog:pickModFiles', async () => {
-    const result = await dialog.showOpenDialog({
+    if (!mainWindow || mainWindow.isDestroyed()) return []
+    const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Mod JARs', extensions: ['jar'] }]
     })
@@ -633,7 +636,8 @@ function registerIpcHandlers(): void {
   handle('content:install', (id: string, kind: ContentKind, projectId: string, engine: ShaderEngine, source: 'modrinth' | 'curseforge' = 'modrinth') =>
     changeContent(id, () => installPackContent(id, kind, projectId, engine, source)))
   handle('content:import', (id: string, kind: ContentKind) => changeContent(id, async () => {
-    const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Pack ZIP', extensions: ['zip'] }] })
+    if (!mainWindow || mainWindow.isDestroyed()) return []
+    const result = await dialog.showOpenDialog(mainWindow, { properties: ['openFile'], filters: [{ name: 'Pack ZIP', extensions: ['zip'] }] })
     if (isRunning(id)) throw new Error('Stop Minecraft before changing pack content.')
     return result.canceled ? listPackContent(id, kind) : importPackContent(id, kind, result.filePaths[0])
   }))

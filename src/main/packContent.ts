@@ -75,6 +75,7 @@ export async function searchPackContent(instanceId: string, kind: ContentKind, q
   url.searchParams.set('query', query.trim())
   url.searchParams.set('facets', JSON.stringify(facets))
   url.searchParams.set('limit', '30')
+  url.searchParams.set('offset', String(options.offset ?? 0))
   url.searchParams.set('index', modrinthSort(query, options))
   const data = await getJson<{ hits: Array<{ project_id: string; title: string; description: string; icon_url?: string; downloads: number }> }>(url)
   return data.hits.map((hit) => ({ source: 'modrinth', projectId: hit.project_id, title: hit.title, description: hit.description, iconUrl: hit.icon_url, downloads: hit.downloads }))

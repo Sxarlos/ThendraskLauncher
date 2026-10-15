@@ -133,6 +133,7 @@ async function searchModrinthMods(instanceId: string, query: string, options: Co
   url.searchParams.set('query', query.trim())
   url.searchParams.set('facets', JSON.stringify(facets))
   url.searchParams.set('limit', '30')
+  url.searchParams.set('offset', String(options.offset ?? 0))
   url.searchParams.set('index', modrinthSort(query, options))
   const data = await getJson<{ hits?: Array<Record<string, unknown>> }>(url.toString())
   return (data.hits ?? []).map((hit) => ({
@@ -162,6 +163,7 @@ async function searchCurseForgeMods(instanceId: string, query: string, options: 
   url.searchParams.set('sortField', curseForgeSort(options))
   url.searchParams.set('sortOrder', 'desc')
   url.searchParams.set('pageSize', '30')
+  url.searchParams.set('index', String(options.offset ?? 0))
   const result = await cfJson<{ data?: Array<Record<string, unknown>> }>(url.toString())
   return (result.data ?? []).map((mod) => {
     const logo = mod.logo as Record<string, unknown> | undefined

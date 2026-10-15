@@ -48,6 +48,7 @@ export type ContentSort = 'relevance' | 'downloads' | 'updated' | 'newest' | 'fo
 export interface ContentSearchOptions {
   category?: string
   sort?: ContentSort
+  offset?: number
 }
 export interface ContentCategory {
   id: string

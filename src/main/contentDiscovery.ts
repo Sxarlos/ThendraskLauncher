@@ -8,6 +8,7 @@ const label = (value: string): string => value.replace(/[-_]/g, ' ').replace(/\b
 
 export function validateContentSearch(options: ContentSearchOptions = {}): ContentSearchOptions {
   if (!options || typeof options !== 'object') throw new Error('Invalid content filters.')
+  if (options.offset !== undefined && (!Number.isSafeInteger(options.offset) || options.offset < 0 || options.offset > 10000)) throw new Error('Invalid search offset.')
   if (options.category !== undefined && (typeof options.category !== 'string' || !/^[a-zA-Z0-9_-]{0,80}$/.test(options.category))) throw new Error('Invalid category.')
   if (options.sort !== undefined && !['relevance', 'downloads', 'updated', 'newest', 'follows'].includes(options.sort)) throw new Error('Invalid sort order.')
   return options

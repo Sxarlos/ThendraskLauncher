@@ -40,10 +40,11 @@ describe('texture pack and shader content', () => {
   it('keeps version compatibility when filtering texture categories and changing sort order', async () => {
     const request = vi.fn(async (_url: URL | string) => json({ hits: [] }))
     vi.stubGlobal('fetch', request)
-    await searchPackContent('instance', 'resourcepack', '', 'iris', { category: '128x', sort: 'newest' })
+    await searchPackContent('instance', 'resourcepack', '', 'iris', { category: '128x', sort: 'newest', offset: 30 })
     const url = new URL(String(request.mock.calls[0][0]))
     expect(JSON.parse(url.searchParams.get('facets')!)).toEqual([['project_type:resourcepack'], ['versions:1.20.1'], ['categories:128x']])
     expect(url.searchParams.get('index')).toBe('newest')
+    expect(url.searchParams.get('offset')).toBe('30')
   })
 
   function mockDownload(options: { checksum?: string; filename?: string; projectType?: string } = {}): void {

@@ -20,6 +20,7 @@ export async function searchCurseForgeContent(kind: ContentKind, mcVersion: stri
   url.searchParams.set('sortField', curseForgeSort(options))
   url.searchParams.set('sortOrder', 'desc')
   url.searchParams.set('pageSize', '30')
+  url.searchParams.set('index', String(options.offset ?? 0))
   if (options.category) {
     if (!/^\d+$/.test(options.category)) throw new Error('Invalid CurseForge category.')
     url.searchParams.set('categoryId', options.category)

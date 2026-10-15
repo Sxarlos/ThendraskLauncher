@@ -5,6 +5,12 @@ const json = (data: unknown): Response => new Response(JSON.stringify(data))
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('provider content discovery', () => {
+  it('accepts page offsets and rejects invalid or excessive offsets', () => {
+    expect(validateContentSearch({ offset: 30 })).toEqual({ offset: 30 })
+    for (const offset of [-1, 0.5, NaN, Infinity, 10001, '30']) {
+      expect(() => validateContentSearch({ offset: offset as number })).toThrow('offset')
+    }
+  })
   it('uses Modrinth categories for the selected content type and preserves their groups', async () => {
     const request = vi.fn(async () => json([
       { name: 'technology', project_type: 'mod', header: 'categories' },
